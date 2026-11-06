@@ -1,0 +1,109 @@
+// App shell and router.
+import { h, clear, attempt, toast } from './ui.js';
+import { createLocalStore } from './data/local.js';
+import { createCloudStore } from './data/supabase.js';
+import { avatarURL, defaultAvatar } from './game/avatar.js';
+import { viewLogin } from './views/auth.js';
+import { viewHome, viewChooseRoad, viewCharacter, SessionEnded } from './views/student.js';
+import { viewMap } from './views/map.js';
+import { viewLesson } from './views/lesson.js';
+import { viewSprites } from './views/sprites.js';
+import { viewArcade } from './views/arcade.js';
+import { viewTeacherHome, viewClass, viewReview, viewCurriculum } from './views/teacher.js';
+
+const cfg = window.PIXEL_TRAIL_CONFIG || {};
+const store = cfg.supabaseUrl && cfg.supabaseAnonKey ? createCloudStore(cfg.supabaseUrl, cfg.supabaseAnonKey) : createLocalStore();
+
+export const app = { store, session: null, cleanup: null };
+export const go = (hash) => { location.hash = hash; };
+
+const STUDENT_ROUTES = [
+  [/^\/$/, viewHome], [/^\/road$/, viewChooseRoad], [/^\/map$/, viewMap], [/^\/character$/, viewCharacter],
+  [/^\/lesson\/(\w+)$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/arcade$/, viewArcade],
+];
+const TEACHER_ROUTES = [
+  [/^\/$/, viewTeacherHome], [/^\/class\/([\w-]+)(?:\/(\w+))?$/, viewClass], [/^\/review\/([\w-]+)$/, viewReview],
+  [/^\/curriculum$/, viewCurriculum], [/^\/lesson\/(\w+)(?:\/(\w+))?$/, viewLesson], [/^\/sprites$/, viewSprites],
+  [/^\/arcade\/([\w-]+)$/, viewArcade], [/^\/map\/([\w-]+)$/, viewMap],
+];
+
+function topbar() {
+  const s = app.session;
+  const hash = location.hash.slice(1) || '/';
+  const link = (href, label) => h('a.nav', { href: `#${href}`, 'aria-current': (href === '/' ? hash === '/' : hash.startsWith(href)) ? 'page' : null }, label);
+  const links = s.role === 'student'
+    ? [link('/', 'Home'), link('/map', 'Journey'), link('/character', 'Character'), link('/sprites', 'Sprites'), link('/arcade', 'Arcade')]
+    : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/sprites', 'Sprites')];
+  const who = s.role === 'student'
+    ? [h('img.mini-av', { src: avatarURL(s.student.avatar || defaultAvatar(s.student.id), 2), alt: '' }), s.student.display_name]
+    : [s.teacher.display_name];
+  return h('header.topbar',
+    h('a.brand', { href: '#/' }, 'Pixel Trail'),
+    h('nav.navs', { 'aria-label': 'Main' }, links),
+    h('div.who', who, h('button.btn.small', { onclick: signOut }, 'Sign out')),
+  );
+}
+
+async function signOut() {
+  await attempt(() => store.signOut());
+  app.session = null;
+  go('/');
+  render();
+}
+
+let renderToken = 0;
+
+export async function render() {
+  const token = ++renderToken;
+  if (app.cleanup) { await attempt(app.cleanup); app.cleanup = null; }
+  const root = document.getElementById('app');
+  const path = location.hash.slice(1) || '/';
+
+  if (!app.session) {
+    clear(root).append(viewLogin());
+    return;
+  }
+
+  const routes = app.session.role === 'student' ? STUDENT_ROUTES : TEACHER_ROUTES;
+  let match = null;
+  let view = null;
+  for (const [re, fn] of routes) {
+    const m = path.match(re);
+    if (m) { match = m; view = fn; break; }
+  }
+  if (!view) { go('/'); return; }
+
+  const main = h('main.page', h('p.muted', 'Loading...'));
+  clear(root).append(store.mode === 'local' ? demoBanner() : '', topbar(), main);
+  try {
+    const content = await view(main, ...match.slice(1));
+    if (token !== renderToken) return;
+    if (content) clear(main).append(content);
+  } catch (e) {
+    if (e instanceof SessionEnded) {
+      app.session = null;
+      go('/');
+      render();
+      toast('Please sign in again.');
+      return;
+    }
+    console.error(e);
+    if (token === renderToken) clear(main).append(h('div.card.stack', h('h2', 'That page could not load.'), h('p', e.message), h('p', h('a', { href: '#/' }, 'Go back home'))));
+  }
+}
+
+function demoBanner() {
+  return h('div.demo-banner', 'Demo mode: data stays in this browser. See the README to go live with real classes.');
+}
+
+/** Refresh the signed-in user's cached details after a profile change. */
+export async function refreshSession() {
+  app.session = await store.session();
+}
+
+window.addEventListener('hashchange', render);
+
+(async function start() {
+  app.session = await attempt(() => store.session()) || null;
+  render();
+})();

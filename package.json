@@ -1,0 +1,13 @@
+{
+  "name": "pixel-trail",
+  "private": true,
+  "type": "module",
+  "description": "Teach game programming in p5.js, one 30-40 minute lesson at a time.",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test tests/curriculum.test.mjs tests/rls.test.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15"
+  }
+}

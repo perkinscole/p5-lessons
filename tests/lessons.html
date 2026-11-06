@@ -1,0 +1,77 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Lesson runtime test</title>
+<style>body{font:14px system-ui;padding:16px}.bad{color:#b3261e;font-weight:700}.player{position:fixed;left:-9999px;width:400px;height:400px}iframe{width:400px;height:400px}</style>
+<h1 id="sum">Running...</h1>
+<pre id="out"></pre>
+<script type="module">
+// Open this page while the app is being served. It runs every lesson's answer key in the real
+// sandbox, presses keys and clicks, and reports crashes and blank canvases.
+import { PATH_IDS, sequence, previousGameLesson } from '../js/curriculum/graph.js';
+import { buildSolution, getLesson } from '../js/curriculum/engine.js';
+import { createPlayer } from '../js/sandbox.js';
+
+const PROBE = `
+setInterval(function () { if (typeof redraw === 'function' && window.p5 && p5.instance) redraw(); }, 16);
+setTimeout(function () {
+  window.dispatchEvent(new MouseEvent('mousedown', { clientX: 200, clientY: 200 }));
+  window.dispatchEvent(new MouseEvent('mouseup', { clientX: 200, clientY: 200 }));
+}, 150);
+setTimeout(function () {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', keyCode: 32 }));
+  window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', keyCode: 32 }));
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', keyCode: 39 }));
+}, 300);
+setTimeout(function () {
+  if (typeof enemies !== 'undefined' && Array.isArray(enemies)) enemies.length = 0;
+  if (typeof wave !== 'undefined') wave = 99;
+  if (typeof boss !== 'undefined') boss.timer = 200;
+}, 500);
+setTimeout(function () {
+  window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', keyCode: 82 }));
+  window.dispatchEvent(new KeyboardEvent('keyup', { key: 'r', keyCode: 82 }));
+}, 1100);
+setTimeout(function () {
+  var seen = {}; var n = 0;
+  var cv = document.querySelector('canvas');
+  var d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+  for (var i = 0; i < d.length; i += 4 * 37) { var k = d[i] + ',' + d[i + 1] + ',' + d[i + 2]; if (!seen[k]) { seen[k] = 1; n++; } }
+  console.log('PROBE ' + n);
+}, 1500);
+`;
+
+const jobs = [];
+const seen = new Set();
+for (const path of PATH_IDS) {
+  for (const id of sequence(path)) {
+    const shared = !getLesson(id).path && !previousGameLesson(id, path);
+    const key = shared ? id : `${path}/${id}`;
+    if (!seen.has(key)) { seen.add(key); jobs.push({ key, id, path }); }
+  }
+}
+
+const results = [];
+function runJob(job) {
+  return new Promise((resolve) => {
+    const r = { key: job.key, errors: [], colors: null };
+    const p = createPlayer((ev) => {
+      if (ev.type === 'error') r.errors.push(`${ev.line ? `line ${ev.line}: ` : ''}${ev.raw}`);
+      if (ev.type === 'log' && ev.message.startsWith('PROBE')) r.colors = +ev.message.split(' ')[1];
+    });
+    document.body.append(p.el);
+    p.run(buildSolution(job.id, job.path) + PROBE, {});
+    setTimeout(() => { p.destroy(); p.el.remove(); resolve(r); }, 2600);
+  });
+}
+
+(async () => {
+  const queue = [...jobs];
+  await Promise.all(Array.from({ length: 6 }, async () => {
+    while (queue.length) results.push(await runJob(queue.shift()));
+  }));
+  const bad = results.filter((r) => r.errors.length || r.colors === null || r.colors < 2);
+  document.getElementById('sum').textContent = `${results.length - bad.length} of ${results.length} lessons ran cleanly`;
+  document.getElementById('out').textContent = bad.map((r) => `${r.key}: colors=${r.colors} ${r.errors.join(' | ')}`).join('\n') || 'All good.';
+  window.__done = { total: results.length, bad };
+})();
+</script>

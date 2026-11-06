@@ -1,0 +1,193 @@
+// Runs student code safely. Each game runs in an iframe with no access to this site:
+// no same-origin (so no login tokens or database), no navigation, no network.
+
+const PLACEHOLDER = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 16;
+  const g = c.getContext('2d');
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    g.fillStyle = (x >> 2) % 2 === (y >> 2) % 2 ? '#ff4fd8' : '#2a2a2a';
+    g.fillRect(x, y, 1, 1);
+  }
+  return c.toDataURL();
+})();
+
+/** Add a stop check inside for and while loops, so a loop that never ends can't freeze the tab. */
+export function protectLoops(src) {
+  let out = '';
+  let i = 0;
+  const n = src.length;
+  const isWord = (c) => c && /[\w$]/.test(c);
+  const skipTrivia = (j) => {
+    for (;;) {
+      while (j < n && /\s/.test(src[j])) j++;
+      if (src[j] === '/' && src[j + 1] === '/') { while (j < n && src[j] !== '\n') j++; continue; }
+      if (src[j] === '/' && src[j + 1] === '*') { j += 2; while (j < n && !(src[j] === '*' && src[j + 1] === '/')) j++; j += 2; continue; }
+      return j;
+    }
+  };
+  const skipString = (j) => {
+    const q = src[j];
+    j++;
+    while (j < n && src[j] !== q) { if (src[j] === '\\') j++; j++; }
+    return j + 1;
+  };
+  while (i < n) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === '`') { const e = skipString(i); out += src.slice(i, e); i = e; continue; }
+    if (c === '/' && (src[i + 1] === '/' || src[i + 1] === '*')) { const e = skipTrivia(i); out += src.slice(i, e); i = e; continue; }
+    const word = src.startsWith('for', i) ? 'for' : src.startsWith('while', i) ? 'while' : null;
+    if (word && !isWord(src[i - 1]) && src[i - 1] !== '.' && !isWord(src[i + word.length])) {
+      let j = skipTrivia(i + word.length);
+      if (src[j] === '(') {
+        let depth = 0;
+        for (; j < n; j++) {
+          if (src[j] === '"' || src[j] === "'" || src[j] === '`') { j = skipString(j) - 1; continue; }
+          if (src[j] === '(') depth++;
+          else if (src[j] === ')' && --depth === 0) break;
+        }
+        const k = skipTrivia(j + 1);
+        if (src[k] === '{') {
+          out += `${src.slice(i, k + 1)}__lp();`;
+          i = k + 1;
+          continue;
+        }
+      }
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+// p5 is written into each game's page rather than requested by it. A locked-down iframe has no
+// origin of its own, and some browsers and school filters refuse its script requests outright.
+let p5Text = null;
+const loadP5 = () => {
+  if (!p5Text) {
+    p5Text = fetch(new URL('../vendor/p5.min.js', import.meta.url))
+      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+      .then((t) => safeInline(t))
+      .catch((e) => { p5Text = null; throw e; });
+  }
+  return p5Text;
+};
+/** Keep script text from ending its own script tag early. */
+const safeInline = (t) => t.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
+
+function buildDoc(code, assets, p5Source) {
+  const csp = `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; connect-src data: blob:; media-src data: blob:; font-src data:`;
+  const boot = `
+window.SPRITES = new Proxy(${JSON.stringify(assets || {})}, { get(t, k) {
+  if (typeof k === 'symbol') return t[k];
+  if (k in t) return t[k];
+  parent.postMessage({ pt: 'warn', message: 'There is no sprite named "' + String(k) + '" in this project yet. Showing a pink checkerboard instead.' }, '*');
+  return ${JSON.stringify(PLACEHOLDER)};
+} });
+(function () {
+  let start = performance.now(); let count = 0;
+  setInterval(function () { start = performance.now(); }, 250);
+  window.__lp = function () {
+    if (++count % 2048 === 0 && performance.now() - start > 2500) {
+      throw new Error('LOOP_TOO_LONG');
+    }
+  };
+})();
+window.addEventListener('error', function (e) {
+  parent.postMessage({ pt: 'error', message: e.message, line: e.lineno }, '*');
+});
+window.addEventListener('unhandledrejection', function (e) {
+  parent.postMessage({ pt: 'error', message: String(e.reason && e.reason.message || e.reason), line: 0 }, '*');
+});
+['log', 'warn', 'error'].forEach(function (m) {
+  const orig = console[m].bind(console);
+  console[m] = function () {
+    orig.apply(null, arguments);
+    if (m === 'log') parent.postMessage({ pt: 'log', message: Array.from(arguments).map(String).join(' ').slice(0, 400) }, '*');
+  };
+});
+window.addEventListener('keydown', function (e) {
+  if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].indexOf(e.key) !== -1) e.preventDefault();
+});
+window.addEventListener('load', function () { parent.postMessage({ pt: 'ready' }, '*'); });
+`;
+  const head = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>html,body{margin:0;height:100%;background:#14141f;display:flex;align-items:center;justify-content:center;overflow:hidden}canvas{display:block}</style><script>${boot}<\/script><script>${p5Source}<\/script><script>`;
+  const safe = safeInline(protectLoops(code));
+  // Error line numbers count from the top of this document, so remember where student code starts.
+  const offset = head.split('\n').length - 1;
+  return { html: `${head}\n${safe}\n<\/script></head><body></body></html>`, offset: offset + 1 };
+}
+
+const ERROR_HELP = [
+  [/LOOP_TOO_LONG/, () => 'A loop ran for too long, so I stopped it. Check that your loop\'s counter really changes and that the condition can become false.'],
+  [/(\S+) is not defined/, (m) => `The computer doesn't know what \`${m[1]}\` is. Check the spelling (capital letters matter), and make sure you created it with \`let\`.`],
+  [/Identifier '(\S+)' has already been declared/, (m) => `You used \`let ${m[1]}\` twice. Each variable only gets one \`let\`. Remove the extra one.`],
+  [/(\S+) is not a function/, (m) => `\`${m[1]}\` isn't something that can be called. Check the spelling, or whether you overwrote it with a variable.`],
+  [/Cannot read propert\w+ of (undefined|null)(?: \(reading '(\S+)'\))?/, (m) => `You asked for \`.${m[2] || 'something'}\` on something that doesn't exist yet. Often an array position is past the end, or a variable hasn't been given a value.`],
+  [/Unexpected end of input/, () => 'A `{` or `(` was never closed. Check that each opening has a matching closing one.'],
+  [/missing \) after argument list/, () => 'A `)` is missing, or a comma is missing between arguments.'],
+  [/Unexpected token '?([^'\s]+)'?/, (m) => `The computer got confused at \`${m[1]}\`. Look on this line and the one above for a missing bracket, comma, or quote.`],
+  [/Invalid or unexpected token/, () => 'There is a stray character or an unclosed quote on this line.'],
+  [/Assignment to constant/, () => 'You tried to change a `const`. Use `let` if the value needs to change.'],
+];
+
+/** Turn a browser error message into something a beginner can act on. */
+export function friendlyError(message) {
+  for (const [re, fn] of ERROR_HELP) {
+    const m = String(message).match(re);
+    if (m) return fn(m);
+  }
+  return String(message).replace(/^Uncaught\s+/, '');
+}
+
+/**
+ * Create a game player. onEvent receives {type:'error'|'log'|'warn'|'ready', message, line}.
+ * Returns { el, run(code, assets), stop(), destroy() }.
+ */
+export function createPlayer(onEvent = () => {}) {
+  const el = document.createElement('div');
+  el.className = 'player';
+  let frame = null;
+  let offset = 0;
+  const listener = (e) => {
+    if (!frame || e.source !== frame.contentWindow || !e.data || !e.data.pt) return;
+    const d = e.data;
+    if (d.pt === 'error') {
+      const line = d.line ? d.line - offset : null;
+      onEvent({ type: 'error', message: friendlyError(d.message), raw: d.message, line: line && line > 0 ? line : null });
+    } else onEvent({ type: d.pt, message: d.message });
+  };
+  window.addEventListener('message', listener);
+  let runToken = 0;
+  const stop = () => {
+    runToken++;
+    if (frame) frame.remove();
+    frame = null;
+  };
+  return {
+    el,
+    async run(code, assets) {
+      stop();
+      const token = ++runToken;
+      let source;
+      try {
+        source = await loadP5();
+      } catch (e) {
+        onEvent({ type: 'error', message: 'The p5 library could not load. Check your connection and press Run again.', raw: e.message, line: null });
+        return;
+      }
+      if (token !== runToken) return; // A newer Run or Stop arrived while waiting.
+      const doc = buildDoc(code, assets, source);
+      offset = doc.offset;
+      frame = document.createElement('iframe');
+      frame.setAttribute('sandbox', 'allow-scripts');
+      frame.setAttribute('title', 'Game canvas');
+      frame.srcdoc = doc.html;
+      el.appendChild(frame);
+      frame.addEventListener('load', () => { try { frame.focus(); } catch (_) { /* cross-origin frames may refuse */ } });
+    },
+    stop,
+    focus() { if (frame) frame.focus(); },
+    destroy() { stop(); window.removeEventListener('message', listener); },
+  };
+}
