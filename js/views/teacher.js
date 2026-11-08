@@ -2,7 +2,8 @@
 import { h, clear, toast, attempt, modal, confirmBox, download, md } from '../ui.js';
 import { app, go, render } from '../main.js';
 import { getLesson, rubricFor, checkSummary } from '../curriculum/engine.js';
-import { PATHS, PATH_IDS, STAGES, sequence, stageOf } from '../curriculum/graph.js';
+import { alignmentFor, standardByCode } from '../curriculum/alignment.js';
+import { PATHS, PATH_IDS, STAGES, SIDE_TRAILS, sequence, stageOf, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { statsFor, TEACHER_BADGES, isDone } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
@@ -16,7 +17,7 @@ export async function viewTeacherHome() {
   return h('div.stack',
     h('div', h('h1', 'Your classes')),
     classes.length
-      ? h('div.class-grid', classes.map((c) => h('a.card.class-card', { href: `#/class/${c.id}` }, h('h2', c.name), h('p', 'Class code: ', h('strong.code', c.code)))))
+      ? h('div.class-grid', classes.map((c) => h('a.card.class-card', { href: `#/class/${c.id}` }, h('h2', c.name), c.code && h('p', 'Class code: ', h('strong.code', c.code)))))
       : h('p.muted', 'No classes yet. Make your first one below.'),
     h('form.card.row.add-class', {
       onsubmit: async (e) => {
@@ -28,8 +29,10 @@ export async function viewTeacherHome() {
     h('section.card.stack',
       h('h2', 'How a class works'),
       h('ol.howto',
-        h('li', 'Create a class, then paste in your students\' names. Each one gets a username and passcode. No student email is needed.'),
-        h('li', 'Students sign in with the class code and start at Base Camp. After six lessons they choose a road.'),
+        app.store.usesPasscodes
+          ? h('li', 'Create a class, then paste in your students\' names. Each one gets a username and passcode.')
+          : h('li', 'Create a class, then paste in your students\' names and school emails.'),
+        h('li', app.store.usesPasscodes ? 'Students sign in with the class code and start at Base Camp. After five lessons they choose a road.' : 'Share this page\'s link with students. Their school Google account signs them in. They start at Base Camp, and after five lessons they choose a road.'),
         h('li', 'Submitted work lands in your review queue. Run it, read the code, score the rubric, and approve it or send it back.'),
         h('li', 'Classmates see each other on the journey map, with ranks and badges. Scores and feedback stay private.'),
       ),
@@ -38,7 +41,8 @@ export async function viewTeacherHome() {
 }
 
 function rosterTab(cls, students, board, reload) {
-  const names = h('textarea', { rows: 5, placeholder: 'One name per line.\nFirst name and last initial works well:\nAri M\nBea T', 'aria-label': 'Student names' });
+  const usesPasscodes = app.store.usesPasscodes;
+  const names = h('textarea', { rows: 5, placeholder: usesPasscodes ? 'One name per line.\nFirst name and last initial works well:\nAri M\nBea T' : 'One student per line: name, then school email.\nAri M, ari@yourschool.org\nBea T, bea@yourschool.org', 'aria-label': usesPasscodes ? 'Student names' : 'Student names and school emails' });
   const statsById = new Map(board.map((b) => [b.id, statsFor(b)]));
 
   const showPasscodes = (rows) => {
@@ -62,11 +66,11 @@ function rosterTab(cls, students, board, reload) {
         const list = names.value.split('\n').map((x) => x.trim()).filter(Boolean);
         if (!list.length) return;
         const rows = await attempt(() => app.store.addStudents(cls.id, list));
-        if (rows) { showPasscodes(rows); reload(); }
+        if (rows) { if (usesPasscodes) showPasscodes(rows); else toast(`Added ${rows.length} student${rows.length === 1 ? '' : 's'}.`); reload(); }
       },
-    }, h('h2', 'Add students'), names, h('p.muted.small', 'For privacy, consider first name and last initial. Classmates can see these names.'), h('button.btn.primary', { type: 'submit' }, 'Add students')),
+    }, h('h2', 'Add students'), names, h('p.muted.small', usesPasscodes ? 'For privacy, consider first name and last initial. Classmates can see these names.' : 'For privacy, consider first name and last initial. Classmates see names, but never emails. Students sign in with their school Google account.'), h('button.btn.primary', { type: 'submit' }, 'Add students')),
     students.length === 0 ? h('p.muted', 'No students yet.') : h('div.table-wrap', h('table.board',
-      h('thead', h('tr', h('th', { scope: 'col' }, 'Student'), h('th', { scope: 'col' }, 'Username'), h('th', { scope: 'col' }, 'Road'), h('th', { scope: 'col' }, 'Game'), h('th.num', { scope: 'col' }, 'Lessons'), h('th', { scope: 'col' }, 'Actions'))),
+      h('thead', h('tr', h('th', { scope: 'col' }, 'Student'), h('th', { scope: 'col' }, usesPasscodes ? 'Username' : 'School email'), h('th', { scope: 'col' }, 'Road'), h('th', { scope: 'col' }, 'Game'), h('th.num', { scope: 'col' }, 'Lessons'), h('th', { scope: 'col' }, 'Actions'))),
       h('tbody', students.map((s) => h('tr',
         h('td.person', h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 2), alt: '' }), s.display_name),
         h('td.mono', s.username),
@@ -78,7 +82,7 @@ function rosterTab(cls, students, board, reload) {
         h('td.num', statsById.get(s.id)?.done.size ?? 0),
         h('td.row.tight-row',
           h('button.btn.small', { onclick: () => awardDialog(s, reload) }, 'Give badge'),
-          h('button.btn.small', {
+          usesPasscodes && h('button.btn.small', {
             onclick: async () => {
               if (!(await confirmBox('Make a new passcode?', `${s.display_name}'s old passcode will stop working.`, 'Make new passcode'))) return;
               const pass = await attempt(() => app.store.resetPasscode(s.id));
@@ -187,10 +191,10 @@ function gradebookTab(cls, students, works) {
     h('div.row.between', h('h2', 'Gradebook'), h('button.btn', { onclick: exportCsv }, 'Export CSV')),
     h('div.legend',
       h('span', h('i.key.submitted'), 'Needs review'), h('span', h('i.key.approved'), 'Approved'), h('span', h('i.key.returned'), 'Sent back'), h('span', h('i.key.working'), 'In progress'),
-      h('span.muted', 'Columns are lesson numbers. Roads share numbers, so a column covers the same concept for every student.'),
+      h('span.muted', 'Columns are lesson numbers. Roads share numbers, so a column covers the same concept for every student. Shaded columns are Beyond the Summit.'),
     ),
     h('div.table-wrap', h('table.gradebook',
-      h('thead', h('tr', h('th.sticky', { scope: 'col' }, 'Student'), Array.from({ length: SLOTS }, (_, i) => h('th', { scope: 'col', title: slotLabel(i) }, i + 1)))),
+      h('thead', h('tr', h('th.sticky', { scope: 'col' }, 'Student'), Array.from({ length: SLOTS }, (_, i) => h('th', { scope: 'col', title: slotLabel(i), class: isBeyond(sequence('platformer')[i]) ? 'beyond-col' : '' }, i + 1)))),
       h('tbody', students.map((s) => h('tr', h('th.sticky.person', { scope: 'row' }, h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 2), alt: '' }), s.display_name), Array.from({ length: SLOTS }, (_, i) => cellFor(s, i))))),
     )),
   );
@@ -223,7 +227,7 @@ export async function viewClass(main, classId, tabParam) {
     : tab === 'grades' ? gradebookTab(cls, students, works)
       : journeyTab(board, cls);
   return h('div.stack',
-    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('p.class-code', 'Class code ', h('strong.code', cls.code))),
+    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code))),
     h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`)),
     content,
   );
@@ -240,7 +244,7 @@ export async function viewReview(main, workId) {
   const player = createPlayer((ev) => {
     if (ev.type === 'error') consoleBox.append(h('div.err', ev.line ? `Line ${ev.line}: ` : '', ev.message));
     if (ev.type === 'log') consoleBox.append(h('div.log', ev.message));
-  });
+  }, { askCamera: true });
   const host = h('div.editor-host.review-code');
   const live = checkSummary(lesson, w.code);
 
@@ -278,9 +282,10 @@ export async function viewReview(main, workId) {
         h('div.stack.tight', h('h3', 'Automatic checks'), h('ul.checklist', lesson.steps.filter((s) => s.check).map((s) => { const ok = live.results[lesson.steps.indexOf(s)]; return h('li', { class: ok ? 'ok' : 'warn' }, `${ok ? '✓' : '✗'} ${s.title}`); }))),
         h('div.stack.tight', h('h3', `Reflection: "${lesson.reflect}"`), w.reflection ? h('blockquote', w.reflection) : h('p.muted', 'No reflection written.')),
         h('p.small', `Stretch goals claimed: ${w.stretch_done}`),
+        w.quiz_total > 0 && h('p.small', `Quick checks right on the first try: ${w.quiz_right} of ${w.quiz_total}`),
       ),
       h('section.stack', h('h2', 'Code'), host),
-      h('section.card.stack.rubric', h('h2', 'Rubric'), rubricRows, h('p', 'Total: ', totalEl), h('label.field', h('span', 'Feedback for the student (private)'), feedback),
+      h('section.card.stack.rubric', h('h2', 'Rubric'), standardsBlock(w.lesson_id), rubricRows, h('p', 'Total: ', totalEl), h('label.field', h('span', 'Feedback for the student (private)'), feedback),
         h('div.row', h('button.btn.primary', { onclick: () => finish('approved') }, 'Approve'), h('button.btn', { onclick: () => finish('returned') }, 'Send back for changes')),
       ),
     ),
@@ -293,11 +298,32 @@ export async function viewReview(main, workId) {
   return null;
 }
 
+const shortCode = (code) => code.replace('6-8.', '');
+
+/** Standard codes for a lesson card. Anchor codes are solid; supporting codes are outlined. */
+function standardCodes(id) {
+  const a = alignmentFor(id);
+  return h('p.std-codes', a.anchor.map((c) => h('span.std.anchor', { title: standardByCode(c).text }, shortCode(c))), a.support.map((c) => h('span.std', { title: standardByCode(c).text }, shortCode(c))));
+}
+
+/** What this lesson is evidence for, shown to the teacher while grading. */
+export function standardsBlock(id) {
+  const a = alignmentFor(id);
+  const row = (c) => h('li', h('strong', shortCode(c)), ' ', standardByCode(c).text);
+  return h('details.std-block', { open: a.anchor.length > 0 },
+    h('summary', 'MA DLCS standards'),
+    a.anchor.length > 0 && h('div', h('h3', 'Assess here'), h('ul.std-list', a.anchor.map(row))),
+    a.support.length > 0 && h('div', h('h3', 'Practiced here'), h('ul.std-list', a.support.map(row))),
+    a.evidence && h('p.small', h('strong', 'Evidence: '), a.evidence),
+  );
+}
+
 export async function viewCurriculum() {
   return h('div.stack',
-    h('div', h('h1', 'All lessons'), h('p.muted', 'Thirty-six lessons, each 30 to 40 minutes. Each student takes 20 of them: 12 shared and 8 on their road. Open any lesson to try it and see its answer key. Nothing is saved.')),
+    h('div', h('h1', 'All lessons'), h('p.muted', 'Each lesson is 30 to 40 minutes. The core is 15 lessons per student, sized for a term: 10 shared and 5 on their road. Students who finish early continue Beyond the Summit. Open any lesson to try it and see its answer key. Nothing is saved.')),
+    h('section.stack', h('h2', 'Side trail'), h('p.muted', 'Optional, and it never holds anyone back.'), lessonList(SIDE_TRAILS.map((t) => t.id))),
     STAGES.map((st) => h('section.stack',
-      h('h2', st.name), h('p.muted', st.theme),
+      h('h2', st.name), h('p.muted', st.beyond ? `Extra challenge: ${st.theme}` : st.theme),
       st.kind === 'shared'
         ? lessonList(st.lessons)
         : h('div.road-columns', PATH_IDS.map((p) => h('div.stack', { style: `--road:${PATHS[p].color}` }, h('h3.road-title', PATHS[p].road), lessonList(st.branches[p])))),
@@ -308,7 +334,7 @@ export async function viewCurriculum() {
 function lessonList(ids) {
   return h('div.lesson-list', ids.map((id) => {
     const l = getLesson(id);
-    return h('a.card.lesson-row', { href: `#/lesson/${id}` }, h('strong', l.title), h('span.muted.small', `${l.mins} min · ${l.concepts.join(', ')}`), md(l.hook));
+    return h('a.card.lesson-row', { href: `#/lesson/${id}` }, h('strong', l.title), h('span.muted.small', `${l.mins} min · ${l.concepts.join(', ')}`), md(l.hook), standardCodes(id));
   }));
 }
 

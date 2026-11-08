@@ -2,7 +2,7 @@
 import { lesson } from './engine.js';
 
 lesson({
-  id: 't1', title: 'Hello, Canvas', mins: 30, concepts: ['coordinates', 'function calls'],
+  id: 't1', title: 'Hello, Canvas', mins: 35, concepts: ['coordinates', 'function calls', 'color'],
   hook: 'Every game you have ever played is a grid of tiny dots. Today you learn to tell the computer exactly where to put them, and you draw your first scene.',
   starter: `function setup() {
   createCanvas(400, 400);
@@ -31,6 +31,19 @@ function draw() {
       code: '  rect(0, 320, 400, 80);',
       at: { after: 'ellipse(340, 60, 70, 70);' },
       check: /rect\s*\(/,
+    },
+    {
+      title: 'Add color', mins: 5,
+      say: 'Screens mix **red, green, and blue** light, each from 0 to 255. `fill(r, g, b)` sets the color for every shape drawn after it, like dipping a brush in paint. Make the sun yellow and the ground green.',
+      edits: [
+        { code: '  fill(255, 220, 60);', at: { before: 'ellipse(340, 60, 70, 70);' } },
+        { code: '  fill(90, 170, 80);', at: { before: 'rect(0, 320, 400, 80);' } },
+      ],
+      show: `fill(255, 220, 60);
+ellipse(340, 60, 70, 70);
+fill(90, 170, 80);
+rect(0, 320, 400, 80);`,
+      check: /fill\s*\(/,
     },
     {
       title: 'Draw a character', mins: 10,
@@ -456,16 +469,16 @@ text("Lives: " + lives, 300, 28);`,
     },
     {
       title: 'Game over', mins: 6,
-      say: 'When lives run out, show a message and stop. `noLoop()` stops `draw()` from repeating. Add this at the end of `draw()`:',
+      say: 'The round should end when lives run out **or** when the player reaches 20 points. `||` means **or**: the condition is true if either side is true. `noLoop()` stops `draw()` from repeating. Add this at the end of `draw()`:',
       code: `
-  if (lives <= 0) {
+  if (lives <= 0 || score >= 20) {
     textSize(40);
     textAlign(CENTER);
     text("GAME OVER", 200, 200);
     noLoop();
   }`,
       at: { endOf: 'function draw' },
-      check: /noLoop\s*\(\s*\)/,
+      check: [/noLoop\s*\(\s*\)/, /\|\|/],
     },
     {
       title: 'Make it get harder', mins: 7,

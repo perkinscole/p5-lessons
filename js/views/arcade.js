@@ -9,7 +9,7 @@ import { avatarURL, defaultAvatar } from '../game/avatar.js';
 function playGame(g) {
   let player;
   modal((close) => {
-    player = createPlayer();
+    player = createPlayer(() => {}, { askCamera: true });
     const name = g.student.game_name || getLesson(g.lesson_id).title;
     const box = h('div.stack',
       h('div.row.between', h('div', h('h2', name), h('p.muted', `by ${g.student.display_name}`)), h('button.btn', { onclick: close }, 'Close')),

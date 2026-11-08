@@ -2,28 +2,28 @@
 import { h, svg, modal } from '../ui.js';
 import { app, go } from '../main.js';
 import { getLesson } from '../curriculum/engine.js';
-import { PATHS, STAGES, mapLayout, currentLesson, sequence } from '../curriculum/graph.js';
+import { PATHS, STAGES, mapLayout, currentLesson, sequence, isSideTrail, sideTrailOpen } from '../curriculum/graph.js';
 import { statsFor } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 
 const COL_W = 104;
-const LANE_H = 118;
+const LANE_H = 104;
 const TOP = 74;
 const MARGIN = 70;
 
-const place = (n) => ({ x: MARGIN + n.col * COL_W, y: TOP + 130 + n.lane * LANE_H });
+const place = (n) => ({ x: MARGIN + n.col * COL_W, y: TOP + 195 + n.lane * LANE_H });
 
 /** Where a student is standing: their next lesson, or the fork, or the summit. */
 export function standingOn(s) {
   const done = new Set(s.works.filter((w) => w.status !== 'in_progress').map((w) => w.lesson_id));
-  return currentLesson(s.path, done) || (s.path ? 'c6' : 't6');
+  return currentLesson(s.path, done) || sequence(s.path).at(-1);
 }
 
 export function buildMap({ board, meId = null, myPath = null, myDone = new Set(), onNode }) {
   const { nodes, edges, cols } = mapLayout();
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const width = MARGIN * 2 + (cols - 1) * COL_W;
-  const height = TOP + 130 + LANE_H + 110;
+  const height = TOP + 195 + LANE_H * 1.5 + 80;
   const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, width, height, class: 'map-svg', role: 'img', 'aria-label': 'Class journey map. Details are in the table below.' });
 
   // Stage bands and labels, so the shape of branch and rejoin can be read at a glance.
@@ -32,9 +32,9 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
     const colsHere = ids.map((id) => byId.get(id).col);
     const x1 = MARGIN + Math.min(...colsHere) * COL_W - COL_W / 2 + 2;
     const x2 = MARGIN + Math.max(...colsHere) * COL_W + COL_W / 2 - 2;
-    root.append(svg('rect', { x: x1, y: 8, width: x2 - x1, height: height - 16, rx: 6, class: `band ${st.kind}` }));
+    root.append(svg('rect', { x: x1, y: 8, width: x2 - x1, height: height - 16, rx: 6, class: `band ${st.beyond ? 'beyond' : st.kind}` }));
     const label = svg('text', { x: (x1 + x2) / 2, y: 34, class: 'stage-name', 'text-anchor': 'middle' });
-    label.textContent = st.name;
+    label.textContent = st.mapName || st.name;
     root.append(label);
   }
 
@@ -45,12 +45,12 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
     const mine = !e.path || !myPath || e.path === myPath;
     root.append(svg('path', {
       d: `M${a.x},${a.y} C${midX},${a.y} ${midX},${b.y} ${b.x},${b.y}`,
-      class: `trail${mine ? '' : ' faint'}`,
+      class: `trail${mine ? '' : ' faint'}${e.beyond || e.side ? ' extra' : ''}`,
       style: e.path ? `stroke:${PATHS[e.path].color}` : null,
     }));
   }
 
-  const myOrder = myPath ? sequence(myPath) : sequence(null);
+  const myOrder = [...(myPath ? sequence(myPath) : sequence(null)), ...nodes.filter((n) => n.side).map((n) => n.id)];
   const myCurrent = meId ? currentLesson(myPath, myDone) : null;
 
   for (const n of nodes) {
@@ -129,6 +129,7 @@ export function legend() {
   return h('div.legend',
     Object.values(PATHS).map((p) => h('span', h('i.road-dot', { style: `background:${p.color}` }), `${p.road}: ${p.genre}`)),
     h('span', h('i.road-dot.shared'), 'Everyone together'),
+    h('span', h('i.road-dot.beyond'), 'Beyond the Summit: extra challenges'),
     h('span.muted', 'Numbers show lesson minutes.'),
   );
 }
@@ -160,7 +161,7 @@ export async function viewMap(_main, classId) {
   const mapEl = buildMap({
     board, meId: me?.id, myPath: isStudent ? session.student.path : null, myDone,
     onNode: {
-      can: (id, onMyRoad, state) => (isStudent ? onMyRoad && (state === 'done' || id === myCurrent) : true),
+      can: (id, onMyRoad, state) => (isStudent ? onMyRoad && (state === 'done' || id === myCurrent || (isSideTrail(id) && sideTrailOpen(id, myDone))) : true),
       go: (id) => go(`/lesson/${id}`),
     },
   });

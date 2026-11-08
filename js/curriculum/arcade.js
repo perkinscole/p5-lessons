@@ -232,7 +232,8 @@ lesson({
   steps: [
     {
       title: 'Write a resetGame function', mins: 8,
-      say: 'Collect your starting values into one function. Add this at the bottom:',
+      reveal: true,
+      say: 'Use what you learned at the Crossing: write a function called `resetGame` at the bottom that puts every starting value back. Look at your variables and decide which ones change during play.',
       code: `function resetGame() {
   playerX = 180;
   bulletActive = false;
@@ -245,10 +246,12 @@ lesson({
 }`,
       at: { end: true },
       check: /function\s+resetGame/,
+      hint: 'Check each variable at the top of your code. If it changes while the game runs, reset it here.',
     },
     {
       title: 'Press R to restart', mins: 4,
-      say: 'Call your function when the player presses R.',
+      reveal: true,
+      say: 'Make the game call `resetGame()` when the player presses R. Put a new `if` inside your `keyPressed()` that checks whether `key === "r"`.',
       code: `  if (key === "r") {
     resetGame();
   }`,
@@ -270,7 +273,8 @@ lesson({
     },
     {
       title: 'A scrolling starfield', mins: 8,
-      say: 'The loop counter can drive any math. Each star gets its own position, and adding `frameCount` makes them move. `%` gives the remainder, which wraps a star back to the top when it passes 400. Add this just below `background`.',
+      reveal: true,
+      say: 'Just below `background`, draw 50 stars with a for loop. Give each star an `x` of `(i * 83) % 400` and a `y` of `(i * 47 + frameCount) % 400`. Adding `frameCount` makes them move, and `%` gives the remainder, which wraps a star back to the top.',
       code: `
   // stars
   fill(255);
@@ -344,7 +348,8 @@ lesson({
     },
     {
       title: 'Check every bullet', mins: 9,
-      say: 'The hit test now has to ask about **each** bullet, so it goes in a loop too. `break` stops the loop early, which we want once one bullet has hit.',
+      reveal: true,
+      say: 'The hit test only knows about one bullet, and `bulletActive` is gone. Rewrite it as a loop over `bullets`, using the same backward loop. If a bullet is close to the enemy, remove it, add to the score, and send the enemy back to the top. `break` stops the loop early, which you want once one bullet has hit.',
       code: `// did a bullet hit?
   for (let i = bullets.length - 1; i >= 0; i = i - 1) {
     if (dist(bullets[i].x, bullets[i].y, enemyX + 15, enemyY + 15) < 22) {
@@ -368,7 +373,8 @@ lesson({
     },
     {
       title: 'Fix the restart', mins: 4,
-      say: 'Your `resetGame` still mentions `bulletActive`. Clear the list instead. Then fire away, and try printing `bullets.length` on screen to watch the list grow and shrink.',
+      reveal: true,
+      say: 'Your `resetGame` still mentions `bulletActive`. Make it empty the list instead. Then fire away, and try printing `bullets.length` on screen to watch the list grow and shrink.',
       code: 'bullets = [];',
       at: { replace: 'bulletActive = false;' },
       check: /^\s*\w+\s*=\s*\[\s*\]\s*;/m,
@@ -384,7 +390,8 @@ lesson({
   steps: [
     {
       title: 'Build a formation', mins: 7,
-      say: 'A function can **return** a list. Use a loop to build a row of enemies, so you can get more by changing one number. Replace your three enemy variables:',
+      reveal: true,
+      say: 'Replace your three enemy variables with a list called `enemies`, built by a function called `makeEnemies()`. Inside the function, start an empty list, use a for loop to `push` six `{ x, y, speed }` objects, and **return** the list.',
       code: `let enemies = makeEnemies();
 
 function makeEnemies() {
@@ -397,10 +404,12 @@ function makeEnemies() {
 `,
       at: { replace: 'let enemyX = 40;\nlet enemyY = 40;\nlet enemySpeed = 2;' },
       check: /return\s+\w+/,
+      hint: 'Spacing the enemies out is math on the loop counter, like 20 + i * 55.',
     },
     {
       title: 'March them all', mins: 9,
-      say: 'Each enemy moves on its own. Replace your old enemy block, and notice the bottom check moves into the loop too.',
+      reveal: true,
+      say: 'Replace your old enemy block with a backward loop over `enemies`. Use `let e = enemies[i];`, then do for `e.x`, `e.y`, and `e.speed` what your old code did for one enemy. Move the check for reaching the player inside the loop too. End the loop body with the comment `// HIT CHECK GOES HERE`, for the next step.',
       code: `// enemies
   for (let i = enemies.length - 1; i >= 0; i = i - 1) {
     let e = enemies[i];
@@ -425,7 +434,7 @@ function makeEnemies() {
   }
   fill(255, 90, 120);
   rect(enemyX, enemyY, 30, 30);` },
-      check: /\.length[\s\S]*\.x/,
+      check: /enemies\s*\[\s*\w+\s*\]/,
     },
     {
       title: 'Every bullet, every enemy', mins: 12,
@@ -468,7 +477,8 @@ for (let j = bullets.length - 1; j >= 0; j = j - 1) {
     },
     {
       title: 'New win and lose rules', mins: 5,
-      say: 'Losing is now handled in the loop. You win by clearing the list. Replace the old win-or-lose block.',
+      reveal: true,
+      say: 'Losing is now handled in the loop. Replace your old win-or-lose block with one rule: you win when the list is **empty**.',
       code: `// win
   if (enemies.length === 0) {
     won = true;
@@ -484,6 +494,7 @@ for (let j = bullets.length - 1; j >= 0; j = j - 1) {
     },
     {
       title: 'Fix the restart', mins: 4,
+      reveal: true,
       say: 'Have `resetGame` build a fresh formation, replacing the three old enemy lines.',
       code: '  enemies = makeEnemies();',
       at: { replace: '  enemyX = 40;\n  enemyY = 40;\n  enemySpeed = 2;' },
@@ -504,7 +515,8 @@ lesson({
   steps: [
     {
       title: 'An Enemy class', mins: 10,
-      say: 'You built classes at the last Crossing, and enemies are a natural fit. Add this at the bottom:',
+      reveal: true,
+      say: 'You built classes at the last Crossing, and enemies are a natural fit. Write a class called `Enemy` at the bottom, with `x`, `y`, and `speed`. Give it an `update()` method that moves and bounces, and a `show()` method that draws.',
       code: `class Enemy {
   constructor(x, y, speed) {
     this.x = x;
@@ -526,11 +538,13 @@ lesson({
   }
 }`,
       at: { end: true },
-      check: /class\s+\w+\s*\{[\s\S]*constructor/,
+      check: /class\s+Enemy\s*\{/,
+      hint: 'Your enemy loop already has this code. Move it here, and change e. to this.',
     },
     {
       title: 'Let enemies handle themselves', mins: 4,
-      say: 'The enemy loop gets much simpler. Replace these lines with two method calls:',
+      reveal: true,
+      say: 'Replace the moving and drawing lines in your enemy loop with two method calls, so each enemy handles itself.',
       code: `e.update();
     e.show();`,
       at: { replace: `e.x = e.x + e.speed;
@@ -540,7 +554,7 @@ lesson({
     }
     fill(255, 90, 120);
     rect(e.x, e.y, 30, 30);` },
-      check: /\.update\s*\(\s*\)|\.\w+\s*\(\s*\)\s*;\s*\n\s*\w+\.\w+\s*\(\s*\)/,
+      check: /\be\.update\s*\(\s*\)/,
     },
     {
       title: 'Describe waves as data', mins: 8,
@@ -557,7 +571,8 @@ let waves = [
     },
     {
       title: 'Read the data', mins: 8,
-      say: 'Have `makeEnemies` read the current wave from your list. Then call it in `setup()`, and have `resetGame` go back to wave 0.',
+      reveal: true,
+      say: 'Rewrite `makeEnemies` so it reads the current wave with `let w = waves[wave];`. Loop `w.count` times and push a `new Enemy` that uses `w.speed`. Then fill the list in `setup()` with `enemies = makeEnemies();`, and set `wave = 0;` in `resetGame` before it builds the enemies.',
       edits: [
         { code: `function makeEnemies() {
   let list = [];
@@ -590,11 +605,12 @@ enemies = makeEnemies();
 
 // in resetGame(), before enemies = makeEnemies();
 wave = 0;`,
-      check: /new\s+\w+\s*\(/,
+      check: /new\s+Enemy\s*\(/,
     },
     {
       title: 'Next wave!', mins: 6,
-      say: 'When the screen is clear, move on to the next wave. Only after the last wave does the player win.',
+      reveal: true,
+      say: 'When the screen is clear, add 1 to `wave`. If there is another wave in the list, build it. If not, the player wins. Replace your old win check.',
       code: `// next wave, or win
   if (enemies.length === 0) {
     wave = wave + 1;
@@ -608,14 +624,15 @@ wave = 0;`,
   if (enemies.length === 0) {
     won = true;
   }` },
-      check: /<\s*\w+\.length/,
+      check: /wave\s*<\s*waves\.length/,
     },
     {
       title: 'Write your own waves', mins: 4,
-      say: 'Add wave data and show the wave number on screen. Build a difficulty curve: easy, harder, then a surprise. Add `text("Wave " + (wave + 1), 10, 46);` to your display.',
+      reveal: true,
+      say: 'Add wave data to your list, and show the wave number on screen using `text()` and `wave + 1`. Build a difficulty curve: easy, harder, then a surprise.',
       code: '  text("Wave " + (wave + 1), 10, 46);',
       at: { after: 'text("Score: " + score, 290, 24);' },
-      check: /text\s*\([^)]*\+/,
+      check: /text\s*\([^)]*wave/i,
     },
   ],
   stretch: ['Add a `pattern` to each wave, such as zig-zag with `sin()`.', 'Give some waves a tough enemy with health.', 'Show a "Wave 2!" banner for 2 seconds using a timer variable.'],
@@ -632,7 +649,8 @@ lesson({
     },
     {
       title: 'Boss data', mins: 4,
-      say: 'Add the boss and its shots at the top. The boss only shows up after the final wave.',
+      reveal: true,
+      say: 'Create a `boss` object at the top with `x: 170`, `y: 40`, `hp: 20`, `state: "patrol"`, `timer: 0`, and `speed: 2`. Also create `bossActive` set to `false`, and an empty list called `enemyShots`. The boss only shows up after the final wave.',
       code: `let boss = { x: 170, y: 40, hp: 20, state: "patrol", timer: 0, speed: 2 };
 let bossActive = false;
 let enemyShots = [];`,
@@ -641,7 +659,8 @@ let enemyShots = [];`,
     },
     {
       title: 'The state machine', mins: 10,
-      say: 'Each frame the boss checks its state and does just that one thing. `timer` counts frames in the current state. At 60 frames a second, 120 is 2 seconds. Add this at the bottom:',
+      reveal: true,
+      say: 'Each frame the boss checks its state and does just that one thing. `timer` counts frames in the current state. At 60 frames a second, 120 is 2 seconds. Press **Add the starter code**. The `patrol` state is finished, as your example. Finish the other two.',
       code: `function updateBoss() {
   boss.timer = boss.timer + 1;
   if (boss.state === "patrol") {
@@ -667,7 +686,31 @@ let enemyShots = [];`,
   }
 }`,
       at: { end: true },
-      check: /===\s*"\w+"[\s\S]*else\s+if/,
+      check: [/state\s*=\s*"rest"/, /state\s*=\s*"patrol"/, /else\s+if/],
+      hint: 'Each TODO has the same shape as the if (boss.timer > 120) block in patrol.',
+      skeleton: [
+        { code: `function updateBoss() {
+  boss.timer = boss.timer + 1;
+  if (boss.state === "patrol") {
+    boss.x = boss.x + boss.speed;
+    if (boss.x > width - 60 || boss.x < 0) {
+      boss.speed = boss.speed * -1;
+    }
+    if (boss.timer > 120) {
+      boss.state = "aim";
+      boss.timer = 0;
+    }
+  } else if (boss.state === "aim") {
+    // TODO 1: When the timer passes 40, call fireAtPlayer(),
+    // switch to the "rest" state, and set the timer back to 0.
+
+  } else if (boss.state === "rest") {
+    // TODO 2: When the timer passes 60, switch back to "patrol",
+    // and set the timer back to 0.
+
+  }
+}`, at: { end: true } },
+      ],
     },
     {
       title: 'Aim with trigonometry', mins: 9,
@@ -684,7 +727,8 @@ let enemyShots = [];`,
     },
     {
       title: 'Bring on the boss', mins: 9,
-      say: 'Draw the boss, flash it while aiming as a warning, and test bullets and shots. Add this above `// player`. Then change `won = true` in your wave check so that the boss appears instead of you winning.',
+      reveal: true,
+      say: 'Press **Add the starter code** to draw the boss and its shots, including a flash while it aims as a warning. Then finish the two TODOs. Last, change `won = true` in your wave check to `bossActive = true`, so the boss appears instead of you winning.',
       edits: [
         { code: `  // boss
   if (bossActive) {
@@ -733,11 +777,53 @@ let enemyShots = [];`,
 
 // in your wave check, replace won = true with:
 bossActive = true;`,
-      check: /\w+\s*=\s*true[\s\S]*\.hp/,
+      check: [/\.hp\s*(?:=\s*\w+\.hp\s*-|-=|--)/, /bossActive\s*=\s*true/, /\.hp\s*<=?\s*0/],
+      hint: 'For TODO 1, a point is inside a box when b.x > boss.x and b.x < boss.x + 60, and the same for y with 40.',
+      skeleton: [
+        { code: `  // boss
+  if (bossActive) {
+    updateBoss();
+    if (boss.state === "aim" && frameCount % 10 < 5) {
+      fill(255);
+    } else {
+      fill(180, 60, 220);
+    }
+    rect(boss.x, boss.y, 60, 40);
+    fill(255, 0, 80);
+    rect(boss.x, boss.y - 10, boss.hp * 3, 5);
+
+    for (let i = bullets.length - 1; i >= 0; i = i - 1) {
+      let b = bullets[i];
+      // TODO 1: If b is inside the boss's box (60 wide, 40 tall),
+      // remove the bullet, subtract 1 from boss.hp, and add 5 to the score.
+
+    }
+
+    // TODO 2: If the boss has no health left, the player has won.
+
+  }
+
+  // enemy shots
+  fill(255, 120, 60);
+  for (let i = enemyShots.length - 1; i >= 0; i = i - 1) {
+    let s = enemyShots[i];
+    s.x = s.x + s.vx;
+    s.y = s.y + s.vy;
+    ellipse(s.x, s.y, 10, 10);
+    if (dist(s.x, s.y, playerX + 20, playerY + 20) < 22) {
+      lost = true;
+    }
+    if (s.y > height || s.x < 0 || s.x > width) {
+      enemyShots.splice(i, 1);
+    }
+  }
+`, at: { before: '// player' } },
+      ],
     },
     {
       title: 'Fix the restart', mins: 4,
-      say: 'Reset the boss in `resetGame`, then play. Tune its timers and health. Can you add a fourth state, like a charge?',
+      reveal: true,
+      say: 'Reset the boss in `resetGame`: `bossActive` back to false, then `hp`, `state`, and `timer`, and an empty `enemyShots`. Then play, and tune its timers and health. Can you add a fourth state, like a charge?',
       code: `  bossActive = false;
   boss.hp = 20;
   boss.state = "patrol";

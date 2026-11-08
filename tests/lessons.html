@@ -26,6 +26,8 @@ setTimeout(function () {
   if (typeof enemies !== 'undefined' && Array.isArray(enemies)) enemies.length = 0;
   if (typeof wave !== 'undefined') wave = 99;
   if (typeof boss !== 'undefined') boss.timer = 200;
+  if (typeof memories !== 'undefined') { for (var m = 0; m < 40; m++) memories.push({ x: m * 9, y: (m * 37) % 370, move: ['left', 'right', 'up', 'down'][m % 4] }); }
+  if (typeof trainBrain === 'function') trainBrain();
 }, 500);
 setTimeout(function () {
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'r', keyCode: 82 }));
@@ -38,9 +40,13 @@ setTimeout(function () {
   for (var i = 0; i < d.length; i += 4 * 37) { var k = d[i] + ',' + d[i + 1] + ',' + d[i + 2]; if (!seen[k]) { seen[k] = 1; n++; } }
   console.log('PROBE ' + n);
 }, 1500);
+if (typeof trainBrain === 'function') setTimeout(function () {
+  if (brainReady) brain.classify([100, 100], function (r) { console.log('BRAIN ' + r[0].label + ' ' + r.length); });
+  else console.log('BRAIN not-ready');
+}, 7000);
 `;
 
-const jobs = [];
+const jobs = [{ key: 't2', id: 't2', path: 'platformer' }];
 const seen = new Set();
 for (const path of PATH_IDS) {
   for (const id of sequence(path)) {
@@ -53,25 +59,30 @@ for (const path of PATH_IDS) {
 const results = [];
 function runJob(job) {
   return new Promise((resolve) => {
-    const r = { key: job.key, errors: [], colors: null };
+    const src = buildSolution(job.id, job.path);
+    const trains = src.includes('trainBrain');
+    const usesMl = src.includes('ml5.');
+    const r = { key: job.key, errors: [], colors: null, brain: null };
     const p = createPlayer((ev) => {
       if (ev.type === 'error') r.errors.push(`${ev.line ? `line ${ev.line}: ` : ''}${ev.raw}`);
       if (ev.type === 'log' && ev.message.startsWith('PROBE')) r.colors = +ev.message.split(' ')[1];
+      if (ev.type === 'log' && ev.message.startsWith('BRAIN')) r.brain = ev.message;
     });
     document.body.append(p.el);
-    p.run(buildSolution(job.id, job.path) + PROBE, {});
-    setTimeout(() => { p.destroy(); p.el.remove(); resolve(r); }, 2600);
+    p.run(src + PROBE, {});
+    setTimeout(() => { p.destroy(); p.el.remove(); resolve(r); }, trains ? 9500 : usesMl ? 5000 : 2600);
   });
 }
 
 (async () => {
   const queue = [...jobs];
-  await Promise.all(Array.from({ length: 6 }, async () => {
+  await Promise.all(Array.from({ length: 4 }, async () => {
     while (queue.length) results.push(await runJob(queue.shift()));
   }));
   const bad = results.filter((r) => r.errors.length || r.colors === null || r.colors < 2);
+  const brains = results.filter((r) => r.brain).map((r) => `${r.key}: ${r.brain}`);
   document.getElementById('sum').textContent = `${results.length - bad.length} of ${results.length} lessons ran cleanly`;
-  document.getElementById('out').textContent = bad.map((r) => `${r.key}: colors=${r.colors} ${r.errors.join(' | ')}`).join('\n') || 'All good.';
+  document.getElementById('out').textContent = (bad.map((r) => `${r.key}: colors=${r.colors} ${r.errors.join(' | ')}`).join('\n') || 'All good.') + '\n' + brains.join('\n');
   window.__done = { total: results.length, bad };
 })();
 </script>

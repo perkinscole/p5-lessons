@@ -260,7 +260,8 @@ lesson({
   steps: [
     {
       title: 'Write a resetGame function', mins: 8,
-      say: 'Right now the only way to replay is to press Run. Collect all your starting values into one function. Add this at the bottom:',
+      reveal: true,
+      say: 'Right now the only way to replay is to press Run. Use what you learned at the Crossing: write a function called `resetGame` at the bottom that puts every starting value back. Look at your variables and decide which ones change during play.',
       code: `function resetGame() {
   playerX = 180;
   playerY = 100;
@@ -272,10 +273,12 @@ lesson({
 }`,
       at: { end: true },
       check: /function\s+resetGame/,
+      hint: 'Check each variable at the top of your code. If it changes while the game runs, reset it here.',
     },
     {
       title: 'Press R to restart', mins: 4,
-      say: 'Call your function when the player presses R. One line of code now does everything.',
+      reveal: true,
+      say: 'Make the game call `resetGame()` when the player presses R. Put a new `if` inside your `keyPressed()` that checks whether `key === "r"`.',
       code: `  if (key === "r") {
     resetGame();
   }`,
@@ -294,7 +297,8 @@ lesson({
     },
     {
       title: 'Loop with math', mins: 8,
-      say: 'The loop variable can drive any math. Draw a row of clouds where each one has a different position. `i % 2` gives the remainder after dividing by 2, which flips between 0 and 1. That is handy for zig-zags. Add this just after `background`:',
+      reveal: true,
+      say: 'Just after `background`, draw a row of 5 clouds with a for loop that counts `i` from 0 to 4. Work out each cloud\'s `x` from `i`, such as `40 + i * 80`. For a zig-zag, add `(i % 2) * 30` to `y`. `%` gives the remainder, so `i % 2` flips between 0 and 1.',
       code: `
   // clouds
   fill(255);
@@ -341,7 +345,8 @@ lesson({
     },
     {
       title: 'Land on any of them', mins: 11,
-      say: 'Now wrap the landing check in the same kind of loop, using `p` in place of the old variables. Your game will work again when this is done.',
+      reveal: true,
+      say: 'Your old landing check only knows about one platform. Wrap it in a loop like the one you just wrote, and use `p.x`, `p.y`, `p.w`, and `p.h` in place of the old variables. Your game will work again when this is done.',
       code: `// landing on the platforms
   for (let i = 0; i < platforms.length; i = i + 1) {
     let p = platforms[i];
@@ -366,10 +371,12 @@ lesson({
     onGround = true;
   }` },
       check: /(?:\.length[\s\S]*){2,}/,
+      hint: 'Copy your drawing loop first. Then move the whole landing check inside it.',
     },
     {
       title: 'Add one line, get a platform', mins: 4,
-      say: 'Add a new `{ }` line to your array and press Run. You added a platform with **one line**, and all your loops handled it automatically. This is why programmers love arrays.',
+      reveal: true,
+      say: 'Add a fourth platform by writing one more `{ }` line in your array, with `x`, `y`, `w`, and `h`. Press Run. You added a platform with **one line**, and all your loops handled it automatically. This is why programmers love arrays.',
       code: '  { x: 150, y: 310, w: 60, h: 15 },',
       at: { after: '{ x: 220, y: 130, w: 100, h: 20 },' },
       check: /(?:\{\s*x\s*:[\s\S]*){4,}/,
@@ -390,7 +397,8 @@ lesson({
   steps: [
     {
       title: 'Build the coin list', mins: 7,
-      say: 'Start with a function that returns a fresh list, so a restart can bring every coin back. A function can **return** a value to whoever called it. Replace the old coin variables:',
+      reveal: true,
+      say: 'Replace the three old coin variables with a list called `coins`. Start with `let coins = makeCoins();`, then write a function called `makeCoins()` that **returns** a list of at least three `{ x, y }` objects. Now a restart can bring every coin back.',
       code: `let coins = makeCoins();
 
 function makeCoins() {
@@ -430,14 +438,16 @@ function makeCoins() {
     },
     {
       title: 'Fix the flag', mins: 4,
-      say: '`coinTaken` no longer exists, so the flag needs a new rule: you can only win when the list is **empty**.',
+      reveal: true,
+      say: '`coinTaken` no longer exists, so the flag needs a new rule: you can only win when the list is **empty**. How can you tell that a list is empty? Change the `if` for your flag.',
       code: 'if (coins.length === 0 && playerX + playerSize > goalX) {',
       at: { replace: 'if (coinTaken && playerX + playerSize > goalX) {' },
       check: /\.length\s*===?\s*0/,
     },
     {
       title: 'Fix the restart', mins: 3,
-      say: 'Your `resetGame` still mentions `coinTaken`. Have it fetch a fresh list instead. This is where `makeCoins()` pays off.',
+      reveal: true,
+      say: 'Your `resetGame` still mentions `coinTaken`. Have it fetch a fresh list instead, using the function you wrote.',
       code: 'coins = makeCoins();',
       at: { replace: 'coinTaken = false;' },
       check: /^\s*\w+\s*=\s*\w+\s*\(\s*\)\s*;/m,
@@ -469,7 +479,8 @@ lesson({
   steps: [
     {
       title: 'A Coin class', mins: 9,
-      say: 'You built classes at the last Crossing. Coins have data **and** behavior, so they are a great fit. Add this class at the bottom:',
+      reveal: true,
+      say: 'You built classes at the last Crossing. Write a class called `Coin` at the bottom. Its constructor takes `x` and `y`. Give it a `show()` method that draws the coin, and a `touches()` method that **returns** whether the player is within 30 dots of it.',
       code: `class Coin {
   constructor(x, y) {
     this.x = x;
@@ -486,7 +497,8 @@ lesson({
   }
 }`,
       at: { end: true },
-      check: /class\s+\w+\s*\{[\s\S]*constructor/,
+      check: /class\s+Coin\s*\{/,
+      hint: 'Your coin loop already has the drawing and the dist() check. Move them here, and use this.x and this.y.',
     },
     {
       title: 'Draw a level with letters', mins: 7,
@@ -529,7 +541,8 @@ lesson({
     },
     {
       title: 'Use the class', mins: 5,
-      say: 'The coins are `Coin` objects now, so your coin loop can get shorter. Replace its two middle lines so each coin handles itself:',
+      reveal: true,
+      say: 'The coins are `Coin` objects now. In your coin loop, replace the drawing line and the `dist` check so each coin handles itself, using `c.show()` and `c.touches()`.',
       edits: [
         { code: `c.show();
     if (c.touches()) {`, at: { replace: `ellipse(c.x, c.y, 20, 20);
@@ -541,7 +554,8 @@ if (c.touches()) {`,
     },
     {
       title: 'Plug it in', mins: 3,
-      say: 'Build the level at the start and on every restart. Your old `makeCoins` is not needed in `resetGame` any more.',
+      reveal: true,
+      say: 'Call `buildLevel()` in `setup()`, and again in `resetGame()` in place of `coins = makeCoins();`.',
       edits: [
         { code: '  buildLevel();', at: { replace: '  coins = makeCoins();' } },
         { code: '  buildLevel();', at: { after: 'createCanvas(400, 400);' } },
@@ -551,7 +565,7 @@ buildLevel();
 
 // in resetGame(), instead of coins = makeCoins();
 buildLevel();`,
-      check: /^\s*\w+\s*\(\s*\)\s*;/m,
+      check: /(?:^\s*buildLevel\s*\(\s*\)\s*;[\s\S]*){2,}/m,
     },
     {
       title: 'Paint your own level', mins: 5,
@@ -591,21 +605,24 @@ pop();`,
     },
     {
       title: 'Unlock the right edge', mins: 3,
-      say: 'The player is still stuck inside 400 dots. Keep the left limit and remove the right one. `max(a, b)` gives whichever is larger.',
+      reveal: true,
+      say: 'The player is still stuck inside 400 dots. Keep the left limit and remove the right one by replacing your `constrain` line. `max(a, b)` gives whichever is larger.',
       code: 'playerX = max(playerX, 0);',
       at: { replace: 'playerX = constrain(playerX, 0, width - playerSize);' },
       check: /max\s*\(/,
     },
     {
       title: 'Follow the ground', mins: 5,
-      say: 'Ground tiles need to appear wherever the camera is looking, so start the loop from the camera position and snap it to the tile grid using `floor`.',
+      reveal: true,
+      say: 'Ground tiles need to appear wherever the camera is looking. Change the start of your ground loop so `x` begins at the camera\'s position, snapped to a multiple of 40 using `floor`. Keep going until `cameraX + width`.',
       code: 'for (let x = floor(cameraX / 40) * 40; x < cameraX + width; x = x + 40) {',
       at: { replace: 'for (let x = 0; x < width; x = x + 40) {' },
-      check: /floor\s*\(/,
+      check: /floor\s*\(\s*cameraX/,
     },
     {
       title: 'The generator algorithm', mins: 14,
-      say: 'An **algorithm** is a precise recipe. Ours is a **random walk**: start somewhere, take a random step, then repeat.\n\nThe important part is the **constraints**. Your jump travels about 160 dots across and 120 up. We keep gaps under 90 and height changes under 70, so every level the code invents can be beaten. Add this at the bottom:',
+      reveal: true,
+      say: 'An **algorithm** is a precise recipe. Ours is a **random walk**: start somewhere, take a random step, then repeat.\n\nThe important part is the **constraints**. Your jump travels about 160 dots across and 120 up, so every gap must stay under 90 and every height change under 70. Press **Add the starter code**, then finish the two TODOs. They are the steps of the walk.',
       code: `function generateWorld() {
   platforms = [];
   coins = [];
@@ -623,11 +640,34 @@ pop();`,
   goalX = x;
 }`,
       at: { end: true },
-      check: [/random\s*\(/, /\.push\s*\(/, /for\s*\(/],
+      check: [/random\s*\(/, /\.push\s*\(/, /\bx\s*(?:=\s*x\s*\+|\+=)[^;)]*random/, /\by\s*(?:=|\+=)[^;]*random/],
+      hint: 'For TODO 1, your line starts with x = x + w. For TODO 2, you can write y = constrain(y + random(-70, 70), 120, 320);',
+      skeleton: [
+        { code: `function generateWorld() {
+  platforms = [];
+  coins = [];
+  let x = 420;
+  let y = 280;
+  for (let i = 0; i < 30; i = i + 1) {
+    let w = random(80, 140);
+    platforms.push({ x: x, y: y, w: w, h: 20 });
+    if (random() < 0.6) {
+      coins.push(new Coin(x + w / 2, y - 30));
+    }
+
+    // TODO 1: Move x past this platform (add w), and across a random gap of 40 to 90.
+
+    // TODO 2: Change y by a random amount from -70 to 70.
+    // Then use constrain() to keep y between 120 and 320.
+  }
+  goalX = x;
+}`, at: { end: true } },
+      ],
     },
     {
       title: 'Switch to the generator', mins: 5,
-      say: 'Call the generator in place of the level builder. Also, the flag should only care about reaching the end now, since not every coin must be collected.',
+      reveal: true,
+      say: 'Call `generateWorld()` everywhere you called `buildLevel()`. Also change the flag so it only cares about reaching the end, since not every coin must be collected.',
       edits: [
         { code: 'generateWorld();', at: { replace: 'buildLevel();' } },
         { code: 'generateWorld();', at: { replace: 'buildLevel();' } },
@@ -642,7 +682,8 @@ if (playerX + playerSize > goalX) {`,
     },
     {
       title: 'Lava below!', mins: 5,
-      say: 'Without danger, you could just walk along the ground. Past the starting area, touching the ground means you lose. Add this to the ground landing check:',
+      reveal: true,
+      say: 'Without danger, you could just walk along the ground. Inside your ground landing check, set `lost` to true if `playerX` is past 420, which is the end of the starting area.',
       code: `    if (playerX > 420) {
       lost = true;
     }`,

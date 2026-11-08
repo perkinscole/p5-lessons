@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "pixel-trail", "runtimeExecutable": "python3", "runtimeArgs": ["-m", "http.server", "8080"], "port": 8080 }
+    { "name": "pixel-trail", "runtimeExecutable": "node", "runtimeArgs": ["tools/dev-server.mjs", "8082"], "port": 8082 },
+    { "name": "apps-script-preview", "runtimeExecutable": "node", "runtimeArgs": ["tools/gas-preview.mjs"], "port": 8081 }
   ]
 }

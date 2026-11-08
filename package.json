@@ -4,10 +4,12 @@
   "type": "module",
   "description": "Teach game programming in p5.js, one 30-40 minute lesson at a time.",
   "scripts": {
-    "start": "python3 -m http.server 8080",
-    "test": "node --test tests/curriculum.test.mjs tests/rls.test.mjs"
+    "start": "node tools/dev-server.mjs 8080",
+    "build": "node tools/build-gas.mjs",
+    "preview": "npm run build && node tools/gas-preview.mjs",
+    "test": "node --test tests/curriculum.test.mjs tests/server.test.mjs"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.15"
+    "esbuild": "^0.25.0"
   }
 }

@@ -261,7 +261,8 @@ lesson({
   steps: [
     {
       title: 'Write a resetGame function', mins: 8,
-      say: 'Collect your starting values into one function. Add this at the bottom:',
+      reveal: true,
+      say: 'Use what you learned at the Crossing: write a function called `resetGame` at the bottom that puts every starting value back. Look at your variables and decide which ones change during play.',
       code: `function resetGame() {
   playerX = 60;
   playerY = 60;
@@ -272,10 +273,12 @@ lesson({
 }`,
       at: { end: true },
       check: /function\s+resetGame/,
+      hint: 'Check each variable at the top of your code. If it changes while the game runs, reset it here.',
     },
     {
       title: 'Press R to restart', mins: 4,
-      say: 'p5 calls `keyPressed()` once per key press. Add one that calls your function.',
+      reveal: true,
+      say: 'p5 calls `keyPressed()` once per key press. Write your own `keyPressed()` at the bottom that calls `resetGame()` when `key === "r"`.',
       code: `function keyPressed() {
   if (key === "r") {
     resetGame();
@@ -300,7 +303,8 @@ lesson({
     },
     {
       title: 'Loop with math', mins: 8,
-      say: 'The loop counter can drive any math. Scatter flowers in a pattern that looks random but is not. `%` gives the remainder, which wraps numbers around. Add this just below `background`.',
+      reveal: true,
+      say: 'Just below `background`, use a for loop to scatter 40 small flowers. Try an `x` of `(i * 97) % 400` and a `y` of `(i * 53) % 400`. `%` gives the remainder, which wraps big numbers back onto the canvas, so the pattern looks random but is not.',
       code: `
   // flowers
   fill(255, 240, 150);
@@ -346,7 +350,8 @@ lesson({
     },
     {
       title: 'A helper that returns an answer', mins: 6,
-      say: 'You will need that long overlap check again and again, so make it a function that **returns** true or false. Add it at the bottom:',
+      reveal: true,
+      say: 'You will need that long overlap check again and again. Write a function called `hitsWall(x, y)` at the bottom. It loops over `walls` and **returns** `true` if a player at that position overlaps any wall. If the loop finishes without a hit, it returns `false`.',
       code: `function hitsWall(x, y) {
   for (let i = 0; i < walls.length; i = i + 1) {
     let w = walls[i];
@@ -358,10 +363,12 @@ lesson({
 }`,
       at: { end: true },
       check: /return\s+true[\s\S]*return\s+false/,
+      hint: 'The four-part overlap check from your bump code goes inside the loop. Use x and y in place of playerX and playerY.',
     },
     {
       title: 'Use your helper', mins: 8,
-      say: 'Now the bump check turns into something you can read aloud. Test each direction on its own so the player still slides along walls.',
+      reveal: true,
+      say: 'Replace your whole bump check so it uses `hitsWall`. Test one direction at a time so the player still slides: call `hitsWall(playerX, oldY)` and undo `x` if it hits. Then call `hitsWall(playerX, playerY)` and undo `y` if it hits.',
       code: `// bump into walls
   if (hitsWall(playerX, oldY)) {
     playerX = oldX;
@@ -380,11 +387,12 @@ lesson({
       playerY = oldY;
     }
   }` },
-      check: /if\s*\(\s*\w+\s*\([^)]*\)\s*\)/,
+      check: /if\s*\(\s*hitsWall\s*\(/,
     },
     {
       title: 'Design your maze', mins: 8,
-      say: 'Add walls to your array, one line each, until you have a real maze. Check that the key can be reached and that the treasure can only be reached through the door.',
+      reveal: true,
+      say: 'Add at least one more wall to your array, one line each, until you have a real maze. Check that the key can be reached and that the treasure can only be reached through the door.',
       code: '  { x: 40, y: 280, w: 200, h: 30 },',
       at: { after: '{ x: 260, y: 200, w: 140, h: 30 },' },
       check: /(?:\{\s*x\s*:[\s\S]*){4,}/,
@@ -401,7 +409,8 @@ lesson({
   steps: [
     {
       title: 'Build the gem list', mins: 7,
-      say: 'Use a function that returns a fresh list, so restarting brings every gem back. Add this at the bottom:',
+      reveal: true,
+      say: 'Write a function called `makeGems()` at the bottom that **returns** a list of at least four `{ x, y }` objects. Using a function means a restart can bring every gem back.',
       code: `function makeGems() {
   return [
     { x: 30, y: 200 },
@@ -415,7 +424,8 @@ lesson({
     },
     {
       title: 'Create the list', mins: 3,
-      say: 'Store it in a variable at the top, calling your function to fill it.',
+      reveal: true,
+      say: 'Create a variable called `gems` at the top, and fill it by calling your function.',
       code: 'let gems = makeGems();',
       at: { after: 'let treasureY = 40;' },
       check: /let\s+\w+\s*=\s*\w+\s*\(\s*\)/,
@@ -439,6 +449,7 @@ lesson({
     },
     {
       title: 'Fix the restart', mins: 3,
+      reveal: true,
       say: 'Have `resetGame` fetch a fresh list of gems.',
       code: '  gems = makeGems();',
       at: { after: '  score = 0;' },
@@ -446,14 +457,16 @@ lesson({
     },
     {
       title: 'Require all gems to win', mins: 5,
-      say: 'Make the treasure chest only count once the list is **empty**. `===` asks "exactly equal?".',
+      reveal: true,
+      say: 'Make the treasure chest count only once the list is **empty**. Add a second condition to your treasure `if` using `&&`. `===` asks "exactly equal?".',
       code: 'if (gems.length === 0 && dist(playerX + 15, playerY + 15, treasureX, treasureY) < 30) {',
       at: { replace: 'if (dist(playerX + 15, playerY + 15, treasureX, treasureY) < 30) {' },
       check: /\.length\s*===?\s*0/,
     },
     {
       title: 'Show progress', mins: 5,
-      say: 'Show players how many gems remain, then spread gems around your map so collecting them means exploring it all.',
+      reveal: true,
+      say: 'Show players how many gems remain, using `text()` and `gems.length`. Then spread gems around your map so collecting them means exploring it all.',
       code: '  text("Gems left: " + gems.length, 230, 46);',
       at: { after: 'text("Score: " + score, 10, 24);' },
       check: /text\s*\([^)]*\.length/,
@@ -469,7 +482,8 @@ lesson({
   steps: [
     {
       title: 'A Gem class', mins: 8,
-      say: 'You built classes at the last Crossing. Gems have data **and** behavior, so they fit well. Add this at the bottom:',
+      reveal: true,
+      say: 'You built classes at the last Crossing. Write a class called `Gem` at the bottom. Its constructor takes `x` and `y`. Give it a `show()` method that draws the gem, and a `touches()` method that **returns** whether the player is within 22 dots of it.',
       code: `class Gem {
   constructor(x, y) {
     this.x = x;
@@ -486,7 +500,8 @@ lesson({
   }
 }`,
       at: { end: true },
-      check: /class\s+\w+\s*\{[\s\S]*constructor/,
+      check: /class\s+Gem\s*\{/,
+      hint: 'Your gem loop already has the drawing and the dist() check. Move them here, and use this.x and this.y.',
     },
     {
       title: 'Draw a map with letters', mins: 8,
@@ -530,7 +545,8 @@ lesson({
     },
     {
       title: 'Use the class', mins: 4,
-      say: 'The gems are `Gem` objects now, so your gem loop can get shorter. Replace its two middle lines so each gem handles itself:',
+      reveal: true,
+      say: 'The gems are `Gem` objects now. In your gem loop, replace the drawing line and the `dist` check so each gem handles itself, using `g.show()` and `g.touches()`.',
       code: `g.show();
     if (g.touches()) {`,
       at: { replace: `ellipse(g.x, g.y, 16, 16);
@@ -539,7 +555,8 @@ lesson({
     },
     {
       title: 'Plug it in', mins: 4,
-      say: 'Build the map at the start of the game and whenever it restarts.',
+      reveal: true,
+      say: 'Call `buildMap()` in `setup()`, and again in `resetGame()` in place of `gems = makeGems();`.',
       edits: [
         { code: '  buildMap();', at: { replace: '  gems = makeGems();' } },
         { code: '  buildMap();', at: { after: 'createCanvas(400, 400);' } },
@@ -549,7 +566,7 @@ buildMap();
 
 // in resetGame(), instead of gems = makeGems();
 buildMap();`,
-      check: /^\s*\w+\s*\(\s*\)\s*;/m,
+      check: /(?:^\s*buildMap\s*\(\s*\)\s*;[\s\S]*){2,}/m,
     },
     {
       title: 'Paint your own map', mins: 5,
@@ -570,7 +587,8 @@ lesson({
     },
     {
       title: 'Which tiles are open?', mins: 5,
-      say: 'First a small helper. A tile is open if it is on the map and is not a wall. `||` means **or**: if any part is true, we are off the map. Add this at the bottom:',
+      reveal: true,
+      say: 'First a small helper. Write a function called `isOpen(col, row)` at the bottom. Return `false` if the tile is off the map. `||` means **or**, so one `if` can check all four edges. Otherwise, return whether `tileMap[row][col]` is something other than `"#"`.',
       code: `function isOpen(col, row) {
   if (row < 0 || row >= tileMap.length || col < 0 || col >= tileMap[0].length) {
     return false;
@@ -578,11 +596,12 @@ lesson({
   return tileMap[row][col] !== "#";
 }`,
       at: { end: true },
-      check: /\|\|/,
+      check: [/function\s+isOpen/, /return\s+false/],
     },
     {
       title: 'Write the search', mins: 15,
-      say: 'This is the heart of it. Read each comment as you type. We start at the goal (the player) and spread out until we reach the hunter. `cameFrom` remembers which tile led to which, so the hunter simply follows it home.',
+      reveal: true,
+      say: 'This is the heart of it. Press **Add the starter code**, then read every comment. We start at the goal (the player) and spread out until we reach the hunter. `cameFrom` remembers which tile led to which, so the hunter simply follows it home.\n\nThree key lines are left for you, marked TODO. They are what make this a queue.',
       code: `function nextStep(startCol, startRow, goalCol, goalRow) {
   let queue = [{ col: goalCol, row: goalRow }];
   let cameFrom = {};
@@ -616,11 +635,50 @@ lesson({
   return null;
 }`,
       at: { end: true },
-      check: [/while\s*\(/, /\.shift\s*\(\s*\)/, /\.push\s*\(/],
+      check: [/while\s*\(/, /\.shift\s*\(\s*\)/, /\.push\s*\(/, /cameFrom\s*\[\s*\w+\s*\]\s*=\s*\w/],
+      hint: 'TODO 1: let current = queue.shift(); TODO 3 uses queue.push(n).',
+      skeleton: [
+        { code: `function nextStep(startCol, startRow, goalCol, goalRow) {
+  let queue = [{ col: goalCol, row: goalRow }];
+  let cameFrom = {};
+  cameFrom[goalCol + "," + goalRow] = null;
+
+  while (queue.length > 0) {
+    // TODO 1: Take the next tile from the FRONT of the line.
+    // Replace null below. A list's .shift() removes and returns its first item.
+    let current = null;
+
+    // did the water reach the hunter?
+    if (current.col === startCol && current.row === startRow) {
+      return cameFrom[current.col + "," + current.row];
+    }
+
+    // spread to the four neighbors
+    let neighbors = [
+      { col: current.col + 1, row: current.row },
+      { col: current.col - 1, row: current.row },
+      { col: current.col, row: current.row + 1 },
+      { col: current.col, row: current.row - 1 },
+    ];
+    for (let i = 0; i < neighbors.length; i = i + 1) {
+      let n = neighbors[i];
+      let id = n.col + "," + n.row;
+      if (isOpen(n.col, n.row) && cameFrom[id] === undefined) {
+        // TODO 2: Remember that we reached n from current. Store current in cameFrom[id].
+
+        // TODO 3: Add n to the BACK of the line.
+
+      }
+    }
+  }
+  return null;
+}`, at: { end: true } },
+      ],
     },
     {
       title: 'Create the hunter', mins: 4,
-      say: 'The hunter walks from tile to tile, so it remembers its current spot and where it is headed.',
+      reveal: true,
+      say: 'The hunter walks from tile to tile, so it remembers its current spot and where it is headed. Create an object called `hunter` near the top with `x`, `y`, `targetX`, and `targetY`, all set to 380. Then set those four values back to 380 in `resetGame`.',
       edits: [
         { code: 'let hunter = { x: 380, y: 380, targetX: 380, targetY: 380 };', at: { after: 'let gems = makeGems();' } },
         { code: `  hunter.x = 380;
@@ -635,11 +693,12 @@ hunter.x = 380;
 hunter.y = 380;
 hunter.targetX = 380;
 hunter.targetY = 380;`,
-      check: /let\s+\w+\s*=\s*\{/,
+      check: /let\s+hunter\s*=\s*\{/,
     },
     {
       title: 'Make it hunt', mins: 8,
-      say: 'When the hunter reaches its target tile, it asks your search where to go next. Between tiles, it glides, moving 1.5 dots a frame. Change the speed to set the difficulty. Add this above `// player`.',
+      reveal: true,
+      say: 'When the hunter reaches its target tile, it asks your search where to go next. Between tiles, it glides 1.5 dots a frame. Press **Add the starter code**, then finish the two TODOs. Change the speed to set the difficulty.',
       code: `  // hunter
   if (dist(hunter.x, hunter.y, hunter.targetX, hunter.targetY) < 2) {
     hunter.x = hunter.targetX;
@@ -666,7 +725,36 @@ hunter.targetY = 380;`,
   }
 `,
       at: { before: '// player' },
-      check: /\w+\s*\(\s*floor\s*\(/,
+      check: [/\w+\s*\(\s*floor\s*\(/, /targetX\s*=[^;]*\bcol\b/],
+      hint: 'The first argument to nextStep is floor(hunter.x / 40).',
+      skeleton: [
+        { code: `  // hunter
+  if (dist(hunter.x, hunter.y, hunter.targetX, hunter.targetY) < 2) {
+    hunter.x = hunter.targetX;
+    hunter.y = hunter.targetY;
+
+    // TODO 1: Replace null with a call to nextStep. It takes four TILE numbers:
+    // the hunter's column and row, then the player's column and row.
+    // Turn pixels into tiles with floor(pixels / 40). Use the player's center, playerX + 15.
+    let step = null;
+
+    if (step) {
+      // TODO 2: Set hunter.targetX and hunter.targetY to the CENTER of that tile.
+      // A tile's center is step.col * 40 + 20.
+
+    }
+  }
+  if (hunter.x < hunter.targetX) { hunter.x = hunter.x + 1.5; }
+  if (hunter.x > hunter.targetX) { hunter.x = hunter.x - 1.5; }
+  if (hunter.y < hunter.targetY) { hunter.y = hunter.y + 1.5; }
+  if (hunter.y > hunter.targetY) { hunter.y = hunter.y - 1.5; }
+  fill(200, 40, 70);
+  ellipse(hunter.x, hunter.y, 28, 28);
+  if (dist(hunter.x, hunter.y, playerX + 15, playerY + 15) < 26) {
+    lost = true;
+  }
+`, at: { before: '// player' } },
+      ],
     },
     {
       title: 'Outsmart it', mins: 3,

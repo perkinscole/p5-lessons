@@ -127,14 +127,26 @@ export function setPreviousResolver(fn) {
   solutionCache.clear();
 }
 
+/** Apply a step's starter skeleton: the structure, with TODOs for students to finish. */
+export function applySkeleton(src, step) {
+  return step.skeleton.reduce((code, e) => applyEdit(code, e.code, e.at), src);
+}
+
 /** Starter + every step's edit, in order: the complete working answer. */
 export function buildSolution(id, path) {
   const key = `${id}:${path || ''}`;
   if (solutionCache.has(key)) return solutionCache.get(key);
+  const src = buildThrough(id, path, Infinity);
+  solutionCache.set(key, src);
+  return src;
+}
+
+/** The working code after the first `count` steps. */
+export function buildThrough(id, path, count) {
   const l = getLesson(id);
   if (!l) throw new Error(`Unknown lesson: ${id}`);
   let src = fallbackStarter(l, previousOf(id, path), path);
-  for (const s of l.steps) {
+  for (const s of l.steps.slice(0, count)) {
     const edits = s.edits || (s.code !== undefined && s.at ? [{ code: s.code, at: s.at }] : []);
     for (const e of edits) {
       try {
@@ -144,7 +156,6 @@ export function buildSolution(id, path) {
       }
     }
   }
-  solutionCache.set(key, src);
   return src;
 }
 
@@ -159,6 +170,22 @@ export function stepPasses(step, code) {
 export function checkSummary(l, code) {
   const results = l.steps.map((s) => stepPasses(s, code));
   return { results, passed: results.filter(Boolean).length, total: results.length };
+}
+
+const DOING = /^(Add|Replace|Write|Change|Make|Create|Press|Run|Use|Put|Click|Open|Try|Move|Draw|Show|Call|Give|Play|Pick|Set|Have|Cut|Delete|Comment|Keep|Talk|Sketch|Read|Ask|Wrap|Build|Start|Show|Reset|Test|Swap|Rearrange|Tune|Replay|Name|Finish|Choose|Look|Grab|Install|Spread|Place|Inside|Above|Below|Just|In |At the|Now use)\b/;
+
+/**
+ * Split a step's text into the one thing to do now, and the explanation to keep folded.
+ * A step can set `brief` to say it by hand.
+ */
+export function briefOf(step) {
+  const say = step.say || '';
+  const sentences = say.split(/(?<=[.!?:])\s+(?=[A-Z`*])/).map((x) => x.trim()).filter(Boolean);
+  if (step.brief) return { brief: step.brief, more: say };
+  const doing = sentences.filter((x) => DOING.test(x.replace(/^\*+/, '')) && !x.startsWith('- '));
+  const chosen = (doing.length ? doing : sentences).slice(doing.length ? -2 : 0, doing.length ? undefined : 1);
+  const more = sentences.filter((x) => !chosen.includes(x)).join(' ');
+  return { brief: chosen.join(' '), more };
 }
 
 /** Default rubric; a lesson may override with its own `rubric`. */

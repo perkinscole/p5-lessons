@@ -1,12 +1,14 @@
 // The workspace: lesson steps on the left, code in the middle, the running game on the right.
 import { h, clear, md, toast, attempt, modal, debounce, confirmBox } from '../ui.js';
 import { app, go } from '../main.js';
-import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor } from '../curriculum/engine.js';
-import { PATHS, previousGameLesson, sequence, stageOf, currentLesson } from '../curriculum/graph.js';
+import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf } from '../curriculum/engine.js';
+import { checksFor } from '../curriculum/checks.js';
+import { PATHS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
 import { statsFor, XP, isDone } from '../game/rules.js';
 import { openSpritePicker } from './sprites.js';
+import { alignmentFor, standardByCode } from '../curriculum/alignment.js';
 
 export function makeEditor(parent, value, opts = {}) {
   return window.CodeMirror(parent, {
@@ -19,6 +21,30 @@ export function makeEditor(parent, value, opts = {}) {
     },
     ...opts.cm,
   });
+}
+
+/** The standards a lesson addresses, in full. Teachers also see what to look for. */
+function standardsPanel(id, isTeacher) {
+  const a = alignmentFor(id);
+  const group = (title, codes) => codes.length > 0 && h('div',
+    h('h3', title),
+    h('ul.std-list', codes.map((c) => h('li', h('strong', c.replace('6-8.', '')), ' ', standardByCode(c).text))));
+  return h('details.hook', { id: 'lesson-standards' },
+    h('summary', 'Standards in this lesson'),
+    group(isTeacher ? 'Assess here' : 'Your work shows this', a.anchor),
+    group(isTeacher ? 'Practiced here' : 'You practice this', a.support),
+    isTeacher && h('p.small', h('strong', 'Evidence: '), a.evidence));
+}
+
+/** Short standard codes under the lesson title. Solid codes are assessed here. */
+function standardChips(id, panel) {
+  const a = alignmentFor(id);
+  const chip = (code, cls, kind) => h(`button.std${cls}`, {
+    type: 'button',
+    title: `${kind}: ${standardByCode(code).text}`,
+    onclick: () => { panel.open = true; panel.scrollIntoView({ block: 'nearest' }); },
+  }, code.replace('6-8.', ''));
+  return h('p.std-codes', h('a.std-link', { href: '#/standards' }, 'MA DLCS'), a.anchor.map((c) => chip(c, '.anchor', 'Assessed here')), a.support.map((c) => chip(c, '', 'Practiced here')));
 }
 
 export async function viewLesson(main, id, previewPath) {
@@ -35,9 +61,13 @@ export async function viewLesson(main, id, previewPath) {
     me = await loadMe();
     path = me.student.path;
     const roadOrder = sequence(path);
-    if (!roadOrder.includes(id)) { go(me.done.has('t6') && !path ? '/road' : '/'); return null; }
-    const current = currentLesson(path, me.done);
-    if (!me.done.has(id) && id !== current) { toast('Finish the lesson before this one first.'); go('/map'); return null; }
+    if (isSideTrail(id)) {
+      if (!sideTrailOpen(id, me.done)) { toast('This side trail opens after the lesson before it.'); go('/map'); return null; }
+    } else {
+      if (!roadOrder.includes(id)) { go(me.done.has('t6') && !path ? '/road' : '/'); return null; }
+      const current = currentLesson(path, me.done);
+      if (!me.done.has(id) && id !== current) { toast('Finish the lesson before this one first.'); go('/map'); return null; }
+    }
     work = me.works.find((w) => w.lesson_id === id) || null;
     if (work) {
       code = work.code;
@@ -55,9 +85,15 @@ export async function viewLesson(main, id, previewPath) {
 
   const readOnly = isStudent && work?.status === 'approved';
   const preview = !isStudent;
+  // The walkthrough: steps with short questions woven in, one screen at a time.
+  const quizzes = checksFor(id);
+  const flow = lesson.steps.flatMap((step, i) => [{ step, n: i }, ...quizzes.filter((q) => q.after === i).map((quiz) => ({ quiz }))]);
+  const answered = new Set(work && work.quiz_total === quizzes.length && quizzes.length ? quizzes : []);
+  let quizRight = work?.quiz_right || 0;
   let stepIndex = 0;
   let stretchDone = work?.stretch_done || 0;
   let dirty = false;
+  const stdPanel = standardsPanel(id, preview);
   const status = h('span.save-state', { 'aria-live': 'polite' }, preview ? 'Teacher preview: nothing is saved' : readOnly ? 'Approved: read only' : 'All saved');
 
   // Run panel -----------------------------------------------------------------------------------
@@ -74,11 +110,13 @@ export async function viewLesson(main, id, previewPath) {
       }
     } else if (ev.type === 'log') logLine(h('div.log', ev.message));
     else if (ev.type === 'warn') logLine(h('div.warn', ev.message));
+    else if (ev.type === 'status') logLine(h('div.muted', ev.message));
   });
   const run = () => {
     if (errorMark !== null) { cm.removeLineClass(errorMark, 'background', 'error-line'); errorMark = null; }
     clear(consoleBox);
     player.run(cm.getValue(), assets);
+    if (dirty) { saveSoon.cancel(); persist(); } // Pressing Run also saves.
   };
 
   // Editor --------------------------------------------------------------------------------------
@@ -90,7 +128,7 @@ export async function viewLesson(main, id, previewPath) {
     const src = cm.getValue();
     const c = checkSummary(lesson, src);
     try {
-      work = await app.store.saveWork(id, { code: src, assets, stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total });
+      work = await app.store.saveWork(id, { code: src, assets, stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() });
       dirty = false;
       status.textContent = 'All saved';
       status.classList.remove('bad');
@@ -98,13 +136,15 @@ export async function viewLesson(main, id, previewPath) {
       status.textContent = "Couldn't save. Check your connection.";
       status.classList.add('bad');
       console.error(e);
+      saveSoon(); // Try again, so a busy moment can't lose a student's work.
     }
   };
-  const saveSoon = debounce(persist, 1500);
+  function quizPatch() { return { quiz_right: quizRight, quiz_total: answered.size === quizzes.length ? quizzes.length : 0 }; }
+  const saveSoon = debounce(persist, app.store.saveDelay || 1500);
   const markDirty = () => {
     if (preview || readOnly) return;
     dirty = true;
-    status.textContent = 'Saving...';
+    status.textContent = 'Not saved yet';
     saveSoon();
   };
 
@@ -117,11 +157,51 @@ export async function viewLesson(main, id, previewPath) {
   const drawDots = () => {
     const results = progress();
     clear(dots);
-    lesson.steps.forEach((s, i) => {
-      const state = s.check ? (results[i] ? 'ok' : '') : 'read';
-      dots.append(h('li', h('button', { class: `${state} ${i === stepIndex ? 'on' : ''}`, 'aria-label': `Step ${i + 1}: ${s.title}${s.check && results[i] ? ', passing' : ''}`, 'aria-current': i === stepIndex ? 'step' : null, title: s.title, onclick: () => { stepIndex = i; drawStep(); } }, s.check && results[i] ? '✓' : i + 1)));
+    flow.forEach((item, i) => {
+      const on = i === stepIndex ? 'on' : '';
+      const go = () => { stepIndex = i; drawStep(); };
+      if (item.quiz) {
+        dots.append(h('li', h('button', { class: `quiz ${answered.has(item.quiz) ? 'ok' : ''} ${on}`, 'aria-label': 'Quick check', 'aria-current': on ? 'step' : null, onclick: go }, answered.has(item.quiz) ? '✓' : '?')));
+        return;
+      }
+      const passing = item.step.check && results[item.n];
+      dots.append(h('li', h('button', { class: `${passing ? 'ok' : ''} ${on}`, 'aria-label': `Step ${item.n + 1}: ${item.step.title}${passing ? ', done' : ''}`, 'aria-current': on ? 'step' : null, title: item.step.title, onclick: go }, passing ? '✓' : item.n + 1)));
     });
-    dots.append(h('li', h('button', { class: `${stepIndex === lesson.steps.length ? 'on' : ''} finish`, 'aria-label': 'Finish', title: 'Finish', onclick: () => { stepIndex = lesson.steps.length; drawStep(); } }, '★')));
+    dots.append(h('li', h('button', { class: `${stepIndex === flow.length ? 'on' : ''} finish`, 'aria-label': 'Finish', title: 'Finish', onclick: () => { stepIndex = flow.length; drawStep(); } }, '★')));
+  };
+
+  const quizPane = (q) => {
+    let firstTry = !answered.has(q);
+    const feedback = h('div.quiz-feedback', { 'aria-live': 'polite' });
+    const nav = h('div.row.step-nav');
+    const drawNav = () => clear(nav).append(...[
+      stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
+      (answered.has(q) || preview) && h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); } }, 'Next'),
+    ].filter(Boolean));
+    drawNav();
+    const buttons = h('div.quiz-options', q.options.map((text, i) => h('button.quiz-option', {
+      onclick: (e) => {
+        if (i === q.answer) {
+          e.currentTarget.classList.add('right');
+          if (firstTry && !answered.has(q)) quizRight++;
+          answered.add(q);
+          clear(feedback).append(h('p.ok', '✓ ', md(q.why)));
+          drawNav();
+          drawDots();
+          markDirty();
+        } else {
+          firstTry = false;
+          e.currentTarget.classList.add('wrong');
+          e.currentTarget.disabled = true;
+          clear(feedback).append(h('p.warn', 'Not quite. Try another one.'));
+        }
+      },
+    }, md(text))));
+    return h('div.stack',
+      h('p.eyebrow', 'Quick check'),
+      h('div.quiz-q', md(q.q)),
+      q.code && h('pre.snippet', h('code', q.code)),
+      buttons, feedback, nav);
   };
 
   const finishPane = () => {
@@ -132,13 +212,10 @@ export async function viewLesson(main, id, previewPath) {
     }), md(g)));
     return h('div.stack',
       h('h2', 'Finish up'),
-      h('h3', `Stretch goals (+${XP.stretch} XP each)`),
-      h('p.muted.small', 'Done early? Pick one. These are how your game becomes really yours.'),
-      h('div.stretches', boxes),
-      h('h3', 'Think about it'),
       md(lesson.reflect),
       reflect,
-      !preview && h('p', c.passed === c.total ? h('span.ok', `All ${c.total} checks pass.`) : h('span.warn', `${c.passed} of ${c.total} checks pass.`)),
+      h('details.hint', h('summary', `Done early? Stretch goals (+${XP.stretch} XP each)`), h('div.stretches', boxes)),
+      !preview && c.passed < c.total && h('p.warn', `${c.passed} of ${c.total} steps done.`),
       !preview && !readOnly && h('button.btn.primary.big', { onclick: submit }, work && isDone(work) ? 'Submit again' : 'Submit lesson'),
     );
   };
@@ -146,8 +223,10 @@ export async function viewLesson(main, id, previewPath) {
   const drawStep = () => {
     drawDots();
     clear(stepBox);
-    if (stepIndex >= lesson.steps.length) { stepBox.append(finishPane()); return; }
-    const s = lesson.steps[stepIndex];
+    if (stepIndex >= flow.length) { stepBox.append(finishPane()); return; }
+    if (flow[stepIndex].quiz) { stepBox.append(quizPane(flow[stepIndex].quiz)); return; }
+    const s = flow[stepIndex].step;
+    const { brief, more } = briefOf(s);
     const passing = s.check && stepPasses(s, cm.getValue());
     const display = s.show !== undefined ? s.show : s.code;
     const codeBlock = display !== undefined && h('pre.snippet', h('code', display.replace(/^\n+/, '').replace(/\n+$/, '')));
@@ -155,18 +234,36 @@ export async function viewLesson(main, id, previewPath) {
     if (codeBlock && s.reveal) {
       revealArea = h('div', h('button.btn', { onclick: (e) => e.target.replaceWith(codeBlock) }, 'Stuck? Show me an example'));
     }
+    const lastSkeleton = s.skeleton && s.skeleton[s.skeleton.length - 1].code.trim().split('\n')[0];
+    const skeletonArea = s.skeleton && h('div.stack.tight',
+      h('pre.snippet', h('code', s.skeleton.map((e) => e.code).join('\n\n'))),
+      !readOnly && h('button.btn.primary', {
+        disabled: cm.getValue().includes(lastSkeleton),
+        onclick: (e) => {
+          try {
+            cm.setValue(applySkeleton(cm.getValue(), s));
+          } catch (err) {
+            toast("Couldn't find where this goes in your code. Copy it in by hand.", 'error');
+            return;
+          }
+          e.target.disabled = true;
+          run();
+        },
+      }, 'Add the starter code'));
     stepBox.append(...[
-      h('p.eyebrow', `Step ${stepIndex + 1} of ${lesson.steps.length} · ${s.mins} min`),
       h('h2', s.title),
-      md(s.say),
+      h('div.step-do', md(brief)),
+      skeletonArea || '',
       revealArea || '',
       s.action === 'sprites' && h('button.btn.primary', { onclick: openPicker }, 'Open Sprites'),
       s.action === 'share' && h('button.btn.primary', { onclick: toggleShare }, 'Share to Arcade'),
+      s.action === 'teachable' && h('a.btn.primary', { href: 'https://teachablemachine.withgoogle.com/train/image', target: '_blank', rel: 'noopener noreferrer' }, 'Open Teachable Machine ↗'),
       s.hint && !passing && h('details.hint', h('summary', 'Hint'), md(s.hint)),
-      s.check && h('p.step-check', { class: passing ? 'ok' : 'wait' }, passing ? '✓ The check for this step passes.' : 'Not passing yet. Make the change in your code.'),
+      more && h('details.hint', h('summary', 'Why?'), md(more)),
+      s.check && h('p.step-check', { class: passing ? 'ok' : 'wait' }, passing ? '✓ Done' : 'Not done yet'),
       h('div.row.step-nav',
         stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
-        h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); run(); } }, 'Next step'),
+        h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); run(); } }, 'Next'),
       ),
     ].filter(Boolean));
   };
@@ -198,7 +295,7 @@ export async function viewLesson(main, id, previewPath) {
     }
     saveSoon.cancel();
     const before = statsFor({ ...me.row, path, works: me.row.works });
-    const saved = await attempt(() => app.store.submitWork(id, { code: cm.getValue(), assets, stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total }));
+    const saved = await attempt(() => app.store.submitWork(id, { code: cm.getValue(), assets, stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() }));
     if (!saved) return;
     work = saved;
     dirty = false;
@@ -218,7 +315,7 @@ export async function viewLesson(main, id, previewPath) {
       h('div.row.end',
         h('a.btn', { href: '#/map', onclick: close }, 'See the map'),
         nextId
-          ? h('a.btn.primary', { href: `#/${!path && me.done.has('t6') ? 'road' : `lesson/${nextId}`}`, onclick: close }, 'Next lesson')
+          ? h('a.btn.primary', { href: `#/${!path && me.done.has('t6') ? 'road' : `lesson/${nextId}`}`, onclick: close }, id === 'c6' ? 'Go Beyond the Summit' : 'Next lesson')
           : (!path ? h('a.btn.primary', { href: '#/road', onclick: close }, 'Choose your road') : h('a.btn.primary', { href: '#/arcade', onclick: close }, 'Open the Arcade')),
       ),
     ));
@@ -229,8 +326,9 @@ export async function viewLesson(main, id, previewPath) {
     const stage = stageOf(id);
     clear(head).append(
       h('div.lesson-title',
-        h('p.eyebrow', stage.name, lesson.path ? ` · ${PATHS[lesson.path].road}` : '', ` · ${lesson.mins} minutes`),
+        h('p.eyebrow', stage.name, lesson.path ? ` · ${PATHS[lesson.path].road}` : '', isBeyond(id) ? ' · Extra challenge' : '', ` · ${lesson.mins} minutes`),
         h('h1', lesson.title),
+        standardChips(id, stdPanel),
       ),
       h('div.row.lesson-actions',
         status,
@@ -246,7 +344,16 @@ export async function viewLesson(main, id, previewPath) {
   drawHead();
   drawStep();
 
-  const onChange = debounce(() => { drawDots(); if (stepIndex < lesson.steps.length) { const el = stepBox.querySelector('.step-check'); const s = lesson.steps[stepIndex]; if (el && s.check) { const ok = stepPasses(s, cm.getValue()); el.className = `step-check ${ok ? 'ok' : 'wait'}`; el.textContent = ok ? '✓ The check for this step passes.' : 'Not passing yet. Make the change in your code.'; } } }, 350);
+  const onChange = debounce(() => {
+    drawDots();
+    const item = flow[stepIndex];
+    const el = stepBox.querySelector('.step-check');
+    if (item?.step?.check && el) {
+      const ok = stepPasses(item.step, cm.getValue());
+      el.className = `step-check ${ok ? 'ok' : 'wait'}`;
+      el.textContent = ok ? '✓ Done' : 'Not done yet';
+    }
+  }, 350);
   cm.on('change', () => { markDirty(); onChange(); });
 
   const feedback = work?.grade?.feedback || (work?.status === 'returned');
@@ -256,14 +363,14 @@ export async function viewLesson(main, id, previewPath) {
     work?.status === 'approved' && feedback && h('div.approved', h('strong', 'Approved! '), work.grade?.feedback || '', work.grade ? ` Score: ${work.grade.total} of ${work.grade.max_total}.` : ''),
     h('div.panes',
       h('aside.steps',
-        h('details.hook', { open: stepIndex === 0 }, h('summary', 'Why this lesson?'), h('p', lesson.hook), h('p.concepts', lesson.concepts.map((c) => h('span.tag', c)))),
+        h('details.hook', h('summary', 'Why this lesson?'), h('p', lesson.hook), h('p.concepts', lesson.concepts.map((c) => h('span.tag', c)))),
+        stdPanel,
         dots,
         stepBox,
       ),
       h('section.code-pane', { 'aria-label': 'Code editor' }, editorHost),
       h('section.game-pane', { 'aria-label': 'Your game' },
         h('div.game-frame', player.el),
-        h('p.muted.small', 'Click the game so it can hear your keyboard.'),
         consoleBox,
       ),
     ),

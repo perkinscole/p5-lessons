@@ -64,6 +64,9 @@ export function protectLoops(src) {
 // origin of its own, and some browsers and school filters refuse its script requests outright.
 let p5Text = null;
 const loadP5 = () => {
+  // On Apps Script, the build puts p5 into the page, with its script tags already made safe.
+  const packed = document.getElementById('p5-src');
+  if (packed) return Promise.resolve(packed.textContent);
   if (!p5Text) {
     p5Text = fetch(new URL('../vendor/p5.min.js', import.meta.url))
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
@@ -72,12 +75,53 @@ const loadP5 = () => {
   }
   return p5Text;
 };
+// ml5 is large, so it is fetched only when a game actually uses it.
+let ml5Text = null;
+let ml5Loader = () => fetch(new URL('../vendor/ml5.min.js', import.meta.url)).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); });
+export const setMl5Loader = (fn) => { ml5Loader = fn; };
+const loadMl5 = () => {
+  if (!ml5Text) ml5Text = ml5Loader().then((t) => safeInline(t)).catch((e) => { ml5Text = null; throw e; });
+  return ml5Text;
+};
+/** Only games that use ml5 get the camera and the Teachable Machine model servers. */
+export const usesMl5 = (code) => /\bml5\s*\./.test(code);
+
 /** Keep script text from ending its own script tag early. */
 const safeInline = (t) => t.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
 
-function buildDoc(code, assets, p5Source) {
-  const csp = `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; connect-src data: blob:; media-src data: blob:; font-src data:`;
+// A locked-down frame is not allowed to open the camera. So createCapture(VIDEO) is replaced with
+// a canvas, and the app (outside the frame) opens the camera and passes in plain image frames.
+// Student code stays ordinary p5, and the game still can't reach anything else.
+const CAMERA_BRIDGE = `
+p5.prototype.createCapture = function () {
+  var g = this.createGraphics(160, 120);
+  g.size = function () { return g; };
+  g.hide = function () { return g; };
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.ptFrame) { g.drawingContext.drawImage(e.data.ptFrame, 0, 0, g.width, g.height); e.data.ptFrame.close(); }
+  });
+  parent.postMessage({ pt: 'camera' }, '*');
+  return g;
+};
+`;
+
+function buildDoc(code, assets, p5Source, ml5Source) {
+  const models = 'https://teachablemachine.withgoogle.com https://storage.googleapis.com';
+  const csp = `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:${ml5Source ? ` ${models}` : ''}; connect-src data: blob:${ml5Source ? ` ${models}` : ''}; media-src data: blob: mediastream:; font-src data:; worker-src blob:`;
+  // ml5's internals read browser storage, which this frame is forbidden on purpose. An in-memory
+  // stand-in lets the library start, and nothing a game stores ever leaves the frame.
+  const storageShim = ml5Source ? `
+(function () {
+  function memory() {
+    var data = {};
+    return { getItem: function (k) { return k in data ? data[k] : null; }, setItem: function (k, v) { data[k] = String(v); }, removeItem: function (k) { delete data[k]; }, clear: function () { data = {}; }, key: function (i) { return Object.keys(data)[i] || null; }, get length() { return Object.keys(data).length; } };
+  }
+  Object.defineProperty(window, 'localStorage', { value: memory() });
+  Object.defineProperty(window, 'sessionStorage', { value: memory() });
+})();
+` : '';
   const boot = `
+${storageShim}
 window.SPRITES = new Proxy(${JSON.stringify(assets || {})}, { get(t, k) {
   if (typeof k === 'symbol') return t[k];
   if (k in t) return t[k];
@@ -103,7 +147,8 @@ window.addEventListener('unhandledrejection', function (e) {
   const orig = console[m].bind(console);
   console[m] = function () {
     orig.apply(null, arguments);
-    if (m === 'log') parent.postMessage({ pt: 'log', message: Array.from(arguments).map(String).join(' ').slice(0, 400) }, '*');
+    var text = Array.from(arguments).map(String).join(' ');
+    if (m === 'log' && text.indexOf('Thank you for using ml5') === -1) parent.postMessage({ pt: 'log', message: text.slice(0, 400) }, '*');
   };
 });
 window.addEventListener('keydown', function (e) {
@@ -111,7 +156,7 @@ window.addEventListener('keydown', function (e) {
 });
 window.addEventListener('load', function () { parent.postMessage({ pt: 'ready' }, '*'); });
 `;
-  const head = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>html,body{margin:0;height:100%;background:#14141f;display:flex;align-items:center;justify-content:center;overflow:hidden}canvas{display:block}</style><script>${boot}<\/script><script>${p5Source}<\/script><script>`;
+  const head = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>html,body{margin:0;height:100%;background:#14141f;display:flex;align-items:center;justify-content:center;overflow:hidden}canvas{display:block}</style><script>${boot}<\/script><script>${p5Source}<\/script>${ml5Source ? `<script>${ml5Source}<\/script><script>${CAMERA_BRIDGE}ml5.setBackend('webgl');<\/script>` : ''}<script>`;
   const safe = safeInline(protectLoops(code));
   // Error line numbers count from the top of this document, so remember where student code starts.
   const offset = head.split('\n').length - 1;
@@ -119,6 +164,8 @@ window.addEventListener('load', function () { parent.postMessage({ pt: 'ready' }
 }
 
 const ERROR_HELP = [
+  [/NotAllowedError|Permission denied|NotFoundError.*device/i, () => 'The camera is blocked. Allow the camera in your browser, or ask your teacher. The arrow keys still work.'],
+  [/Failed to fetch|NetworkError|model\.json/i, () => 'Your model could not be loaded. Check that the whole Teachable Machine link is pasted between the quotes, and that it ends with a slash.'],
   [/LOOP_TOO_LONG/, () => 'A loop ran for too long, so I stopped it. Check that your loop\'s counter really changes and that the condition can become false.'],
   [/(\S+) is not defined/, (m) => `The computer doesn't know what \`${m[1]}\` is. Check the spelling (capital letters matter), and make sure you created it with \`let\`.`],
   [/Identifier '(\S+)' has already been declared/, (m) => `You used \`let ${m[1]}\` twice. Each variable only gets one \`let\`. Remove the extra one.`],
@@ -144,7 +191,11 @@ export function friendlyError(message) {
  * Create a game player. onEvent receives {type:'error'|'log'|'warn'|'ready', message, line}.
  * Returns { el, run(code, assets), stop(), destroy() }.
  */
-export function createPlayer(onEvent = () => {}) {
+/**
+ * Create a game player. Pass askCamera for other people's games (Arcade, grading), so the viewer
+ * must choose to share their camera each time. A student's own lesson starts it directly.
+ */
+export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
   const el = document.createElement('div');
   el.className = 'player';
   let frame = null;
@@ -155,12 +206,56 @@ export function createPlayer(onEvent = () => {}) {
     if (d.pt === 'error') {
       const line = d.line ? d.line - offset : null;
       onEvent({ type: 'error', message: friendlyError(d.message), raw: d.message, line: line && line > 0 ? line : null });
+    } else if (d.pt === 'camera') {
+      if (askCamera) showCameraPrompt();
+      else startCamera();
     } else onEvent({ type: d.pt, message: d.message });
+  };
+  let stream = null;
+  let timer = null;
+  let prompt = null;
+  const stopCamera = () => {
+    clearInterval(timer);
+    timer = null;
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    stream = null;
+    if (prompt) prompt.remove();
+    prompt = null;
+  };
+  const startCamera = async () => {
+    const token = runToken;
+    try {
+      const media = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
+      if (token !== runToken) { media.getTracks().forEach((t) => t.stop()); return; }
+      stream = media;
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.srcObject = media;
+      await video.play();
+      timer = setInterval(async () => {
+        if (!frame || video.readyState < 2) return;
+        const bitmap = await createImageBitmap(video, { resizeWidth: 160, resizeHeight: 120 });
+        if (frame && frame.contentWindow) frame.contentWindow.postMessage({ ptFrame: bitmap }, '*', [bitmap]);
+        else bitmap.close();
+      }, 100);
+    } catch (e) {
+      onEvent({ type: 'error', message: friendlyError(`${e.name}: ${e.message}`), raw: e.message, line: null });
+    }
+  };
+  const showCameraPrompt = () => {
+    if (prompt) return;
+    prompt = document.createElement('button');
+    prompt.className = 'camera-prompt btn primary';
+    prompt.textContent = 'This game wants your camera. Allow it';
+    prompt.addEventListener('click', () => { prompt.remove(); prompt = null; startCamera(); });
+    el.appendChild(prompt);
   };
   window.addEventListener('message', listener);
   let runToken = 0;
   const stop = () => {
     runToken++;
+    stopCamera();
     if (frame) frame.remove();
     frame = null;
   };
@@ -170,14 +265,17 @@ export function createPlayer(onEvent = () => {}) {
       stop();
       const token = ++runToken;
       let source;
+      let ml5Source = null;
+      const needsMl5 = usesMl5(code);
       try {
-        source = await loadP5();
+        if (needsMl5) onEvent({ type: 'status', message: 'Loading the machine learning library...' });
+        [source, ml5Source] = await Promise.all([loadP5(), needsMl5 ? loadMl5() : null]);
       } catch (e) {
-        onEvent({ type: 'error', message: 'The p5 library could not load. Check your connection and press Run again.', raw: e.message, line: null });
+        onEvent({ type: 'error', message: 'A code library could not load. Check your connection and press Run again.', raw: e.message, line: null });
         return;
       }
       if (token !== runToken) return; // A newer Run or Stop arrived while waiting.
-      const doc = buildDoc(code, assets, source);
+      const doc = buildDoc(code, assets, source, ml5Source);
       offset = doc.offset;
       frame = document.createElement('iframe');
       frame.setAttribute('sandbox', 'allow-scripts');

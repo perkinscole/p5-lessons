@@ -1,6 +1,6 @@
 // Demo data store: everything lives in this browser's localStorage. It has the same
-// interface as supabase.js, so the rest of the app can't tell which one it's talking to.
-// It is for trying the app. Real classes need the cloud store (see README).
+// interface as appsscript.js, so the rest of the app can't tell which one it's talking to.
+// It is for trying the app. Real classes use Apps Script (see README).
 import { buildSolution, getLesson, checkSummary } from '../curriculum/engine.js';
 import { sequence } from '../curriculum/graph.js';
 
@@ -26,7 +26,7 @@ function seed() {
   const roster = [
     ['Ari M', 'platformer', 19, 'Canopy Climb'], ['Bea T', 'adventure', 12, 'Sunken Keep'], ['Cam R', 'arcade', 24, 'Comet Patrol'],
     ['Dee L', 'platformer', 10, 'Lava Hop'], ['Eli S', 'adventure', 27, 'The Long Maze'], ['Fin O', null, 4, null],
-    ['Gia P', 'arcade', 15, 'Bubble Sub'], ['Hal W', 'platformer', 7, null], ['Ivy K', 'adventure', 8, 'Moss Cave'], ['Jo N', null, 2, null],
+    ['Gia P', 'mind', 15, 'Mind Maze'], ['Hal W', 'platformer', 7, null], ['Ivy K', 'mind', 8, 'Bot Trap'], ['Jo N', null, 2, null],
     ['Kai B', 'arcade', 36, 'Nova Squad'], ['Lux D', 'platformer', 22, 'Tower of Toast'],
   ];
   const skins = [0, 3, 1, 4, 2, 0, 3, 1, 2, 4, 5, 1];
@@ -82,6 +82,7 @@ export function createLocalStore() {
 
   return {
     mode: 'local',
+    usesPasscodes: true,
     session: async () => me(),
     async teacherSignUp(name, email) {
       const t = { id: uid(), display_name: name, email };
@@ -175,7 +176,7 @@ export function createLocalStore() {
       const sid = readSession().id;
       let w = db.works.find((x) => x.student_id === sid && x.lesson_id === lessonId);
       if (!w) {
-        w = { id: uid(), student_id: sid, lesson_id: lessonId, code: '', assets: {}, status: 'in_progress', stretch_done: 0, reflection: '', checks_passed: 0, checks_total: 0, auto_ok: false, shared: false, submitted_at: null };
+        w = { id: uid(), student_id: sid, lesson_id: lessonId, code: '', assets: {}, status: 'in_progress', stretch_done: 0, reflection: '', checks_passed: 0, checks_total: 0, quiz_right: 0, quiz_total: 0, auto_ok: false, shared: false, submitted_at: null };
         db.works.push(w);
       }
       if (w.status === 'approved') throw new Error('This lesson was approved. Ask your teacher to reopen it.');

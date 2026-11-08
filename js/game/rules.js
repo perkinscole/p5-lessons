@@ -6,16 +6,16 @@ export const XP = { submit: 50, submitUnchecked: 25, approved: 50, stretch: 10, 
 
 export const RANKS = [
   { name: 'Spark', xp: 0 },
-  { name: 'Doodler', xp: 200 },
-  { name: 'Tinkerer', xp: 500 },
-  { name: 'Coder', xp: 1000 },
-  { name: 'Builder', xp: 1700 },
-  { name: 'Engineer', xp: 2500 },
-  { name: 'Architect', xp: 3400 },
-  { name: 'Game Master', xp: 4400 },
+  { name: 'Doodler', xp: 100 },
+  { name: 'Tinkerer', xp: 300 },
+  { name: 'Coder', xp: 600 },
+  { name: 'Builder', xp: 1000 },
+  { name: 'Engineer', xp: 1400 },
+  { name: 'Architect', xp: 1800 },
+  { name: 'Game Master', xp: 2300 },
 ];
 
-const ROAD = { platformer: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'], adventure: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8'], arcade: ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'] };
+const ROAD = { platformer: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8'], adventure: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8'], arcade: ['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'], mind: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8'] };
 
 const any = (...ids) => (r) => ids.some((id) => r.done.has(id));
 const all = (ids) => (r) => ids.every((id) => r.done.has(id));
@@ -28,15 +28,18 @@ export const BADGES = [
   { id: 'trailblazer', icon: '🥾', name: 'Trailblazer', desc: 'Chose your own road', earned: (r) => !!r.path },
   { id: 'function', icon: '🪄', name: 'Spell Caster', desc: 'Wrote your own functions', earned: any('c1') },
   { id: 'artist', icon: '🖌️', name: 'Pixel Artist', desc: 'Put your own sprite in your game', earned: any('c2') },
-  { id: 'loops', icon: '🔁', name: 'Loop Master', desc: 'Used for loops in your game', earned: any('p4', 'a4', 's4') },
-  { id: 'arrays', icon: '📚', name: 'List Keeper', desc: 'Used arrays and objects', earned: any('p5', 'a5', 's5') },
+  { id: 'loops', icon: '🔁', name: 'Loop Master', desc: 'Used for loops in your game', earned: any('p4', 'a4', 's4', 'm4') },
+  { id: 'arrays', icon: '📚', name: 'List Keeper', desc: 'Used arrays and objects', earned: any('p5', 'a5', 's5', 'm5') },
   { id: 'classes', icon: '🏛️', name: 'Blueprint', desc: 'Wrote your own class', earned: any('c3') },
   { id: 'states', icon: '🎬', name: 'The Director', desc: 'Added title and ending screens', earned: any('c4') },
-  { id: 'algorithm', icon: '🧩', name: 'Algorithmist', desc: 'Wrote your first real algorithm', earned: any('p8', 'a8', 's8') },
+  { id: 'algorithm', icon: '🧩', name: 'Algorithmist', desc: 'Wrote your first real algorithm', earned: any('p8', 'a8', 's8', 'm5', 'c5') },
   { id: 'sorter', icon: '📊', name: 'The Sorter', desc: 'Wrote a sorting algorithm', earned: any('c5') },
   { id: 'high-road', icon: '⛰️', name: 'High Road Hero', desc: 'Finished every High Road lesson', earned: all(ROAD.platformer) },
   { id: 'wild-road', icon: '🌲', name: 'Wild Road Hero', desc: 'Finished every Wild Road lesson', earned: all(ROAD.adventure) },
   { id: 'star-road', icon: '🚀', name: 'Star Road Hero', desc: 'Finished every Star Road lesson', earned: all(ROAD.arcade) },
+  { id: 'mind-road', icon: '🤖', name: 'Mind Road Hero', desc: 'Finished every Mind Road lesson', earned: all(ROAD.mind) },
+  { id: 'trainer', icon: '📷', name: 'Model Trainer', desc: 'Trained a machine learning model', earned: any('m3') },
+  { id: 'beyond', icon: '🌌', name: 'Beyond the Summit', desc: 'Kept going after the Summit', earned: any('p6', 'a6', 's6', 'm6') },
   { id: 'summit', icon: '🏔️', name: 'Summit!', desc: 'Reached the end of the trail', earned: any('c6') },
   { id: 'stretch-5', icon: '💪', name: 'Stretching Out', desc: 'Finished 5 stretch goals', earned: (r) => r.stretch >= 5 },
   { id: 'stretch-20', icon: '🏋️', name: 'Going Further', desc: 'Finished 20 stretch goals', earned: (r) => r.stretch >= 20 },

@@ -4,7 +4,7 @@ import { lesson } from './engine.js';
 
 lesson({
   id: 'c1', title: 'Forest Maker', mins: 35, concepts: ['functions', 'parameters', 'return values'],
-  hook: 'All three roads meet here. Whatever game you are building, you have probably noticed your code getting long. Functions are how programmers name a chunk of code and reuse it. You will use them in your own game next.',
+  hook: 'All the roads meet here. Whatever game you are building, you have probably noticed your code getting long. Functions are how programmers name a chunk of code and reuse it. You will use them in your own game next.',
   starter: `function setup() {
   createCanvas(400, 400);
   noLoop();
@@ -292,7 +292,7 @@ function draw() {
     },
     {
       title: 'Make a crowd', mins: 6,
-      say: '`new Critter(x, y)` builds one object from the blueprint. Make ten in `setup()`, and then ask each to move and show itself in `draw()`.',
+      say: '`new Critter(x, y)` builds one object from the blueprint. `critters.push(thing)` adds a thing to the end of the list. Make ten in `setup()`, and then ask each to move and show itself in `draw()`.',
       edits: [
         { code: `  for (let i = 0; i < 10; i = i + 1) {
     critters.push(new Critter(random(width), random(height)));
@@ -365,7 +365,7 @@ lesson({
     },
     {
       title: 'The new draw()', mins: 8,
-      say: 'Now `draw()` is a traffic controller: it checks the state and calls the right function. Add this at the bottom.',
+      say: 'Now `draw()` is a traffic controller: it checks the state and calls the right function. `else if` asks another question only when the ones before it were false, and the last `else` catches anything left over. Add this at the bottom.',
       code: `function draw() {
   if (gameState === "title") {
     showTitle();
@@ -441,7 +441,7 @@ lesson({
 
 lesson({
   id: 'c5', title: 'The Leaderboard', mins: 35, concepts: ['algorithms', 'linear search', 'selection sort', 'swapping'],
-  hook: 'All three roads meet one last time before the summit. Sorting is one of the most studied problems in computer science. Today you do not call a sort function. You write one, and watch it work.',
+  hook: 'All the roads meet one last time before the summit. Sorting is one of the most studied problems in computer science. Today you do not call a sort function. You write one, and watch it work.',
   starter: `let scores = [];
 
 function setup() {
@@ -463,7 +463,8 @@ function draw() {
   steps: [
     {
       title: 'Search for the best', mins: 8,
-      say: 'To find the highest score, walk the list and remember the best one seen so far. This is **linear search**. Add this function, which starts at a given position and returns the **index** of the largest value.',
+      reveal: true,
+      say: 'To find the highest score, walk the list and remember the best one seen so far. This is **linear search**. (The `scores.push` line in your starter adds each number to the end of the list.) Press **Add the starter code**, then finish the TODO. The function returns the **index** of the largest value, starting from a given position.',
       code: `function findBest(start) {
   let best = start;
   for (let i = start + 1; i < scores.length; i = i + 1) {
@@ -474,7 +475,19 @@ function draw() {
   return best;
 }`,
       at: { end: true },
-      check: /return\s+\w+\s*;/,
+      check: /best\s*=\s*i\b/,
+      hint: 'Compare scores[i] with scores[best].',
+      skeleton: [
+        { code: `function findBest(start) {
+  let best = start;
+  for (let i = start + 1; i < scores.length; i = i + 1) {
+    // TODO: If the score at i is bigger than the score at best,
+    // then i is the new best.
+
+  }
+  return best;
+}`, at: { end: true } },
+      ],
     },
     {
       title: 'Swap two items', mins: 6,
@@ -489,7 +502,8 @@ function draw() {
     },
     {
       title: 'One sorting step', mins: 7,
-      say: 'Here is **selection sort**: find the best of what is left, swap it to the front, then repeat from the next position. `sortedUpTo` marks how much of the list is finished.',
+      reveal: true,
+      say: 'Here is **selection sort**: find the best of what is left, swap it to the front, then repeat from the next position. `sortedUpTo` marks how much of the list is finished. Press **Add the starter code**, then write the three lines that do one step.',
       edits: [
         { code: 'let sortedUpTo = 0;', at: { after: 'let scores = [];' } },
         { code: `function sortStep() {
@@ -509,7 +523,20 @@ function sortStep() {
     sortedUpTo = sortedUpTo + 1;
   }
 }`,
-      check: /\w+\s*\(\s*\w+\s*,\s*\w+\s*\)\s*;/,
+      check: [/\bswap\s*\(\s*\w+\s*,\s*\w+\s*\)\s*;/, /sortedUpTo\s*(?:=\s*sortedUpTo\s*\+|\+=|\+\+)/],
+      skeleton: [
+        { code: `let sortedUpTo = 0;`, at: { after: 'let scores = [];' } },
+        { code: `function sortStep() {
+  if (sortedUpTo < scores.length - 1) {
+    // TODO 1: Find the best score from sortedUpTo onward, using findBest.
+
+    // TODO 2: Swap it into position sortedUpTo, using swap.
+
+    // TODO 3: One more bar is finished. Add 1 to sortedUpTo.
+
+  }
+}`, at: { end: true } },
+      ],
     },
     {
       title: 'Watch it run', mins: 5,

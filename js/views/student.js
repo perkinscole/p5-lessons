@@ -1,7 +1,7 @@
 import { h, clear, toast, attempt, modal } from '../ui.js';
 import { app, go, refreshSession, render } from '../main.js';
 import { getLesson } from '../curriculum/engine.js';
-import { PATHS, PATH_IDS, currentLesson, sequence, stageOf, needsPathChoice } from '../curriculum/graph.js';
+import { PATHS, PATH_IDS, currentLesson, coreSequence, isBeyond, stageOf, needsPathChoice, SIDE_TRAILS } from '../curriculum/graph.js';
 import { statsFor, RANKS, BADGES, TEACHER_BADGES, badgeById, isDone } from '../game/rules.js';
 import { SLOTS, avatarURL, defaultAvatar, isUnlocked, unlockLabel } from '../game/avatar.js';
 
@@ -37,16 +37,19 @@ export async function viewHome() {
   const mustChoose = needsPathChoice(done, student.path);
   const next = nextId && getLesson(nextId);
   const inProgress = next && works.find((w) => w.lesson_id === nextId && w.status === 'in_progress');
-  const total = sequence(student.path || 'platformer').length;
+  const coreIds = coreSequence(student.path || 'platformer');
+  const total = coreIds.length;
+  const coreDone = coreIds.filter((id) => done.has(id)).length;
+  const sideTrails = SIDE_TRAILS.filter((t) => done.has(t.after) && !done.has(t.id));
 
   const feedback = works.filter((w) => w.grade && w.grade.feedback).sort((a, b) => (b.grade.graded_at || '').localeCompare(a.grade.graded_at || '')).slice(0, 3);
   const returned = works.filter((w) => w.status === 'returned');
 
   const nextCard = mustChoose
-    ? h('section.card.next.fork', h('p.eyebrow', 'You reached the First Fork'), h('h2', 'Time to choose your road'), h('p', 'Three kinds of game. Same big ideas. Yours to build for the rest of the trail.'), h('a.btn.primary.big', { href: '#/road' }, 'See the roads'))
+    ? h('section.card.next.fork', h('p.eyebrow', 'You reached the First Fork'), h('h2', 'Time to choose your road'), h('p', 'Four kinds of game. Same big ideas. Yours to build for the rest of the trail.'), h('a.btn.primary.big', { href: '#/road' }, 'See the roads'))
     : next
       ? h('section.card.next',
-        h('p.eyebrow', `${stageOf(nextId).name} · Lesson ${done.size + 1} of ${total} · about ${next.mins} minutes`),
+        h('p.eyebrow', isBeyond(nextId) ? `${stageOf(nextId).name} · Extra challenge · about ${next.mins} minutes` : `${stageOf(nextId).name} · Lesson ${coreDone + 1} of ${total} · about ${next.mins} minutes`),
         h('h2', next.title),
         h('p', next.hook),
         h('p.concepts', next.concepts.map((c) => h('span.tag', c))),
@@ -67,6 +70,7 @@ export async function viewHome() {
       ),
     ),
     nextCard,
+    sideTrails.length > 0 && h('section.card.stack', h('h2', 'Side trail'), sideTrails.map((t) => h('a.row.linkrow', { href: `#/lesson/${t.id}` }, h('strong', getLesson(t.id).title), h('span.muted', 'Optional. ', getLesson(t.id).hook)))),
     returned.length > 0 && h('section.card.stack.alert', h('h2', 'Your teacher asked for changes'), returned.map((w) => h('a.row.linkrow', { href: `#/lesson/${w.lesson_id}` }, h('strong', getLesson(w.lesson_id).title), h('span', w.grade?.feedback || 'Open it to see what to fix.')))),
     h('section.card.stack',
       h('h2', 'Badges'),

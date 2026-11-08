@@ -1,29 +1,30 @@
 // App shell and router.
 import { h, clear, attempt, toast } from './ui.js';
 import { createLocalStore } from './data/local.js';
-import { createCloudStore } from './data/supabase.js';
+import { createAppsScriptStore } from './data/appsscript.js';
 import { avatarURL, defaultAvatar } from './game/avatar.js';
-import { viewLogin } from './views/auth.js';
+import { viewLogin, viewNoAccess } from './views/auth.js';
 import { viewHome, viewChooseRoad, viewCharacter, SessionEnded } from './views/student.js';
 import { viewMap } from './views/map.js';
 import { viewLesson } from './views/lesson.js';
 import { viewSprites } from './views/sprites.js';
 import { viewArcade } from './views/arcade.js';
 import { viewTeacherHome, viewClass, viewReview, viewCurriculum } from './views/teacher.js';
+import { viewStandards } from './views/standards.js';
 
-const cfg = window.PIXEL_TRAIL_CONFIG || {};
-const store = cfg.supabaseUrl && cfg.supabaseAnonKey ? createCloudStore(cfg.supabaseUrl, cfg.supabaseAnonKey) : createLocalStore();
+// On Apps Script the page has google.script. Anywhere else it runs as a browser-only demo.
+const store = window.google?.script ? createAppsScriptStore() : createLocalStore();
 
 export const app = { store, session: null, cleanup: null };
 export const go = (hash) => { location.hash = hash; };
 
 const STUDENT_ROUTES = [
-  [/^\/$/, viewHome], [/^\/road$/, viewChooseRoad], [/^\/map$/, viewMap], [/^\/character$/, viewCharacter],
+  [/^\/$/, viewHome], [/^\/road$/, viewChooseRoad], [/^\/map$/, viewMap], [/^\/character$/, viewCharacter], [/^\/standards$/, viewStandards],
   [/^\/lesson\/(\w+)$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/arcade$/, viewArcade],
 ];
 const TEACHER_ROUTES = [
   [/^\/$/, viewTeacherHome], [/^\/class\/([\w-]+)(?:\/(\w+))?$/, viewClass], [/^\/review\/([\w-]+)$/, viewReview],
-  [/^\/curriculum$/, viewCurriculum], [/^\/lesson\/(\w+)(?:\/(\w+))?$/, viewLesson], [/^\/sprites$/, viewSprites],
+  [/^\/curriculum$/, viewCurriculum], [/^\/standards$/, viewStandards], [/^\/lesson\/(\w+)(?:\/(\w+))?$/, viewLesson], [/^\/sprites$/, viewSprites],
   [/^\/arcade\/([\w-]+)$/, viewArcade], [/^\/map\/([\w-]+)$/, viewMap],
 ];
 
@@ -32,15 +33,15 @@ function topbar() {
   const hash = location.hash.slice(1) || '/';
   const link = (href, label) => h('a.nav', { href: `#${href}`, 'aria-current': (href === '/' ? hash === '/' : hash.startsWith(href)) ? 'page' : null }, label);
   const links = s.role === 'student'
-    ? [link('/', 'Home'), link('/map', 'Journey'), link('/character', 'Character'), link('/sprites', 'Sprites'), link('/arcade', 'Arcade')]
-    : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/sprites', 'Sprites')];
+    ? [link('/', 'Home'), link('/map', 'Journey'), link('/character', 'Character'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/arcade', 'Arcade')]
+    : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/standards', 'Standards'), link('/sprites', 'Sprites')];
   const who = s.role === 'student'
     ? [h('img.mini-av', { src: avatarURL(s.student.avatar || defaultAvatar(s.student.id), 2), alt: '' }), s.student.display_name]
     : [s.teacher.display_name];
   return h('header.topbar',
     h('a.brand', { href: '#/' }, 'Pixel Trail'),
     h('nav.navs', { 'aria-label': 'Main' }, links),
-    h('div.who', who, h('button.btn.small', { onclick: signOut }, 'Sign out')),
+    h('div.who', who, store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
   );
 }
 
@@ -60,7 +61,7 @@ export async function render() {
   const path = location.hash.slice(1) || '/';
 
   if (!app.session) {
-    clear(root).append(viewLogin());
+    clear(root).append(store.mode === 'local' ? viewLogin() : viewNoAccess());
     return;
   }
 
@@ -93,7 +94,7 @@ export async function render() {
 }
 
 function demoBanner() {
-  return h('div.demo-banner', 'Demo mode: data stays in this browser. See the README to go live with real classes.');
+  return h('div.demo-banner', 'Demo mode: data stays in this browser. See the README to put this on Apps Script for real classes.');
 }
 
 /** Refresh the signed-in user's cached details after a profile change. */
@@ -103,7 +104,16 @@ export async function refreshSession() {
 
 window.addEventListener('hashchange', render);
 
+// Handle in-app links here, so they always stay inside the frame Apps Script serves the app in.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest?.('a[href^="#"]');
+  if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey) return;
+  e.preventDefault();
+  location.hash = a.getAttribute('href');
+});
+
 (async function start() {
+  document.getElementById('app').append(h('p.muted.boot', 'Loading Pixel Trail...'));
   app.session = await attempt(() => store.session()) || null;
   render();
 })();
