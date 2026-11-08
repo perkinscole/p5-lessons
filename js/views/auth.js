@@ -85,7 +85,7 @@ export function viewLogin() {
     clear(body).append(tab === 'student' ? studentForm() : teacherForm());
   };
   draw();
-  return h('div.login',
+  return h('main.login',
     h('section.login-hero',
       h('h1', 'Pixel Trail'),
       h('p.lede', 'Make your own video games with code. Start with a blank canvas, choose your road, and end up with a game that is all yours.'),

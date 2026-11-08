@@ -105,7 +105,7 @@ p5.prototype.createCapture = function () {
 };
 `;
 
-function buildDoc(code, assets, p5Source, ml5Source) {
+function buildDoc(code, assets, p5Source, ml5Source, files = {}) {
   const models = 'https://teachablemachine.withgoogle.com https://storage.googleapis.com';
   const csp = `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:${ml5Source ? ` ${models}` : ''}; connect-src data: blob:${ml5Source ? ` ${models}` : ''}; media-src data: blob: mediastream:; font-src data:; worker-src blob:`;
   // ml5's internals read browser storage, which this frame is forbidden on purpose. An in-memory
@@ -141,7 +141,10 @@ window.addEventListener('error', function (e) {
   parent.postMessage({ pt: 'error', message: e.message, line: e.lineno }, '*');
 });
 window.addEventListener('unhandledrejection', function (e) {
-  parent.postMessage({ pt: 'error', message: String(e.reason && e.reason.message || e.reason), line: 0 }, '*');
+  // p5 runs setup() inside a promise, so these errors only say where they happened in the stack.
+  var stack = String(e.reason && e.reason.stack || '');
+  var lines = (stack.match(/:\\d+:\\d+/g) || []).map(function (m) { return Number(m.split(':')[1]); });
+  parent.postMessage({ pt: 'error', message: String(e.reason && e.reason.message || e.reason), line: 0, stack: lines }, '*');
 });
 ['log', 'warn', 'error'].forEach(function (m) {
   const orig = console[m].bind(console);
@@ -157,10 +160,21 @@ window.addEventListener('keydown', function (e) {
 window.addEventListener('load', function () { parent.postMessage({ pt: 'ready' }, '*'); });
 `;
   const head = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>html,body{margin:0;height:100%;background:#14141f;display:flex;align-items:center;justify-content:center;overflow:hidden}canvas{display:block}</style><script>${boot}<\/script><script>${p5Source}<\/script>${ml5Source ? `<script>${ml5Source}<\/script><script>${CAMERA_BRIDGE}ml5.setBackend('webgl');<\/script>` : ''}<script>`;
-  const safe = safeInline(protectLoops(code));
-  // Error line numbers count from the top of this document, so remember where student code starts.
-  const offset = head.split('\n').length - 1;
-  return { html: `${head}\n${safe}\n<\/script></head><body></body></html>`, offset: offset + 1 };
+  // Extra files load first, each as its own script, so students can share code between them.
+  // Each one's position is recorded, so an error can name the right file and line.
+  const lines = (t) => t.split('\n').length - 1;
+  let html = head.replace(/<script>$/, '');
+  const ranges = [];
+  const addScript = (name, source) => {
+    const safe = safeInline(protectLoops(source));
+    html += '<script>\n';
+    const offset = lines(html);
+    html += `${safe}\n<\/script>`;
+    ranges.push({ name, offset, last: lines(html) });
+  };
+  for (const name of Object.keys(files).sort()) addScript(name, files[name]);
+  addScript('sketch.js', code);
+  return { html: `${html}</head><body></body></html>`, ranges };
 }
 
 const ERROR_HELP = [
@@ -199,13 +213,15 @@ export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
   const el = document.createElement('div');
   el.className = 'player';
   let frame = null;
-  let offset = 0;
+  let ranges = [];
   const listener = (e) => {
     if (!frame || e.source !== frame.contentWindow || !e.data || !e.data.pt) return;
     const d = e.data;
     if (d.pt === 'error') {
-      const line = d.line ? d.line - offset : null;
-      onEvent({ type: 'error', message: friendlyError(d.message), raw: d.message, line: line && line > 0 ? line : null });
+      const inFile = (n) => ranges.find((r) => n > r.offset && n <= r.last);
+      const at = d.line || (d.stack || []).find(inFile) || 0;
+      const range = at ? inFile(at) : null;
+      onEvent({ type: 'error', message: friendlyError(d.message), raw: d.message, line: range ? at - range.offset : null, file: range ? range.name : null });
     } else if (d.pt === 'camera') {
       if (askCamera) showCameraPrompt();
       else startCamera();
@@ -261,12 +277,12 @@ export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
   };
   return {
     el,
-    async run(code, assets) {
+    async run(code, assets, files = {}) {
       stop();
       const token = ++runToken;
       let source;
       let ml5Source = null;
-      const needsMl5 = usesMl5(code);
+      const needsMl5 = usesMl5([code, ...Object.values(files)].join('\n'));
       try {
         if (needsMl5) onEvent({ type: 'status', message: 'Loading the machine learning library...' });
         [source, ml5Source] = await Promise.all([loadP5(), needsMl5 ? loadMl5() : null]);
@@ -275,8 +291,8 @@ export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
         return;
       }
       if (token !== runToken) return; // A newer Run or Stop arrived while waiting.
-      const doc = buildDoc(code, assets, source, ml5Source);
-      offset = doc.offset;
+      const doc = buildDoc(code, assets, source, ml5Source, files);
+      ranges = doc.ranges;
       frame = document.createElement('iframe');
       frame.setAttribute('sandbox', 'allow-scripts');
       frame.setAttribute('title', 'Game canvas');

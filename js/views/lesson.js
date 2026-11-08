@@ -1,25 +1,68 @@
 // The workspace: lesson steps on the left, code in the middle, the running game on the right.
 import { h, clear, md, toast, attempt, modal, debounce, confirmBox } from '../ui.js';
 import { app, go } from '../main.js';
-import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf } from '../curriculum/engine.js';
+import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
 import { PATHS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
 import { statsFor, XP, isDone } from '../game/rules.js';
 import { openSpritePicker } from './sprites.js';
+import { onSettings, getSettings, readButton, speak, stopSpeaking } from '../settings.js';
 import { alignmentFor, standardByCode } from '../curriculum/alignment.js';
 
 export function makeEditor(parent, value, opts = {}) {
-  return window.CodeMirror(parent, {
+  // Tab indents, so Esc then Tab is how keyboard users leave the editor.
+  let leaving = false;
+  const leaveOr = (fn) => (cm) => {
+    if (leaving) { leaving = false; return window.CodeMirror.Pass; }
+    return fn(cm);
+  };
+  const cm = window.CodeMirror(parent, {
     value, mode: 'javascript', lineNumbers: true, indentUnit: 2, tabSize: 2, matchBrackets: true, autoCloseBrackets: true, lineWrapping: false,
     extraKeys: {
-      Tab: (cm) => (cm.somethingSelected() ? cm.indentSelection('add') : cm.replaceSelection('  ')),
-      'Shift-Tab': (cm) => cm.indentSelection('subtract'),
+      Tab: leaveOr((c) => (c.somethingSelected() ? c.indentSelection('add') : c.replaceSelection('  '))),
+      'Shift-Tab': leaveOr((c) => c.indentSelection('subtract')),
+      Esc: () => { leaving = true; },
       'Cmd-/': 'toggleComment', 'Ctrl-/': 'toggleComment',
       'Cmd-Enter': () => opts.onRun && opts.onRun(), 'Ctrl-Enter': () => opts.onRun && opts.onRun(),
     },
     ...opts.cm,
+  });
+  cm.getInputField().setAttribute('aria-label', 'Code editor. Press Escape, then Tab, to leave the editor.');
+  cm.getScrollerElement().setAttribute('tabindex', '0');
+  const stop = onSettings((set) => { cm.setOption('lineWrapping', set.wrap); cm.refresh(); });
+  cm.stopSettings = stop;
+  return cm;
+}
+
+const MAX_PROJECT = 520000;
+const safeName = (name) => name.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_]/g, '_').replace(/^(\d)/, '_$1') || 'file';
+
+/** Shrink an uploaded picture so a project still fits in the class Sheet. */
+function readImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}.`));
+    reader.onload = () => {
+      if (file.type === 'image/gif') { resolve(reader.result); return; }
+      const img = new Image();
+      img.onerror = () => reject(new Error(`${file.name} is not a picture this browser can read.`));
+      img.onload = () => {
+        const scale = Math.min(1, 256 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale));
+        c.height = Math.max(1, Math.round(img.height * scale));
+        const g = c.getContext('2d');
+        // Small pixel art stays crisp. Photos get smoothed when they shrink.
+        g.imageSmoothingEnabled = scale < 1;
+        g.drawImage(img, 0, 0, c.width, c.height);
+        const png = c.toDataURL('image/png');
+        resolve(png.length < 120000 ? png : c.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
   });
 }
 
@@ -56,6 +99,7 @@ export async function viewLesson(main, id, previewPath) {
   let path = previewPath || lesson.path || 'platformer';
   let code;
   let assets = {};
+  let startFiles = {};
 
   if (isStudent) {
     me = await loadMe();
@@ -72,15 +116,19 @@ export async function viewLesson(main, id, previewPath) {
     if (work) {
       code = work.code;
       assets = work.assets || {};
+      startFiles = work.files || {};
     } else {
       // Carry the student's own game forward from their last game lesson.
       const prevId = previousGameLesson(id, path);
       const prevWork = prevId && me.works.find((w) => w.lesson_id === prevId);
       code = prevWork ? prevWork.code : fallbackStarter(lesson, prevId, path);
+      startFiles = prevWork ? prevWork.files || {} : (prevId ? filesThrough(prevId, path) : {});
       assets = prevWork ? prevWork.assets || {} : {};
     }
   } else {
     code = fallbackStarter(lesson, previousGameLesson(id, path), path);
+    const prevGame = previousGameLesson(id, path);
+    if (prevGame) startFiles = filesThrough(prevGame, path);
   }
 
   const readOnly = isStudent && work?.status === 'approved';
@@ -102,33 +150,151 @@ export async function viewLesson(main, id, previewPath) {
   let errorMark = null;
   const player = createPlayer((ev) => {
     if (ev.type === 'error') {
-      logLine(h('div.err', ev.line && h('button.linejump', { onclick: () => { cm.setCursor(ev.line - 1, 0); cm.focus(); } }, `Line ${ev.line}`), ' ', md(ev.message)));
+      const where = ev.line ? (ev.file && ev.file !== 'sketch.js' ? `${ev.file}, line ${ev.line}` : `Line ${ev.line}`) : null;
+      logLine(h('div.err', where && h('button.linejump', { onclick: () => { openFile(ev.file || MAIN); cm.setCursor(ev.line - 1, 0); cm.focus(); } }, where), ' ', md(ev.message)));
       if (ev.line) {
-        if (errorMark !== null) cm.removeLineClass(errorMark, 'background', 'error-line');
-        errorMark = ev.line - 1;
-        cm.addLineClass(errorMark, 'background', 'error-line');
+        clearErrorMark();
+        const doc = docFor(ev.file || MAIN);
+        doc.addLineClass(ev.line - 1, 'background', 'error-line');
+        errorMark = { doc, line: ev.line - 1 };
       }
     } else if (ev.type === 'log') logLine(h('div.log', ev.message));
     else if (ev.type === 'warn') logLine(h('div.warn', ev.message));
     else if (ev.type === 'status') logLine(h('div.muted', ev.message));
   });
   const run = () => {
-    if (errorMark !== null) { cm.removeLineClass(errorMark, 'background', 'error-line'); errorMark = null; }
+    clearErrorMark();
     clear(consoleBox);
-    player.run(cm.getValue(), assets);
+    player.run(mainCode(), assets, extraFiles());
     if (dirty) { saveSoon.cancel(); persist(); } // Pressing Run also saves.
   };
 
   // Editor --------------------------------------------------------------------------------------
   const editorHost = h('div.editor-host');
   const cm = makeEditor(editorHost, code, { onRun: run, cm: { readOnly } });
+  const MAIN = 'sketch.js';
+  const mainDoc = cm.getDoc();
+  const extraDocs = new Map(Object.entries(startFiles).map(([name, text]) => [name, window.CodeMirror.Doc(text, 'javascript')]));
+  let activeFile = MAIN;
+  const docFor = (name) => extraDocs.get(name) || mainDoc;
+  const mainCode = () => mainDoc.getValue();
+  const allCode = () => [mainCode(), ...[...extraDocs.values()].map((d) => d.getValue())].join('\n');
+  const extraFiles = () => Object.fromEntries([...extraDocs.entries()].map(([name, d]) => [name, d.getValue()]));
+  function clearErrorMark() {
+    if (errorMark) errorMark.doc.removeLineClass(errorMark.line, 'background', 'error-line');
+    errorMark = null;
+  }
+  const fileBar = h('div.file-bar');
+  function openFile(name) {
+    activeFile = extraDocs.has(name) ? name : MAIN;
+    cm.swapDoc(docFor(activeFile));
+    cm.setOption('mode', 'javascript');
+    drawFileBar();
+    cm.refresh();
+  }
+  const projectSize = () => JSON.stringify({ code: mainCode(), assets, files: extraFiles() }).length;
+  function addCodeFile(rawName, text = '') {
+    const base = safeName(rawName);
+    let name = `${base}.js`;
+    for (let n = 2; extraDocs.has(name) || name === MAIN; n++) name = `${base}${n}.js`;
+    if (extraDocs.size >= 8) { toast('A project can have up to 8 extra code files.', 'error'); return; }
+    extraDocs.set(name, window.CodeMirror.Doc(text, 'javascript'));
+    openFile(name);
+    markDirty();
+  }
+  async function addUploads(list) {
+    if (readOnly) return;
+    for (const file of list) {
+      if (/\.js$/i.test(file.name)) {
+        if (file.size > 100000) { toast(`${file.name} is too long to add.`, 'error'); continue; }
+        addCodeFile(file.name, await file.text());
+      } else if (/^image\/(png|jpeg|gif|webp)$/.test(file.type)) {
+        const url = await attempt(() => readImage(file));
+        if (!url) continue;
+        if (projectSize() + url.length > MAX_PROJECT) { toast('This project is full. Remove an image first.', 'error'); break; }
+        const base = safeName(file.name);
+        let name = base;
+        for (let n = 2; assets[name]; n++) name = `${base}${n}`;
+        assets = { ...assets, [name]: url };
+        toast(`Added ${name}. Load it with SPRITES.${name}`);
+        markDirty();
+      } else {
+        toast(`${file.name}: add pictures (PNG, JPG, GIF, WebP) or .js code files.`, 'error');
+      }
+    }
+    drawFileBar();
+    run();
+  }
+  function addProvided(p) {
+    if (extraDocs.has(p.name)) return;
+    extraDocs.set(p.name, window.CodeMirror.Doc(p.code, 'javascript'));
+    drawFileBar();
+    markDirty();
+    drawStep();
+    run();
+  }
+
+  // Getting unstuck: go back to how this lesson began, or to a known working version.
+  function cleanCopy() {
+    const prevId = previousGameLesson(id, path);
+    const prevWork = prevId && me?.works.find((w) => w.lesson_id === prevId);
+    const working = fallbackStarter(lesson, prevId, path);
+    const restore = (src, close) => {
+      openFile(MAIN);
+      cm.setValue(src);
+      if (prevId) {
+        for (const [n, t] of Object.entries(filesThrough(prevId, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript'));
+        drawFileBar();
+      }
+      close();
+      run();
+      drawStep();
+      toast('Restored. Changed your mind? Press Ctrl+Z in the code.');
+    };
+    modal((close) => h('div.stack',
+      h('h2', 'Get a clean copy'),
+      h('p', 'This replaces the code in sketch.js. Your images and extra files stay.'),
+      prevWork && h('button.btn', { onclick: () => restore(prevWork.code, close) }, 'My code from the start of this lesson'),
+      h('button.btn.primary', { onclick: () => restore(working, close) }, prevWork ? 'A fresh copy that works' : 'Start this lesson over'),
+      prevWork && h('p.muted.small', 'A fresh copy works, but it won\'t have your own changes.'),
+      h('button.btn', { onclick: close }, 'Cancel'),
+    ));
+  }
+
+  const fileInput = h('input.visually-hidden', { type: 'file', multiple: true, accept: 'image/png,image/jpeg,image/gif,image/webp,.js', 'aria-label': 'Add images or code files', onchange: (e) => { addUploads([...e.target.files]); e.target.value = ''; } });
+  function newFileDialog() {
+    modal((close) => {
+      const input = h('input', { 'aria-label': 'File name', placeholder: 'helpers', maxlength: 30 });
+      return h('form.stack', { onsubmit: (e) => { e.preventDefault(); if (input.value.trim()) { addCodeFile(input.value.trim()); close(); } } },
+        h('h2', 'New code file'), input, h('div.row.end', h('button.btn', { type: 'button', onclick: close }, 'Cancel'), h('button.btn.primary', { type: 'submit' }, 'Create')));
+    });
+  }
+  function drawFileBar() {
+    const names = [MAIN, ...extraDocs.keys()];
+    clear(fileBar).append(
+      h('div.file-tabs', { 'aria-label': 'Project files' }, names.map((name) => h('div.file-tab', { class: name === activeFile ? 'on' : '' },
+        h('button', { 'aria-current': name === activeFile ? 'true' : null, onclick: () => openFile(name) }, name),
+        name !== MAIN && !readOnly && h('button.file-x', { 'aria-label': `Remove ${name}`, onclick: async () => {
+          if (!(await confirmBox(`Remove ${name}?`, 'Its code will be deleted from this project.', 'Remove', true))) return;
+          extraDocs.delete(name);
+          openFile(MAIN);
+          markDirty();
+          run();
+        } }, '×')))),
+      Object.keys(assets).length > 0 && h('div.file-assets', Object.keys(assets).map((name) => h('button.file-asset', { title: `SPRITES.${name}`, 'aria-label': `Image ${name}`, onclick: openPicker }, h('img', { src: assets[name], alt: '' }), name))),
+      !readOnly && h('div.file-actions',
+        h('button.btn.small', { onclick: newFileDialog }, '+ Code file'),
+        h('button.btn.small', { onclick: () => fileInput.click() }, '+ Images or files')),
+      fileInput,
+    );
+  }
 
   const persist = async () => {
     if (preview || readOnly) return;
-    const src = cm.getValue();
-    const c = checkSummary(lesson, src);
+    const src = mainCode();
+    const c = checkSummary(lesson, allCode());
     try {
-      work = await app.store.saveWork(id, { code: src, assets, stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() });
+      work = await app.store.saveWork(id, { code: src, assets, files: extraFiles(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() });
       dirty = false;
       status.textContent = 'All saved';
       status.classList.remove('bad');
@@ -152,7 +318,7 @@ export async function viewLesson(main, id, previewPath) {
   const stepBox = h('div.step-body');
   const dots = h('ol.step-dots');
   const reflect = h('textarea', { rows: 3, value: work?.reflection || '', readOnly, oninput: markDirty, 'aria-label': 'Your reflection' });
-  const progress = () => lesson.steps.map((s) => stepPasses(s, cm.getValue()));
+  const progress = () => lesson.steps.map((s) => stepPasses(s, allCode()));
 
   const drawDots = () => {
     const results = progress();
@@ -199,20 +365,20 @@ export async function viewLesson(main, id, previewPath) {
     }, md(text))));
     return h('div.stack',
       h('p.eyebrow', 'Quick check'),
-      h('div.quiz-q', md(q.q)),
+      h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
       q.code && h('pre.snippet', h('code', q.code)),
       buttons, feedback, nav);
   };
 
   const finishPane = () => {
-    const c = checkSummary(lesson, cm.getValue());
+    const c = checkSummary(lesson, allCode());
     const boxes = lesson.stretch.map((g, i) => h('label.check', h('input', {
       type: 'checkbox', checked: i < stretchDone, disabled: readOnly,
       onchange: (e) => { stretchDone += e.target.checked ? 1 : -1; stretchDone = Math.max(0, Math.min(3, stretchDone)); markDirty(); },
     }), md(g)));
     return h('div.stack',
       h('h2', 'Finish up'),
-      md(lesson.reflect),
+      h('div.read-row', md(lesson.reflect), readButton(() => lesson.reflect)),
       reflect,
       h('details.hint', h('summary', `Done early? Stretch goals (+${XP.stretch} XP each)`), h('div.stretches', boxes)),
       !preview && c.passed < c.total && h('p.warn', `${c.passed} of ${c.total} steps done.`),
@@ -223,11 +389,13 @@ export async function viewLesson(main, id, previewPath) {
   const drawStep = () => {
     drawDots();
     clear(stepBox);
+    stopSpeaking();
     if (stepIndex >= flow.length) { stepBox.append(finishPane()); return; }
     if (flow[stepIndex].quiz) { stepBox.append(quizPane(flow[stepIndex].quiz)); return; }
     const s = flow[stepIndex].step;
     const { brief, more } = briefOf(s);
-    const passing = s.check && stepPasses(s, cm.getValue());
+    if (getSettings().autoRead) speak(brief);
+    const passing = s.check && stepPasses(s, allCode());
     const display = s.show !== undefined ? s.show : s.code;
     const codeBlock = display !== undefined && h('pre.snippet', h('code', display.replace(/^\n+/, '').replace(/\n+$/, '')));
     let revealArea = codeBlock;
@@ -238,10 +406,11 @@ export async function viewLesson(main, id, previewPath) {
     const skeletonArea = s.skeleton && h('div.stack.tight',
       h('pre.snippet', h('code', s.skeleton.map((e) => e.code).join('\n\n'))),
       !readOnly && h('button.btn.primary', {
-        disabled: cm.getValue().includes(lastSkeleton),
+        disabled: mainCode().includes(lastSkeleton),
         onclick: (e) => {
           try {
-            cm.setValue(applySkeleton(cm.getValue(), s));
+            openFile(MAIN);
+            cm.setValue(applySkeleton(mainCode(), s));
           } catch (err) {
             toast("Couldn't find where this goes in your code. Copy it in by hand.", 'error');
             return;
@@ -252,14 +421,16 @@ export async function viewLesson(main, id, previewPath) {
       }, 'Add the starter code'));
     stepBox.append(...[
       h('h2', s.title),
-      h('div.step-do', md(brief)),
+      h('div.step-do', h('div.read-row', md(brief), readButton(() => brief))),
       skeletonArea || '',
       revealArea || '',
+      s.provides && !readOnly && h('button.btn.primary', { disabled: extraDocs.has(s.provides.name), onclick: () => addProvided(s.provides) }, extraDocs.has(s.provides.name) ? `${s.provides.name} added ✓` : 'Add the finished file'),
+      s.provides && h('details.hint', h('summary', 'Peek inside'), h('pre.snippet', h('code', s.provides.code))),
       s.action === 'sprites' && h('button.btn.primary', { onclick: openPicker }, 'Open Sprites'),
       s.action === 'share' && h('button.btn.primary', { onclick: toggleShare }, 'Share to Arcade'),
       s.action === 'teachable' && h('a.btn.primary', { href: 'https://teachablemachine.withgoogle.com/train/image', target: '_blank', rel: 'noopener noreferrer' }, 'Open Teachable Machine ↗'),
       s.hint && !passing && h('details.hint', h('summary', 'Hint'), md(s.hint)),
-      more && h('details.hint', h('summary', 'Why?'), md(more)),
+      more && h('details.hint', h('summary', 'Why?'), md(more), readButton(() => more, 'Read the explanation aloud')),
       s.check && h('p.step-check', { class: passing ? 'ok' : 'wait' }, passing ? '✓ Done' : 'Not done yet'),
       h('div.row.step-nav',
         stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
@@ -272,7 +443,7 @@ export async function viewLesson(main, id, previewPath) {
   const openPicker = () => openSpritePicker({
     project: assets,
     suggestedName: lesson.steps.some((s) => s.action === 'sprites') ? 'hero' : '',
-    onChange: (next) => { assets = next; markDirty(); run(); },
+    onChange: (next) => { assets = next; drawFileBar(); markDirty(); run(); },
   });
 
   const toggleShare = async () => {
@@ -288,14 +459,14 @@ export async function viewLesson(main, id, previewPath) {
   };
 
   async function submit() {
-    const c = checkSummary(lesson, cm.getValue());
+    const c = checkSummary(lesson, allCode());
     if (c.passed < c.total) {
       const sure = await confirmBox('Some checks are not passing', `${c.passed} of ${c.total} checks pass. Your teacher will see that. Sometimes the checker misses a different but correct way of doing things, so you can still submit if you think it works.`, 'Submit anyway');
       if (!sure) return;
     }
     saveSoon.cancel();
     const before = statsFor({ ...me.row, path, works: me.row.works });
-    const saved = await attempt(() => app.store.submitWork(id, { code: cm.getValue(), assets, stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() }));
+    const saved = await attempt(() => app.store.submitWork(id, { code: mainCode(), assets, files: extraFiles(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() }));
     if (!saved) return;
     work = saved;
     dirty = false;
@@ -332,10 +503,11 @@ export async function viewLesson(main, id, previewPath) {
       ),
       h('div.row.lesson-actions',
         status,
+        isStudent && !readOnly && h('button.btn', { onclick: cleanCopy }, 'Get a clean copy'),
         h('button.btn', { onclick: openPicker }, 'Sprites'),
         isStudent && !readOnly && h('button.btn', { onclick: toggleShare }, work?.shared ? 'In the Arcade ✓' : 'Share to Arcade'),
         preview && h('select.path-pick', { 'aria-label': 'Road to preview', onchange: (e) => go(`/lesson/${id}/${e.target.value}`) }, Object.values(PATHS).map((p) => h('option', { value: p.id, selected: p.id === path }, p.road))),
-        preview && h('button.btn', { onclick: () => { cm.setValue(buildSolution(id, path)); run(); toast('Showing the answer key.'); } }, 'Show answer key'),
+        preview && h('button.btn', { onclick: () => { openFile(MAIN); cm.setValue(buildSolution(id, path)); for (const [n, t] of Object.entries(filesThrough(id, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript')); drawFileBar(); run(); toast('Showing the answer key.'); } }, 'Show answer key'),
         h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run'),
       ),
     );
@@ -349,7 +521,7 @@ export async function viewLesson(main, id, previewPath) {
     const item = flow[stepIndex];
     const el = stepBox.querySelector('.step-check');
     if (item?.step?.check && el) {
-      const ok = stepPasses(item.step, cm.getValue());
+      const ok = stepPasses(item.step, allCode());
       el.className = `step-check ${ok ? 'ok' : 'wait'}`;
       el.textContent = ok ? '✓ Done' : 'Not done yet';
     }
@@ -368,7 +540,11 @@ export async function viewLesson(main, id, previewPath) {
         dots,
         stepBox,
       ),
-      h('section.code-pane', { 'aria-label': 'Code editor' }, editorHost),
+      h('section.code-pane', {
+        'aria-label': 'Code editor',
+        ondragover: (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); },
+        ondrop: (e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); e.stopPropagation(); addUploads([...e.dataTransfer.files]); } },
+      }, fileBar, editorHost),
       h('section.game-pane', { 'aria-label': 'Your game' },
         h('div.game-frame', player.el),
         consoleBox,
@@ -378,6 +554,7 @@ export async function viewLesson(main, id, previewPath) {
 
   clear(main).append(page);
   document.body.classList.add('in-workspace');
+  drawFileBar();
   cm.refresh();
   run();
 
@@ -388,6 +565,8 @@ export async function viewLesson(main, id, previewPath) {
     document.body.classList.remove('in-workspace');
     saveSoon.cancel();
     if (dirty) await persist();
+    cm.stopSettings();
+    stopSpeaking();
     player.destroy();
   };
   return null;

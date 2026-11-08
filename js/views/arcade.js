@@ -16,7 +16,7 @@ function playGame(g) {
       h('div.game-frame', player.el),
       h('p.muted.small', 'Click the game so it can hear your keyboard.'),
     );
-    setTimeout(() => player.run(g.code, g.assets || {}), 0);
+    setTimeout(() => player.run(g.code, g.assets || {}, g.files || {}), 0);
     return box;
   }, { wide: true, onClose: () => player && player.destroy() });
 }

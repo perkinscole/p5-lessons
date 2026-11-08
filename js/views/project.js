@@ -2,6 +2,7 @@
 // Everything here is safe to show the room: no scores, feedback, or emails.
 import { h, clear, md, modal, toast, attempt } from '../ui.js';
 import { app, go } from '../main.js';
+import { readButton } from '../settings.js';
 import { getLesson } from '../curriculum/engine.js';
 import { PATHS, STAGES, stageOf, isSideTrail } from '../curriculum/graph.js';
 import { alignmentFor, coverage, standardByCode } from '../curriculum/alignment.js';
@@ -186,7 +187,7 @@ export async function viewProject(main, classId) {
   function questionPanel(lessons) {
     const bank = plan.question ? null : suggestedQuestion(lessons);
     return h('section.pj-panel.pj-question',
-      h('h2', 'Question of the day'),
+      h('div.read-row', h('h2', 'Question of the day'), readButton(() => (plan.question || (bank ? `${bank.q} ${bank.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}` : '')))),
       plan.question
         ? h('p.pj-q', plan.question)
         : bank

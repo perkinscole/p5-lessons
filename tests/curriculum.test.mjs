@@ -7,7 +7,9 @@ import { ALIGNMENT } from '../js/curriculum/alignment.js';
 import { checksFor } from '../js/curriculum/checks.js';
 import { recentAchievements } from '../js/game/rules.js';
 import { STANDARDS } from '../js/curriculum/standards.js';
-import { allLessons, buildSolution, buildThrough, applySkeleton, stepPasses, checkSummary, getLesson, stripComments, fallbackStarter, briefOf } from '../js/curriculum/engine.js';
+import { allLessons, buildSolution, buildThrough, applySkeleton, stepPasses, checkSummary, getLesson, stripComments, fallbackStarter, briefOf, filesThrough } from '../js/curriculum/engine.js';
+
+const allCode = (id, path, count = Infinity) => [buildThrough(id, path, count), ...Object.values(filesThrough(id, path, count))].join('\n');
 
 test('there are 44 lessons and all are on the map', () => {
   assert.equal(allLessons().length, 44);
@@ -32,7 +34,7 @@ test('each lesson has a hook, concept, stretch goals, and a reflection', () => {
 test('every lesson builds on every road and passes its own checks', () => {
   for (const path of PATH_IDS) {
     for (const id of sequence(path)) {
-      const src = buildSolution(id, path);
+      const src = allCode(id, path);
       const { results } = checkSummary(getLesson(id), src);
       results.forEach((ok, i) => assert.ok(ok, `${path}/${id} fails check: "${getLesson(id).steps[i].title}"`));
     }
@@ -42,7 +44,7 @@ test('every lesson builds on every road and passes its own checks', () => {
 test('every solution is syntactically valid JavaScript', () => {
   for (const path of PATH_IDS) {
     for (const id of sequence(path)) {
-      assert.doesNotThrow(() => new Function(buildSolution(id, path)), `${path}/${id}`);
+      assert.doesNotThrow(() => new Function(allCode(id, path)), `${path}/${id}`);
     }
   }
 });
@@ -128,7 +130,7 @@ test('a try-first step is not already passing before the student does it', () =>
   for (const path of PATH_IDS) {
     for (const id of sequence(path)) {
       getLesson(id).steps.forEach((s, i) => {
-        if (s.reveal && s.check) assert.ok(!stepPasses(s, buildThrough(id, path, i)), `${path}/${id} / ${s.title} is already green`);
+        if (s.reveal && s.check) assert.ok(!stepPasses(s, allCode(id, path, i)), `${path}/${id} / ${s.title} is already green`);
       });
     }
   }
@@ -151,8 +153,8 @@ test('the side trail stands alone and builds', () => {
 });
 
 test('AI lessons use ml5 only where they say so', () => {
-  assert.ok(/ml5\./.test(buildSolution('m3', 'mind')));
-  assert.ok(!/ml5\./.test(buildSolution('p5', 'platformer')), 'other roads should not load ml5');
+  assert.ok(/ml5\./.test(allCode('m3', 'mind')));
+  assert.ok(!/ml5\./.test(allCode('p5', 'platformer')), 'other roads should not load ml5');
 });
 
 test('each lesson has well-formed checks for learning, in the walkthrough', () => {
@@ -201,6 +203,22 @@ test('recent achievements come from real records, newest first, and never scores
   assert.deepEqual(feed.map((e) => e.time), [...feed.map((e) => e.time)].sort((x, y) => y - x));
   const old = [{ ...board[0], works: [{ ...board[0].works[0], submitted_at: at(60 * 24 * 30) }], awards: [] }];
   assert.equal(recentAchievements(old).length, 0);
+});
+
+test('core lessons do not ask students to write what they have not been taught', () => {
+  const inStudentCode = (l) => l.steps.map((s) => [s.code, s.show, ...(s.edits || []).map((e) => e.code), ...(s.skeleton || []).map((e) => e.code)].filter(Boolean).join('\n')).join('\n');
+  const c6 = inStudentCode(getLesson('c6'));
+  for (const re of [/\bclass\s+\w/, /\bnew\s+[A-Z]/, /\bthis\./, /\.splice\(/]) assert.ok(!re.test(c6), `capstone uses ${re}`);
+  const m3 = inStudentCode(getLesson('m3'));
+  for (const re of [/\bfunction\s+\w/, /results\[0\]/, /imageClassifier/]) assert.ok(!re.test(m3), `m3 uses ${re}`);
+});
+
+test('helper files carry forward to later lessons', () => {
+  assert.ok(filesThrough('c6', 'mind')['model.js'], 'model.js should still be there at the Summit');
+  assert.ok(filesThrough('c6', 'mind')['sparks.js']);
+  assert.equal(filesThrough('m2', 'mind')['model.js'], undefined);
+  assert.ok(filesThrough('p8', 'platformer')['sparks.js'], 'Beyond lessons follow the Summit');
+  assert.deepEqual(filesThrough('t3', 'platformer'), {});
 });
 
 test('stripComments ignores commented code but keeps strings', () => {

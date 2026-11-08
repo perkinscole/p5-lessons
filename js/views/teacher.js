@@ -278,7 +278,7 @@ export async function viewReview(main, workId) {
       h('p', h('a.btn', { href: nextHref }, queue[0] ? `Skip to next (${queue.length} left)` : 'Back to gradebook')),
     ),
     h('div.review-grid',
-      h('section.stack', h('div.row.between', h('h2', 'Game'), h('button.btn.run', { onclick: () => { clear(consoleBox); player.run(w.code, w.assets || {}); } }, '▶ Restart')), h('div.game-frame', player.el), consoleBox,
+      h('section.stack', h('div.row.between', h('h2', 'Game'), h('button.btn.run', { onclick: () => { clear(consoleBox); player.run(w.code, w.assets || {}, w.files || {}); } }, '▶ Restart')), h('div.game-frame', player.el), consoleBox,
         h('div.stack.tight', h('h3', 'Automatic checks'), h('ul.checklist', lesson.steps.filter((s) => s.check).map((s) => { const ok = live.results[lesson.steps.indexOf(s)]; return h('li', { class: ok ? 'ok' : 'warn' }, `${ok ? '✓' : '✗'} ${s.title}`); }))),
         h('div.stack.tight', h('h3', `Reflection: "${lesson.reflect}"`), w.reflection ? h('blockquote', w.reflection) : h('p.muted', 'No reflection written.')),
         h('p.small', `Stretch goals claimed: ${w.stretch_done}`),
@@ -291,10 +291,11 @@ export async function viewReview(main, workId) {
     ),
   );
   clear(main).append(page);
-  const cm = makeEditor(host, w.code, { cm: { readOnly: true } });
+  const shown = [w.code, ...Object.entries(w.files || {}).map(([name, text]) => `\n// ---------- ${name} ----------\n${text}`)].join('\n');
+  const cm = makeEditor(host, shown, { cm: { readOnly: true } });
   cm.refresh();
-  player.run(w.code, w.assets || {});
-  app.cleanup = () => player.destroy();
+  player.run(w.code, w.assets || {}, w.files || {});
+  app.cleanup = () => { cm.stopSettings(); player.destroy(); };
   return null;
 }
 

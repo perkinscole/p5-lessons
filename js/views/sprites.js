@@ -245,7 +245,7 @@ function spriteEditor({ initial, name: startName = '', onSave, saveLabel = 'Save
       toolsBox,
       palBox,
       h('div.stack.tight',
-        h('h3', 'Frames'),
+        h('h2.subhead', 'Frames'),
         strip,
         h('div.row',
           h('button.btn.small', { onclick: () => { snap(); frames.splice(at + 1, 0, blank(size)); at++; draw(); drawStrip(); } }, 'New frame'),

@@ -601,9 +601,14 @@ lesson({
       at: { replace: 'text("MY GAME", 200, 160);' },
     },
     {
-      title: 'A Spark class', mins: 8,
-      say: '**Particles** are tiny objects that burst out, fade, and vanish. They use everything you know: classes, arrays, loops, and removal. Add this at the bottom.',
-      code: `class Spark {
+      title: 'Add the sparks file', mins: 8,
+      say: '**Particles** are tiny objects that burst out, fade, and vanish. The hard part is already written for you, in a file of its own. Press **Add the finished file**. Look at the tabs above your code to find it.',
+      provides: { name: 'sparks.js', code: `// A finished helper file. You can use it without changing it.
+// Beyond the Summit, you can learn to write code like this yourself.
+
+let sparks = [];
+
+class Spark {
   constructor(x, y) {
     this.x = x;
     this.y = y;
@@ -619,52 +624,55 @@ lesson({
   }
 
   show() {
+    noStroke();
     fill(255, 220, 80, this.life);
     rect(this.x, this.y, 4, 4);
   }
-}`,
-      at: { end: true },
-      check: /this\.life/,
-    },
-    {
-      title: 'Burst on a score', mins: 8,
-      say: 'Your game is different from everyone else\'s, but all of them have a `score`. So we watch it: when it goes up, burst! Add the variables at the top, and the code at the end of `playGame`.',
-      edits: [
-        { code: 'let sparks = [];\nlet lastScore = 0;\n', at: { top: true } },
-        { code: `
-  // sparks when the score goes up
-  if (score > lastScore) {
-    for (let i = 0; i < 25; i = i + 1) {
-      sparks.push(new Spark(60, 24));
-    }
+}
+
+// Make a burst of sparks at a spot on the screen.
+function burst(x, y) {
+  for (let i = 0; i < 25; i = i + 1) {
+    sparks.push(new Spark(x, y));
   }
-  lastScore = score;
+}
+
+// Move and draw every spark. Call this once each frame.
+function updateSparks() {
   for (let i = sparks.length - 1; i >= 0; i = i - 1) {
     sparks[i].update();
     sparks[i].show();
     if (sparks[i].life <= 0) {
       sparks.splice(i, 1);
     }
-  }`, at: { endOf: 'function playGame' } },
+  }
+}
+` },
+      check: /this\.life/,
+      hint: 'You only need two things from this file: burst(x, y) and updateSparks().',
+    },
+    {
+      title: 'Burst on a score', mins: 8,
+      say: 'Your game is different from everyone else\'s, but all of them have a `score`. So we watch it: when it goes up, burst! Add the variable at the top, and the code at the end of `playGame`.',
+      edits: [
+        { code: 'let lastScore = 0;\n', at: { top: true } },
+        { code: `
+  // sparks when the score goes up
+  if (score > lastScore) {
+    burst(60, 24);
+  }
+  lastScore = score;
+  updateSparks();`, at: { endOf: 'function playGame' } },
       ],
-      show: `let sparks = [];        // at the top
-let lastScore = 0;
+      show: `let lastScore = 0;        // at the top
 
 // at the end of playGame():
 if (score > lastScore) {
-  for (let i = 0; i < 25; i = i + 1) {
-    sparks.push(new Spark(60, 24));
-  }
+  burst(60, 24);
 }
 lastScore = score;
-for (let i = sparks.length - 1; i >= 0; i = i - 1) {
-  sparks[i].update();
-  sparks[i].show();
-  if (sparks[i].life <= 0) {
-    sparks.splice(i, 1);
-  }
-}`,
-      check: /\.push\s*\(\s*new\s+Spark/,
+updateSparks();`,
+      check: /\bburst\s*\([^)]*\)\s*;/,
       hint: 'Try moving the burst to where the action happens, like an enemy or a coin. Use its position in place of 60, 24.',
     },
     {

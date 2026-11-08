@@ -1,7 +1,7 @@
 // Demo data store: everything lives in this browser's localStorage. It has the same
 // interface as appsscript.js, so the rest of the app can't tell which one it's talking to.
 // It is for trying the app. Real classes use Apps Script (see README).
-import { buildSolution, getLesson, checkSummary } from '../curriculum/engine.js';
+import { buildSolution, getLesson, checkSummary, filesThrough } from '../curriculum/engine.js';
 import { sequence } from '../curriculum/graph.js';
 
 const KEY = 'pixeltrail.demo.v1';
@@ -46,7 +46,7 @@ function seed() {
       const c = checkSummary(l, code);
       const pending = n >= seq.length - 2;
       const w = {
-        id: `demo-w${i}-${id}`, student_id: s.id, lesson_id: id, code, assets: {},
+        id: `demo-w${i}-${id}`, student_id: s.id, lesson_id: id, code, assets: {}, files: filesThrough(id, path || 'platformer'),
         status: pending ? 'submitted' : 'approved', stretch_done: (i + n) % 3, reflection: pending ? 'I changed the colors and tried to make it harder. The tricky part was getting my conditions in the right order.' : '',
         checks_passed: c.passed, checks_total: c.total, auto_ok: true, shared: id === 'c6' || (id === 't6' && i % 3 === 0), submitted_at: now(), updated_at: now(),
       };

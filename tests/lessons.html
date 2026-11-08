@@ -8,7 +8,7 @@
 // Open this page while the app is being served. It runs every lesson's answer key in the real
 // sandbox, presses keys and clicks, and reports crashes and blank canvases.
 import { PATH_IDS, sequence, previousGameLesson } from '../js/curriculum/graph.js';
-import { buildSolution, getLesson } from '../js/curriculum/engine.js';
+import { buildSolution, getLesson, filesThrough } from '../js/curriculum/engine.js';
 import { createPlayer } from '../js/sandbox.js';
 
 const PROBE = `
@@ -61,7 +61,7 @@ function runJob(job) {
   return new Promise((resolve) => {
     const src = buildSolution(job.id, job.path);
     const trains = src.includes('trainBrain');
-    const usesMl = src.includes('ml5.');
+    const usesMl = src.includes('ml5.') || Object.values(filesThrough(job.id, job.path)).some((t) => t.includes('ml5.'));
     const r = { key: job.key, errors: [], colors: null, brain: null };
     const p = createPlayer((ev) => {
       if (ev.type === 'error') r.errors.push(`${ev.line ? `line ${ev.line}: ` : ''}${ev.raw}`);
@@ -69,7 +69,7 @@ function runJob(job) {
       if (ev.type === 'log' && ev.message.startsWith('BRAIN')) r.brain = ev.message;
     });
     document.body.append(p.el);
-    p.run(src + PROBE, {});
+    p.run(src + PROBE, {}, filesThrough(job.id, job.path));
     setTimeout(() => { p.destroy(); p.el.remove(); resolve(r); }, trains ? 9500 : usesMl ? 5000 : 2600);
   });
 }

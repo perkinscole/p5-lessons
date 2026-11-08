@@ -181,51 +181,39 @@ lesson({
     },
     {
       title: 'Paste in your model\'s link', mins: 3,
-      say: 'These variables hold your model and what it currently sees. Add them at the top, then paste your link between the quotes. Leave the quotes empty for now if you are not ready, and the arrow keys will keep working.',
-      code: `let MODEL_URL = "";
-let classifier;
-let video;
-let label = "still";`,
+      say: 'This variable holds the link to your model. Add it at the top, then paste your link between the quotes. Leave the quotes empty for now if you are not ready, and the arrow keys will keep working.',
+      code: 'let MODEL_URL = "";',
       at: { after: 'let botSpeed = 1.5;' },
       check: /let\s+MODEL_URL/,
     },
     {
-      title: 'Start the camera and the model', mins: 7,
-      say: 'ml5.js is a library for using machine learning in p5. `imageClassifier` loads your trained model. When it is ready, `modelReady` starts it classifying the video. Add this inside `setup()`, and the two new functions at the bottom.',
-      edits: [
-        { code: `
-  // start the camera and load your model
-  if (MODEL_URL !== "") {
-    video = createCapture(VIDEO);
-    video.size(160, 120);
-    video.hide();
-    classifier = ml5.imageClassifier(MODEL_URL + "model.json", modelReady);
-  }`, at: { after: 'createCanvas(400, 400);' } },
-        { code: `function modelReady() {
-  classifier.classifyStart(video, gotResult);
-}
+      title: 'Connect your model', mins: 7,
+      say: 'Connecting a model to a game takes some code you will learn later, so it is already written, in a file of its own. Press **Add the finished file**. Then add this line inside `setup()` to start it. After that, a variable called `label` always holds what the model sees.',
+      provides: { name: 'model.js', code: `// A finished helper file. You can use it without changing it.
+// It connects your Teachable Machine model to your game.
 
-function gotResult(results) {
-  label = results[0].label;
-}`, at: { end: true } },
-      ],
-      show: `// inside setup():
-if (MODEL_URL !== "") {
+let classifier;
+let video;
+let label = "still";
+
+// Start the camera and the model. After this, label holds what the model sees.
+function startModel(url) {
+  if (url === "") {
+    return;
+  }
   video = createCapture(VIDEO);
   video.size(160, 120);
   video.hide();
-  classifier = ml5.imageClassifier(MODEL_URL + "model.json", modelReady);
+  classifier = ml5.imageClassifier(url + "model.json", function () {
+    classifier.classifyStart(video, function (results) {
+      label = results[0].label;
+    });
+  });
 }
-
-// at the bottom:
-function modelReady() {
-  classifier.classifyStart(video, gotResult);
-}
-
-function gotResult(results) {
-  label = results[0].label;
-}`,
-      check: [/imageClassifier\s*\(/, /classifyStart\s*\(/],
+` },
+      code: '  startModel(MODEL_URL);',
+      at: { after: 'createCanvas(400, 400);' },
+      check: [/imageClassifier\s*\(/, /startModel\s*\(\s*MODEL_URL/],
       hint: 'If the camera does not start, check that your browser allows it. The arrow keys still work.',
     },
     {
@@ -347,7 +335,7 @@ lesson({
       title: 'A list of memories', mins: 4,
       say: 'An **array** is an ordered list inside `[ ]`. Each memory will be an **object**, which bundles values under one name: `{ x: 10, y: 20, move: "left" }`. Choosing what to record is how you describe a moment to a computer. Add these at the top.',
       code: 'let memories = [];\nlet lastMove = "";',
-      at: { after: 'let label = "still";' },
+      at: { after: 'let MODEL_URL = "";' },
       check: /let\s+memories\s*=\s*\[\s*\]/,
     },
     {

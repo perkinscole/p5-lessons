@@ -157,7 +157,21 @@ test('long programs survive the 50,000 character cell limit, intact', () => {
   const w = ari('myWorks').find((x) => x.lesson_id === 't4');
   assert.equal(w.code, code);
   assert.equal(w.assets.hero, 'data:image/png;base64,AAAA');
-  denied(() => ari('saveWork', 't5', { code: 'x'.repeat(400000) }));
+  denied(() => ari('saveWork', 't5', { code: 'x'.repeat(600000) }));
+});
+
+test('projects can hold extra code files, with safe names only', () => {
+  const { ari, bea, cls, teacher } = setup();
+  const files = { 'helpers.js': 'function hi() {}', 'sketch.js': 'x', '../evil.js': 'x', 'a b.js': 'x', 'notes.txt': 'x' };
+  const saved = ari('saveWork', 't2', { code: 'hi();', assets: {}, files });
+  assert.deepEqual(saved.files, { 'helpers.js': 'function hi() {}' });
+  assert.equal(ari('myWorks').find((w) => w.lesson_id === 't2').files['helpers.js'], 'function hi() {}');
+  const w = teacher('classWork', cls.id).find((x) => x.lesson_id === 't2');
+  assert.equal(teacher('getWorkFull', w.id).files['helpers.js'], 'function hi() {}');
+  ari('setShared', 't2', true);
+  assert.equal(bea('arcade', cls.id).find((g) => g.lesson_id === 't2').files['helpers.js'], 'function hi() {}');
+  const many = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`f${i}.js`, 'x']));
+  assert.equal(Object.keys(ari('saveWork', 't3', { code: '', assets: {}, files: many }).files).length, 8);
 });
 
 test('special characters and quotes come back exactly', () => {

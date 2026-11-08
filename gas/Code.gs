@@ -5,7 +5,7 @@
 // what that role is allowed to do. Functions ending in _ can't be called from the browser.
 
 const CELL_CHUNK = 45000; // A Sheets cell holds at most 50,000 characters.
-const WORK_CELLS = 8;
+const WORK_CELLS = 12;
 const SPRITE_CELLS = 7;
 const MAX_WORK_CHARS = CELL_CHUNK * WORK_CELLS;
 const MAX_SPRITE_CHARS = CELL_CHUNK * SPRITE_CELLS;
@@ -242,10 +242,10 @@ const metaWorks_ = () => rows_('Works', WORK_META);
 
 function fullWork_(row) {
   const full = readRow_('Works', row._row);
-  const doc = JSON.parse(unpackChunks_(full, WORK_CELLS) || '{"code":"","assets":{}}');
+  const doc = JSON.parse(unpackChunks_(full, WORK_CELLS) || '{"code":"","assets":{},"files":{}}');
   const out = {};
   WORK_META.forEach((f) => { out[f] = full[f]; });
-  return { ...out, code: doc.code, assets: doc.assets };
+  return { ...out, code: doc.code, assets: doc.assets, files: doc.files || {} };
 }
 
 const gradeFor_ = (workId, grades) => {
@@ -276,7 +276,7 @@ function arcade_(me, classId) {
   return metaWorks_().filter((w) => w.shared && students.has(w.student_id)).map((w) => {
     const full = fullWork_(w);
     const s = students.get(w.student_id);
-    return { id: w.id, student_id: w.student_id, lesson_id: w.lesson_id, code: full.code, assets: full.assets, updated_at: w.updated_at, student: { display_name: s.display_name, avatar: s.avatar, game_name: s.game_name, path: s.path } };
+    return { id: w.id, student_id: w.student_id, lesson_id: w.lesson_id, code: full.code, assets: full.assets, files: full.files, updated_at: w.updated_at, student: { display_name: s.display_name, avatar: s.avatar, game_name: s.game_name, path: s.path } };
   });
 }
 
@@ -482,10 +482,19 @@ const TEACHER_ROUTES = {
 
 // Student actions: these only ever touch the student making the request ----------------------------
 
+/** Extra code files in a project: at most 8, with safe names. */
+function cleanFiles_(files) {
+  const out = {};
+  Object.keys(files && typeof files === 'object' ? files : {}).slice(0, 8).forEach((name) => {
+    if (/^[A-Za-z_][\w-]*\.js$/.test(name) && name !== 'sketch.js') out[name] = String(files[name]);
+  });
+  return out;
+}
+
 function saveMyWork_(me, lessonId, patch, extra) {
   if (!/^[a-z]\d{1,2}$/.test(String(lessonId))) throw new Error('Unknown lesson.');
-  const docText = JSON.stringify({ code: String(patch.code === undefined ? '' : patch.code), assets: patch.assets || {} });
-  if (docText.length > MAX_WORK_CHARS) throw new Error('This project is too big to save. Try removing a sprite.');
+  const docText = JSON.stringify({ code: String(patch.code === undefined ? '' : patch.code), assets: patch.assets || {}, files: cleanFiles_(patch.files) });
+  if (docText.length > MAX_WORK_CHARS) throw new Error('This project is too big to save. Try removing an image.');
   return withLock_(() => {
     const existing = metaWorks_().find((w) => w.student_id === me.student.id && w.lesson_id === lessonId);
     if (existing && existing.status === 'approved') throw new Error('This lesson was approved. Ask your teacher to reopen it.');
@@ -506,7 +515,8 @@ function saveMyWork_(me, lessonId, patch, extra) {
     else insert_('Works', row);
     const out = {};
     WORK_META.forEach((f) => { out[f] = row[f]; });
-    return { ...out, code: JSON.parse(docText).code, assets: patch.assets || {} };
+    const saved = JSON.parse(docText);
+    return { ...out, code: saved.code, assets: saved.assets, files: saved.files };
   });
 }
 

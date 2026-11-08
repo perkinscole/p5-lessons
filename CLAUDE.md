@@ -59,6 +59,7 @@ Plain ES modules with no framework. `index.html` runs them directly in demo mode
 - `at` anchors are literal strings in the previous lesson's solution. Editing one lesson can break anchors in later lessons on that road, and the tests will name which one.
 - A lesson with no `starter` continues the student's own game. `graph.js` (`previousGameLesson`) finds what it continues from. Shared lessons (`c2`, `c4`, `c6`) apply to every road, so all roads must keep the names `playerX`, `playerY`, `playerSize`, `score`, `won`, `lost`, `resetGame()`, the comments `// player` and `// score and messages`, and the line `rect(playerX, playerY, playerSize, playerSize);`.
 - After `c4`, the game's main function is `playGame`, not `draw`.
+- A step's `provides: { name, code }` hands the student a finished helper file. Use it when a lesson needs code from a concept not taught yet. Extra files load before `sketch.js` and carry forward (`filesThrough`), and checks run against all of a project's files.
 - `graph.js` defines `STAGES`, the roads, and `SIDE_TRAILS`. Each student's order is the core then Beyond. Beyond lessons run after the capstone (`c6`), so their anchors must still exist in code that has been through it.
 
 A new lesson needs entries beyond its own definition, and the tests enforce all of these:

@@ -49,6 +49,7 @@ const BRIEFS = {
   'c6/Your polish list': 'Pick **two** ways to polish your game. Open "Why?" for ideas.',
   'm1/Stay in the arena': 'Keep the player in the arena with `constrain`.',
   'm2/Playtest for fairness': 'Have a neighbor play with no hints, then adjust `botSpeed`.',
+  'm3/Connect your model': 'Press **Add the finished file**. Then add this line inside `setup()`.',
   'm4/Write a resetGame function': RESET,
   'm4/Loop with math': 'Use a for loop to scatter 40 floor dots. Try `(i * 97) % 400` for `x`.',
   'm6/Two ways to learn': 'Predict which will guess your moves better, and write down why.',

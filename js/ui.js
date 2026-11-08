@@ -102,6 +102,7 @@ export function modal(render, { wide = false, onClose } = {}) {
   const box = h(`div.modal${wide ? '.wide' : ''}`, { role: 'dialog', 'aria-modal': 'true', tabindex: '-1' });
   back = h('div.backdrop', { onmousedown: (e) => { if (e.target === back) close(); } }, box);
   box.append(render(close));
+  box.setAttribute('aria-label', box.querySelector('h2')?.textContent || 'Dialog');
   root.append(back);
   document.addEventListener('keydown', onKey);
   box.focus();

@@ -1,4 +1,5 @@
 import { h, clear, toast, attempt, modal } from '../ui.js';
+import { readButton } from '../settings.js';
 import { app, go, refreshSession, render } from '../main.js';
 import { getLesson } from '../curriculum/engine.js';
 import { PATHS, PATH_IDS, currentLesson, coreSequence, isBeyond, stageOf, needsPathChoice, SIDE_TRAILS } from '../curriculum/graph.js';
@@ -51,7 +52,7 @@ export async function viewHome() {
       ? h('section.card.next',
         h('p.eyebrow', isBeyond(nextId) ? `${stageOf(nextId).name} · Extra challenge · about ${next.mins} minutes` : `${stageOf(nextId).name} · Lesson ${coreDone + 1} of ${total} · about ${next.mins} minutes`),
         h('h2', next.title),
-        h('p', next.hook),
+        h('div.read-row', h('p', next.hook), readButton(() => `${next.title}. ${next.hook}`)),
         h('p.concepts', next.concepts.map((c) => h('span.tag', c))),
         h('a.btn.primary.big', { href: `#/lesson/${nextId}` }, inProgress ? 'Keep going' : 'Start lesson'))
       : h('section.card.next', h('p.eyebrow', 'The Summit'), h('h2', 'You finished the whole trail!'), h('p', 'Your game is in the Arcade. Go play what your classmates built, or keep adding to yours.'), h('a.btn.primary.big', { href: '#/arcade' }, 'Open the Arcade'));
@@ -155,7 +156,7 @@ export async function viewCharacter() {
       }
     };
     draw();
-    return h('section', h('h3', def.label), box);
+    return h('section', h('h2.subhead', def.label), box);
   });
 
   const earned = new Set(stats.badges);

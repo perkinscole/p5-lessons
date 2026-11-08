@@ -176,7 +176,7 @@ export const CHECKS = {
     Q(2, 'After one sorting step, what is true?', ['The whole list is sorted', 'Nothing changed', 'The biggest score is at the front'], 2, 'Then it repeats on the rest.'),
   ],
   c6: [
-    Q(1, 'What is a particle here?', ['A small object that moves, fades, and is removed', 'A type of loop', 'A sprite file'], 0, 'It uses a class, a list, and removal.'),
+    Q(1, 'What is a particle here?', ['A small object that moves, fades, and is removed', 'A type of loop', 'A sprite file'], 0, 'Your helper file keeps a list of them.'),
     Q(4, 'Why watch someone play without helping?', ['To see their score', 'To find what confuses a new player', 'To finish faster'], 1, 'You already know how your game works. They do not.'),
   ],
 };

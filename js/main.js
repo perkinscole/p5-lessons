@@ -12,6 +12,7 @@ import { viewArcade } from './views/arcade.js';
 import { viewTeacherHome, viewClass, viewReview, viewCurriculum } from './views/teacher.js';
 import { viewStandards } from './views/standards.js';
 import { viewProject } from './views/project.js';
+import { applySettings, openSettings } from './settings.js';
 
 // On Apps Script the page has google.script. Anywhere else it runs as a browser-only demo.
 const store = window.google?.script ? createAppsScriptStore() : createLocalStore();
@@ -43,7 +44,7 @@ function topbar() {
   return h('header.topbar',
     h('a.brand', { href: '#/' }, 'Pixel Trail'),
     h('nav.navs', { 'aria-label': 'Main' }, links),
-    h('div.who', who, store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
+    h('div.who', h('button.btn.small', { onclick: openSettings }, 'Display'), who, store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
   );
 }
 
@@ -96,7 +97,7 @@ export async function render() {
 }
 
 function demoBanner() {
-  return h('div.demo-banner', 'Demo mode: data stays in this browser. See the README to put this on Apps Script for real classes.');
+  return h('aside.demo-banner', { 'aria-label': 'Demo notice' }, 'Demo mode: data stays in this browser. See the README to put this on Apps Script for real classes.');
 }
 
 /** Refresh the signed-in user's cached details after a profile change. */
@@ -113,6 +114,8 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   location.hash = a.getAttribute('href');
 });
+
+applySettings();
 
 (async function start() {
   document.getElementById('app').append(h('p.muted.boot', 'Loading Pixel Trail...'));

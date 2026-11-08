@@ -159,6 +159,15 @@ export function buildThrough(id, path, count) {
   return src;
 }
 
+/** Finished helper files the lesson chain has handed the student, after the first `count` steps. */
+export function filesThrough(id, path, count = Infinity) {
+  const l = getLesson(id);
+  const prev = l.starter === undefined ? previousOf(id, path) : null;
+  const files = prev ? filesThrough(prev, path) : {};
+  for (const s of l.steps.slice(0, count)) if (s.provides) files[s.provides.name] = s.provides.code;
+  return files;
+}
+
 /** Evaluate a step's checks against student code. Returns true when all pass. */
 export function stepPasses(step, code) {
   if (!step.check) return true;

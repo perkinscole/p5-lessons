@@ -24,7 +24,7 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const width = MARGIN * 2 + (cols - 1) * COL_W;
   const height = TOP + 195 + LANE_H * 1.5 + 80;
-  const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, width, height, class: 'map-svg', role: 'img', 'aria-label': 'Class journey map. Details are in the table below.' });
+  const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, width, height, class: 'map-svg', role: 'group', 'aria-label': 'Class journey map. Details are in the table below.' });
 
   // Stage bands and labels, so the shape of branch and rejoin can be read at a glance.
   for (const st of STAGES) {
