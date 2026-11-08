@@ -11,6 +11,7 @@ import { viewSprites } from './views/sprites.js';
 import { viewArcade } from './views/arcade.js';
 import { viewTeacherHome, viewClass, viewReview, viewCurriculum } from './views/teacher.js';
 import { viewStandards } from './views/standards.js';
+import { viewProject } from './views/project.js';
 
 // On Apps Script the page has google.script. Anywhere else it runs as a browser-only demo.
 const store = window.google?.script ? createAppsScriptStore() : createLocalStore();
@@ -23,6 +24,7 @@ const STUDENT_ROUTES = [
   [/^\/lesson\/(\w+)$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/arcade$/, viewArcade],
 ];
 const TEACHER_ROUTES = [
+  [/^\/project\/([\w-]+)$/, viewProject],
   [/^\/$/, viewTeacherHome], [/^\/class\/([\w-]+)(?:\/(\w+))?$/, viewClass], [/^\/review\/([\w-]+)$/, viewReview],
   [/^\/curriculum$/, viewCurriculum], [/^\/standards$/, viewStandards], [/^\/lesson\/(\w+)(?:\/(\w+))?$/, viewLesson], [/^\/sprites$/, viewSprites],
   [/^\/arcade\/([\w-]+)$/, viewArcade], [/^\/map\/([\w-]+)$/, viewMap],

@@ -90,3 +90,32 @@ export function statsFor(s) {
 
 /** Lessons completed for gating progress. "returned" still counts: students keep moving. */
 export const isDone = (w) => w && w.status !== 'in_progress';
+
+/**
+ * Recent wins across a class, newest first. Replays each student's lessons in the order they
+ * were turned in to find when each badge and rank was reached. Badges a teacher gave have dates.
+ */
+export function recentAchievements(board, days = 7) {
+  const cutoff = Date.now() - days * 86400000;
+  const events = [];
+  for (const s of board) {
+    const add = (when, priority, icon, text) => {
+      const time = Date.parse(when);
+      if (time >= cutoff) events.push({ student_id: s.id, name: s.display_name, avatar: s.avatar, time, priority, icon, text });
+    };
+    const turnedIn = (s.works || []).filter((w) => w.status !== 'in_progress' && w.submitted_at).sort((a, b) => a.submitted_at.localeCompare(b.submitted_at));
+    let before = statsFor({ works: [], awards: [], path: null });
+    turnedIn.forEach((w, i) => {
+      const works = turnedIn.slice(0, i + 1);
+      const onRoad = works.some((x) => /^[pasm]\d/.test(x.lesson_id));
+      const now = statsFor({ works, awards: [], path: onRoad ? s.path : null });
+      for (const id of now.badges.filter((b) => !before.badges.includes(b))) add(w.submitted_at, 2, badgeById(id).icon, `earned ${badgeById(id).name}`);
+      if (now.rankIndex > before.rankIndex) add(w.submitted_at, 3, '⬆️', `reached ${now.rank.name} rank`);
+      before = now;
+    });
+    for (const a of s.awards || []) {
+      if (a.created_at) add(a.created_at, 3, badgeById(a.badge_id)?.icon || '🏅', `earned ${badgeById(a.badge_id)?.name || 'a badge'}`);
+    }
+  }
+  return events.sort((a, b) => b.time - a.time || b.priority - a.priority);
+}

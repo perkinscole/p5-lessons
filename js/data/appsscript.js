@@ -18,7 +18,7 @@ function call(method, ...args) {
 const METHODS = [
   'listClasses', 'createClass', 'deleteClass', 'getClass', 'listStudents', 'addStudents', 'removeStudent', 'setStudentPath',
   'classBoard', 'updateProfile', 'myWorks', 'saveWork', 'submitWork', 'setShared', 'classWork', 'getWorkFull', 'saveGrade',
-  'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'saveSprite', 'deleteSprite',
+  'getClassPlan', 'saveClassPlan', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'saveSprite', 'deleteSprite',
 ];
 
 /** ml5 is stored in pieces, because Apps Script files can't comfortably hold it whole. */

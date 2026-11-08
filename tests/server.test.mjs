@@ -180,6 +180,29 @@ test('reading the board does not load stored code', () => {
   assert.ok(widest <= 14, `read ${widest} columns`);
 });
 
+test('a daily plan is the teacher\'s alone, and bad input is cleaned', () => {
+  const { teacher, other, ari, cls } = setup();
+  denied(() => ari('getClassPlan', cls.id));
+  denied(() => ari('saveClassPlan', cls.id, { question: 'x' }));
+  denied(() => other('getClassPlan', cls.id));
+  denied(() => other('saveClassPlan', cls.id, { question: 'x' }));
+  const saved = teacher('saveClassPlan', cls.id, { day: '2026-11-08', question: `=BAD()${'x'.repeat(400)}`, focus: 'Keep going', standards: ['6-8.CT.b.5', 'junk', '<b>'], timer_end: 'not a date' });
+  assert.equal(saved.question.length, 200);
+  assert.deepEqual(saved.standards, ['6-8.CT.b.5']);
+  assert.equal(saved.timer_end, '');
+  teacher('saveClassPlan', cls.id, { day: '2026-11-08', question: 'Second', timer_end: '2026-11-08T15:00:00Z' });
+  const plan = teacher('getClassPlan', cls.id);
+  assert.equal(plan.question, 'Second');
+  assert.equal(plan.timer_end, '2026-11-08T15:00:00.000Z');
+});
+
+test('the class board gives dates for achievements, and still no private details', () => {
+  const { ari, cls } = setup();
+  const b = ari('classBoard', cls.id).find((s) => s.display_name === 'Bea T');
+  assert.ok(b.works[0].submitted_at);
+  assert.ok(!JSON.stringify(b).includes('PRIVATE FEEDBACK'));
+});
+
 test('sharing is visible inside the class only, and a teacher can take it down', () => {
   const { ari, bea, zed, teacher, cls } = setup();
   ari('setShared', 't1', true);

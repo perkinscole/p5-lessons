@@ -89,6 +89,10 @@ To publish changes, use **Deploy → Manage deployments**, edit the deployment, 
 - Student code runs in a locked-down frame that can't reach this app, the Sheet, or the network. Loops that never end get stopped. AI games can also reach Teachable Machine's model servers, and the frame gets only image frames from the camera, never the camera itself. Playing someone else's game asks before sharing your camera.
 - Teachers can remove any shared game or sprite in their class. Sharing is always the student's choice.
 
+## Projecting a class
+
+On a class page, press **Project this class** for a display to leave up during student-led work. It shows where everyone is on the trail, what to work on, the question of the day, time left, recent achievements, and the day's standards for visitors and administrators. **Set up today** lets you type your own items. Anything left blank fills in from where students are, and a blank question comes from the lesson check questions. It never shows scores or feedback.
+
 ## Grading and points
 
 Students keep moving after submitting: they don't wait for approval to unlock the next lesson. Teachers score a rubric of 1 to 4 on three rows, write feedback, then approve the work or send it back. Approved work is locked.

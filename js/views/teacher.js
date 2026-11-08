@@ -227,7 +227,7 @@ export async function viewClass(main, classId, tabParam) {
     : tab === 'grades' ? gradebookTab(cls, students, works)
       : journeyTab(board, cls);
   return h('div.stack',
-    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code))),
+    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
     h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`)),
     content,
   );

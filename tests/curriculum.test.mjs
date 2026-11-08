@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { PATH_IDS, STAGES, SIDE_TRAILS, sequence, coreSequence, mapLayout, previousGameLesson } from '../js/curriculum/graph.js';
 import { ALIGNMENT } from '../js/curriculum/alignment.js';
 import { checksFor } from '../js/curriculum/checks.js';
+import { recentAchievements } from '../js/game/rules.js';
 import { STANDARDS } from '../js/curriculum/standards.js';
 import { allLessons, buildSolution, buildThrough, applySkeleton, stepPasses, checkSummary, getLesson, stripComments, fallbackStarter, briefOf } from '../js/curriculum/engine.js';
 
@@ -179,6 +180,27 @@ test('each step opens with one short instruction', () => {
       assert.ok(brief.split(/\s+/).length <= 26, `${l.id} / ${s.title}: ${brief.split(/\s+/).length} words`);
     }
   }
+});
+
+test('recent achievements come from real records, newest first, and never scores', () => {
+  const at = (mins) => new Date(Date.now() - mins * 60000).toISOString();
+  const board = [{
+    id: 's1', display_name: 'Ari M', path: 'mind', avatar: null,
+    works: [
+      { lesson_id: 't1', status: 'approved', stretch_done: 0, auto_ok: true, shared: false, submitted_at: at(120) },
+      { lesson_id: 't3', status: 'submitted', stretch_done: 0, auto_ok: true, shared: false, submitted_at: at(30) },
+      { lesson_id: 't4', status: 'in_progress', stretch_done: 0, auto_ok: true, shared: false, submitted_at: null },
+    ],
+    awards: [{ badge_id: 'helper', note: '', created_at: at(5) }],
+  }];
+  const feed = recentAchievements(board);
+  assert.equal(feed[0].text, 'earned Helping Hand');
+  assert.ok(feed.some((e) => e.text === 'earned Total Recall'));
+  assert.ok(feed.some((e) => e.text === 'earned First Canvas'));
+  assert.ok(!feed.some((e) => e.text === 'earned Trailblazer'), 'no road lesson yet');
+  assert.deepEqual(feed.map((e) => e.time), [...feed.map((e) => e.time)].sort((x, y) => y - x));
+  const old = [{ ...board[0], works: [{ ...board[0].works[0], submitted_at: at(60 * 24 * 30) }], awards: [] }];
+  assert.equal(recentAchievements(old).length, 0);
 });
 
 test('stripComments ignores commented code but keeps strings', () => {

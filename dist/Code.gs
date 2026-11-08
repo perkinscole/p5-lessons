@@ -22,10 +22,11 @@ const SCHEMA = {
   Grades: ['work_id', 'scores', 'total', 'max_total', 'feedback', 'graded_at'],
   Awards: ['id', 'student_id', 'badge_id', 'note', 'created_at'],
   Sprites: [...SPRITE_META, ...chunkCols_(SPRITE_CELLS)],
+  Daily: ['class_id', 'plan', 'updated_at'],
 };
 const NUMBERS = new Set(['stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h']);
 const BOOLEANS = new Set(['auto_ok', 'shared', 'published']);
-const OBJECTS = new Set(['avatar', 'scores']);
+const OBJECTS = new Set(['avatar', 'scores', 'plan']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
 const ML5_PARTS = 5; // Set by the build: how many ML5_n files it made.
 
@@ -263,8 +264,8 @@ function classBoard_(me, classId) {
   // Progress only: never code, grades, feedback, reflections, or emails.
   return students.map((s) => ({
     id: s.id, display_name: s.display_name, avatar: s.avatar, path: s.path, game_name: s.game_name,
-    works: works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared })),
-    awards: awards.filter((a) => a.student_id === s.id).map((a) => ({ badge_id: a.badge_id, note: a.note })),
+    works: works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
+    awards: awards.filter((a) => a.student_id === s.id).map((a) => ({ badge_id: a.badge_id, note: a.note, created_at: a.created_at })),
     sprites_shared: sprites.filter((sp) => sp.student_id === s.id && sp.published).length,
   }));
 }
@@ -356,7 +357,32 @@ function parseRosterLine_(line) {
   return { email, display_name: text_(name || email.split('@')[0], 60) };
 }
 
+/** What a teacher set for today's class display. Text is limited, and standards must look like codes. */
+function cleanPlan_(p) {
+  const when = String(p.timer_end || '');
+  return {
+    day: text_(p.day, 10),
+    question: text_(p.question, 200),
+    focus: text_(p.focus, 300),
+    standards: (Array.isArray(p.standards) ? p.standards : []).map(String).filter((c) => /^6-8\.[A-Z]+\.[a-e]\.\d$/.test(c)).slice(0, 3),
+    timer_end: when && !Number.isNaN(Date.parse(when)) ? new Date(when).toISOString() : '',
+  };
+}
+
 const TEACHER_ROUTES = {
+  getClassPlan: (me, classId) => {
+    ownedClass_(me, classId);
+    const row = rows_('Daily').find((d) => d.class_id === classId);
+    return row ? row.plan : null;
+  },
+  saveClassPlan: (me, classId, plan) => withLock_(() => {
+    ownedClass_(me, classId);
+    const clean = cleanPlan_(plan || {});
+    const row = rows_('Daily').find((d) => d.class_id === classId);
+    if (row) update_('Daily', { ...row, plan: clean, updated_at: now_() });
+    else insert_('Daily', { class_id: classId, plan: clean, updated_at: now_() });
+    return clean;
+  }),
   libraryPart: libraryPart_,
   listClasses: (me) => rows_('Classes').filter((c) => c.teacher_email === me.email),
   getClass: (me, id) => ownedClass_(me, id),
@@ -374,6 +400,7 @@ const TEACHER_ROUTES = {
     deleteRows_('Works', (w) => ids.has(w.student_id));
     deleteRows_('Awards', (a) => ids.has(a.student_id));
     deleteRows_('Sprites', (s) => s.class_id === id);
+    deleteRows_('Daily', (d) => d.class_id === id);
     deleteRows_('Students', (s) => s.class_id === id);
     deleteRows_('Classes', (c) => c.id === id);
   }),
