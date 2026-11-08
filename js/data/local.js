@@ -3,6 +3,7 @@
 // It is for trying the app. Real classes use Apps Script (see README).
 import { buildSolution, getLesson, checkSummary, filesThrough } from '../curriculum/engine.js';
 import { sequence } from '../curriculum/graph.js';
+import { paceAlerts_, isCoreLesson_ } from '../game/pace.js';
 
 const KEY = 'pixeltrail.demo.v1';
 const SESSION = 'pixeltrail.demo.session';
@@ -54,6 +55,11 @@ function seed() {
       if (!pending) db.grades.push({ work_id: w.id, scores: { works: 3 + ((i + n) % 2), concept: 3, own: 2 + (n % 3) }, total: 8 + ((i + n) % 2) + (n % 3), max_total: 12, feedback: 'Nice work. Keep going!', graded_at: now() });
     });
   });
+  // Some demo students have gone quiet, so Keeping up has something to show.
+  const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  for (const w of db.works) if (['demo-s5', 'demo-s9'].includes(w.student_id)) w.updated_at = daysAgo(16);
+  db.links = { 'demo-class': { course_id: 'demo-course', course_name: 'Period 3: Game Design', synced_at: now() } };
+  db.pace = { 'demo-class': { term_start: daysAgo(50).slice(0, 10), term_end: daysAgo(-60).slice(0, 10) } };
   db.awards.push({ id: uid(), student_id: 'demo-s2', badge_id: 'helper', note: 'Helped Fin with their if statements', created_at: now() });
   db.awards.push({ id: uid(), student_id: 'demo-s4', badge_id: 'debugger', note: '', created_at: now() });
   return db;
@@ -83,6 +89,7 @@ export function createLocalStore() {
   return {
     mode: 'local',
     usesPasscodes: true,
+    hasClassroom: true,
     session: async () => me(),
     async teacherSignUp(name, email) {
       const t = { id: uid(), display_name: name, email };
@@ -123,6 +130,70 @@ export function createLocalStore() {
       save();
     },
     getClass: async (id) => clone(db.classes.find((c) => c.id === id)),
+    listGoogleCourses: async () => [
+      { id: 'demo-course', name: 'Period 3: Game Design', section: 'Demo', linked: true },
+      { id: 'demo-course-2', name: 'Period 6: Game Design', section: 'Demo', linked: !!(db.links || {})['demo-class-6'] },
+    ],
+    async importCourses(ids) {
+      db.links = db.links || {};
+      return ids.map((id) => {
+        if (id === 'demo-course') return { name: 'Period 3: Game Design', class_id: 'demo-class', added: 0, matched: 12, skipped: [], gone: 0 };
+        if (!db.classes.some((c) => c.id === 'demo-class-6')) {
+          db.classes.push({ id: 'demo-class-6', teacher_email: readSession().id, teacher_id: readSession().id, name: 'Period 6: Game Design', code: 'DEMO66', created_at: now() });
+          [['Maya R', 'mayar'], ['Noah P', 'noahp'], ['Omar S', 'omars']].forEach(([display_name, username], i) => db.students.push({ id: `demo-p6-${i}`, class_id: 'demo-class-6', display_name, username, passcode: 'demo', avatar: null, path: null, game_name: null, created_at: now() }));
+          db.links['demo-class-6'] = { course_id: id, course_name: 'Period 6: Game Design', synced_at: now() };
+          save();
+        }
+        return { name: 'Period 6: Game Design', class_id: 'demo-class-6', added: 3, matched: 0, skipped: ['Sam T: already in another class here'], gone: 0 };
+      });
+    },
+    async classroomWork(classId) {
+      const link = (db.links || {})[classId];
+      if (!link) return { linked: false };
+      const day = 86400000;
+      const assignments = ['Reading reflection', 'Bug journal', 'Sprite sketch', 'Game plan'].map((title, i) => ({ id: `w${i}`, title, link: 'https://classroom.google.com', due: Date.now() + (i === 0 ? 3 : -4 * i) * day }));
+      const states = ['done', 'graded', 'late', 'missing', 'done', 'done', 'missing'];
+      const students = db.students.filter((s) => s.class_id === classId).sort((a, b) => a.display_name.localeCompare(b.display_name)).map((s, i) => {
+        const cells = {};
+        assignments.forEach((a, j) => {
+          const state = j === 0 ? 'assigned' : states[(i * 3 + j) % states.length];
+          cells[a.id] = { state, grade: state === 'graded' ? 8 + (i % 3) : undefined, link: 'https://classroom.google.com' };
+        });
+        return { id: s.id, display_name: s.display_name, cells, missing: Object.values(cells).filter((c) => c.state === 'missing').length, core_done: db.works.filter((w) => w.student_id === s.id && w.status !== 'in_progress' && isCoreLesson_(w.lesson_id)).length };
+      });
+      return { linked: true, course_name: link.course_name, assignments, students };
+    },
+    async classAlerts(classId, includeClassroom) {
+      const link = (db.links || {})[classId];
+      const list = db.students.filter((s) => s.class_id === classId).map((s) => ({ id: s.id, display_name: s.display_name, works: db.works.filter((w) => w.student_id === s.id) }));
+      const students = paceAlerts_(list, (db.pace || {})[classId] || null);
+      if (includeClassroom && link) {
+        const work = await this.classroomWork(classId);
+        for (const s of work.students) {
+          if (!s.missing) continue;
+          const a = students.find((x) => x.id === s.id);
+          a.reasons.push(`${s.missing} missing in Classroom`);
+          if (s.missing >= 3) a.level = 'behind';
+          else if (a.level === 'ok') a.level = 'watch';
+        }
+        const levels = { behind: 0, watch: 1, ok: 2 };
+        students.sort((x, y) => levels[x.level] - levels[y.level] || x.done - y.done);
+      }
+      return { linked: !!link, course_name: link?.course_name || '', synced_at: link?.synced_at || '', students };
+    },
+    async alertSummary() {
+      const out = {};
+      for (const c of db.classes.filter((x) => x.teacher_id === readSession()?.id)) out[c.id] = (await this.classAlerts(c.id, false)).students.filter((s) => s.level !== 'ok').length;
+      return out;
+    },
+    getPace: async (id) => clone((db.pace || {})[id] || null),
+    async savePace(id, pace) {
+      db.pace = db.pace || {};
+      db.pace[id] = clone(pace);
+      save();
+    },
+    getDigest: async () => ({ can: true, on: !!db.digest }),
+    async setDigest(on) { db.digest = !!on; save(); },
     getClassPlan: async (id) => clone((db.plans || {})[id] || null),
     async saveClassPlan(id, plan) {
       db.plans = db.plans || {};

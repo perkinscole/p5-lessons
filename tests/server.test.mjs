@@ -33,7 +33,7 @@ const denied = (fn) => assert.throws(fn);
 
 test('only the two entry points can be called from a browser', () => {
   const { server } = setup();
-  assert.deepEqual(server.publicFunctions().sort(), ['api', 'doGet']);
+  assert.deepEqual(server.publicFunctions().sort(), ['api', 'dailyProgressEmail', 'doGet']);
 });
 
 test('someone on no roster gets no access and no data', () => {
@@ -215,6 +215,129 @@ test('the class board gives dates for achievements, and still no private details
   const b = ari('classBoard', cls.id).find((s) => s.display_name === 'Bea T');
   assert.ok(b.works[0].submitted_at);
   assert.ok(!JSON.stringify(b).includes('PRIVATE FEEDBACK'));
+});
+
+const person = (id, name, email) => ({ userId: id, profile: { name: { fullName: name }, emailAddress: email } });
+const classroomData = () => ({
+  courses: [{ id: 'c1', name: 'Game Design', section: 'P3' }, { id: 'c2', name: 'Robotics' }, { id: 'c3', name: 'Art' }],
+  rosters: {
+    c1: [person('g1', 'Ava Marie Lopez', 'ava@school.test'), person('g2', 'Ben Tran', 'ben@school.test'), person('g3', 'Cy', 'cy@school.test'), person('g4', 'No Email', '')],
+    c2: [person('g2', 'Ben Tran', 'ben@school.test'), person('g5', 'Dee Fox', 'dee@school.test')],
+  },
+  work: { c1: [{ id: 'w1', title: 'Essay', alternateLink: 'https://cr/w1', dueDate: { year: 2020, month: 1, day: 1 } }, { id: 'w2', title: 'Quiz', alternateLink: 'https://cr/w2', dueDate: { year: 2099, month: 1, day: 1 } }, { id: 'w3', title: 'Poster', alternateLink: 'https://cr/w3' }] },
+  subs: { c1: [
+    { userId: 'g1', courseWorkId: 'w1', state: 'CREATED' }, { userId: 'g1', courseWorkId: 'w2', state: 'CREATED' }, { userId: 'g1', courseWorkId: 'w3', state: 'TURNED_IN', late: true },
+    { userId: 'g2', courseWorkId: 'w1', state: 'RETURNED', assignedGrade: 9 }, { userId: 'g2', courseWorkId: 'w3', state: 'TURNED_IN' },
+    { userId: 'stranger', courseWorkId: 'w1', state: 'CREATED' },
+  ] },
+});
+
+function classroomSetup() {
+  const server = createServer({ owner: OWNER, classroom: classroomData() });
+  const t = server.as(OWNER);
+  t('listClasses');
+  server.sheets.get('Teachers').appendRow([OTHER, 'Other', '2026-01-01']);
+  const [r] = t('importCourses', ['c1']);
+  return { server, t, r, cid: r.class_id };
+}
+
+test('importing brings in a course across pages, with last initials only', () => {
+  const { t, r, cid } = classroomSetup();
+  assert.equal(r.added, 3);
+  assert.equal(r.skipped.length, 1);
+  const names = t('listStudents', cid).map((s) => s.display_name).sort();
+  assert.deepEqual(names, ['Ava L', 'Ben T', 'Cy']);
+  assert.ok(!JSON.stringify(t('classBoard', cid)).includes('Lopez'));
+  assert.equal(t('listGoogleCourses').find((c) => c.id === 'c1').linked, true);
+  assert.equal(t('listGoogleCourses').length, 3);
+});
+
+test('importing again adds only new students, and reports who left without removing them', () => {
+  const data = classroomData();
+  const server = createServer({ owner: OWNER, classroom: data });
+  const t = server.as(OWNER);
+  const [first] = t('importCourses', ['c1']);
+  data.rosters.c1 = data.rosters.c1.filter((p) => p.userId !== 'g3').concat(person('g9', 'New Kid', 'new@school.test'));
+  const [again] = t('importCourses', ['c1']);
+  assert.equal(again.class_id, first.class_id);
+  assert.equal(again.added, 1);
+  assert.equal(again.matched, 2);
+  assert.equal(again.gone, 1);
+  assert.equal(t('listStudents', first.class_id).length, 4);
+  assert.equal(t('listClasses').length, 1);
+});
+
+test('a student in two courses is reported, not duplicated', () => {
+  const { t } = classroomSetup();
+  const [r] = t('importCourses', ['c2']);
+  assert.equal(r.added, 1);
+  assert.ok(r.skipped.some((x) => x.includes('already in another class')));
+});
+
+test('only the deploying teacher can reach Google Classroom', () => {
+  const { server, cid } = classroomSetup();
+  const other = server.as(OTHER);
+  const student = server.as('ava@school.test');
+  denied(() => other('listGoogleCourses'));
+  denied(() => other('importCourses', ['c1']));
+  denied(() => other('classroomWork', cid));
+  denied(() => other('setDigest', true));
+  denied(() => other('classAlerts', cid));
+  denied(() => student('listGoogleCourses'));
+  denied(() => student('importCourses', ['c1']));
+  denied(() => student('classroomWork', cid));
+  denied(() => student('classAlerts', cid));
+  denied(() => student('getPace', cid));
+  denied(() => student('savePace', cid, {}));
+  denied(() => server.as(OWNER)('importCourses', ['not-mine']));
+});
+
+test('assignments show each student\'s status, across pages', () => {
+  const { t, cid } = classroomSetup();
+  const data = t('classroomWork', cid);
+  assert.equal(data.assignments.length, 3);
+  const ava = data.students.find((s) => s.display_name === 'Ava L');
+  assert.equal(ava.cells.w1.state, 'missing');
+  assert.equal(ava.cells.w2.state, 'assigned');
+  assert.equal(ava.cells.w3.state, 'late');
+  assert.equal(ava.missing, 1);
+  const ben = data.students.find((s) => s.display_name === 'Ben T');
+  assert.equal(ben.cells.w1.state, 'graded');
+  assert.equal(ben.cells.w1.grade, 9);
+  assert.equal(ben.cells.w3.state, 'done');
+});
+
+test('alerts include Classroom work, and an email goes only to the deploying teacher', () => {
+  const { server, t, cid } = classroomSetup();
+  const yearAgo = new Date(Date.now() - 86400000 * 100).toISOString().slice(0, 10);
+  const soon = new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 10);
+  t('savePace', cid, { term_start: yearAgo, term_end: soon });
+  const a = t('classAlerts', cid, true).students.find((s) => s.display_name === 'Ava L');
+  assert.equal(a.level, 'behind');
+  assert.ok(a.reasons.some((r) => r.includes('missing in Classroom')));
+  denied(() => server.run('ava@school.test', 'dailyProgressEmail'));
+  assert.equal(server.mail.length, 0);
+  const day = new Date().getDay();
+  server.run(OWNER, 'dailyProgressEmail');
+  server.run(OWNER, 'dailyProgressEmail');
+  if (day !== 0 && day !== 6) {
+    assert.equal(server.mail.length, 1, 'one email per day');
+    assert.equal(server.mail[0].to, OWNER);
+    assert.ok(server.mail[0].body.includes('Ava L'));
+    assert.ok(!server.mail[0].body.includes('Lopez'));
+  }
+  t('setDigest', true);
+  t('setDigest', true);
+  assert.equal(server.triggers.length, 1);
+  assert.equal(t('getDigest').on, true);
+  t('setDigest', false);
+  assert.equal(t('getDigest').on, false);
+});
+
+test('pace dates are checked', () => {
+  const { t, cid } = classroomSetup();
+  t('savePace', cid, { term_start: '<b>', term_end: '2026-12-20' });
+  assert.deepEqual(t('getPace', cid), { term_start: '', term_end: '2026-12-20' });
 });
 
 test('sharing is visible inside the class only, and a teacher can take it down', () => {

@@ -9,15 +9,17 @@ import { statsFor, TEACHER_BADGES, isDone } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { buildMap, legend, leaderboard } from './map.js';
 import { makeEditor } from './lesson.js';
+import { openImport, assignmentsTab, keepingUpTab } from './classroom.js';
 import { badgeChip } from './student.js';
 
 export async function viewTeacherHome() {
   const classes = await app.store.listClasses();
+  const alerts = app.store.alertSummary ? await app.store.alertSummary() : {};
   const name = h('input', { required: true, maxlength: 80, placeholder: 'Period 3: Game Design', 'aria-label': 'New class name' });
   return h('div.stack',
-    h('div', h('h1', 'Your classes')),
+    h('div.row.between', h('h1', 'Your classes'), app.store.hasClassroom && h('button.btn', { onclick: () => openImport(render) }, 'Import from Google Classroom')),
     classes.length
-      ? h('div.class-grid', classes.map((c) => h('a.card.class-card', { href: `#/class/${c.id}` }, h('h2', c.name), c.code && h('p', 'Class code: ', h('strong.code', c.code)))))
+      ? h('div.class-grid', classes.map((c) => h('a.card.class-card', { href: `#/class/${c.id}` }, h('h2', c.name), alerts[c.id] > 0 && h('p.alert-chip', `${alerts[c.id]} need${alerts[c.id] === 1 ? 's' : ''} a check-in`), c.code && h('p', 'Class code: ', h('strong.code', c.code)))))
       : h('p.muted', 'No classes yet. Make your first one below.'),
     h('form.card.row.add-class', {
       onsubmit: async (e) => {
@@ -223,12 +225,16 @@ export async function viewClass(main, classId, tabParam) {
   const [students, board, works] = await Promise.all([app.store.listStudents(classId), app.store.classBoard(classId), app.store.classWork(classId)]);
   const waiting = works.filter((w) => w.status === 'submitted').length;
   const link = (id, label) => h('a.tab', { href: `#/class/${classId}/${id}`, role: 'tab', 'aria-selected': tab === id ? 'true' : 'false' }, label);
+  const alerts = app.store.classAlerts ? await app.store.classAlerts(classId, false) : { students: [] };
+  const needing = alerts.students.filter((s) => s.level !== 'ok').length;
   const content = tab === 'roster' ? rosterTab(cls, students, board, render)
     : tab === 'grades' ? gradebookTab(cls, students, works)
-      : journeyTab(board, cls);
+      : tab === 'assignments' ? await assignmentsTab(cls)
+        : tab === 'keeping' ? await keepingUpTab(cls, render)
+          : journeyTab(board, cls);
   return h('div.stack',
     h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
-    h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`)),
+    h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
     content,
   );
 }

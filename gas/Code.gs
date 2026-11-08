@@ -17,12 +17,14 @@ const SPRITE_META = ['id', 'class_id', 'student_id', 'teacher_email', 'author_na
 const SCHEMA = {
   Teachers: ['email', 'display_name', 'created_at'],
   Classes: ['id', 'teacher_email', 'name', 'created_at'],
-  Students: ['id', 'class_id', 'email', 'display_name', 'avatar', 'path', 'game_name', 'created_at'],
+  Students: ['id', 'class_id', 'email', 'display_name', 'avatar', 'path', 'game_name', 'created_at', 'google_id'],
   Works: [...WORK_META, ...chunkCols_(WORK_CELLS)],
   Grades: ['work_id', 'scores', 'total', 'max_total', 'feedback', 'graded_at'],
   Awards: ['id', 'student_id', 'badge_id', 'note', 'created_at'],
   Sprites: [...SPRITE_META, ...chunkCols_(SPRITE_CELLS)],
   Daily: ['class_id', 'plan', 'updated_at'],
+  Links: ['class_id', 'course_id', 'course_name', 'synced_at'],
+  Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
 };
 const NUMBERS = new Set(['stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h']);
 const BOOLEANS = new Set(['auto_ok', 'shared', 'published']);
@@ -357,6 +359,196 @@ function parseRosterLine_(line) {
   return { email, display_name: text_(name || email.split('@')[0], 60) };
 }
 
+// Google Classroom ---------------------------------------------------------------------------------
+// The app runs under the deploying teacher's account, so these calls can see that teacher's courses.
+// Other teachers on this deployment must never reach them, so every route here checks ownerOnly_.
+
+const ownerEmail_ = () => String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
+
+function ownerOnly_(me) {
+  if (me.email !== ownerEmail_()) throw new Error('Only the teacher who set up this app can use Google Classroom here.');
+}
+
+function allPages_(fetchPage, key) {
+  let items = [];
+  let token;
+  do {
+    const page = fetchPage(token);
+    items = items.concat(page[key] || []);
+    token = page.nextPageToken;
+  } while (token);
+  return items;
+}
+
+const pageOpts_ = (token, extra) => ({ pageSize: 100, ...(extra || {}), ...(token ? { pageToken: token } : {}) });
+const myCourses_ = () => allPages_((t) => Classroom.Courses.list(pageOpts_(t, { teacherId: 'me', courseStates: ['ACTIVE'] })), 'courses');
+const courseRoster_ = (id) => allPages_((t) => Classroom.Courses.Students.list(id, pageOpts_(t)), 'students');
+
+/** Classmates see this name, so keep only a last initial. */
+function shortName_(fullName) {
+  const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return text_(parts[0] || 'Student', 60);
+  return text_(`${parts[0]} ${parts[parts.length - 1].charAt(0).toUpperCase()}`, 60);
+}
+
+const linkFor_ = (classId) => rows_('Links').find((l) => l.class_id === classId);
+
+/** Bring one course's roster in, adding only what's new. Never removes anyone. */
+function applyRoster_(me, course, roster) {
+  return withLock_(() => {
+    let link = rows_('Links').find((l) => l.course_id === course.id);
+    let classId;
+    if (link) {
+      classId = link.class_id;
+      ownedClass_(me, classId);
+    } else {
+      classId = uuid_();
+      insert_('Classes', { id: classId, teacher_email: me.email, name: text_(course.name, 80), created_at: now_() });
+      insert_('Links', { class_id: classId, course_id: course.id, course_name: text_(course.name, 120), synced_at: now_() });
+    }
+    const students = rows_('Students');
+    const teachers = new Set(rows_('Teachers').map((t) => t.email));
+    const seenIds = new Set();
+    const result = { name: course.name, class_id: classId, added: 0, matched: 0, skipped: [], gone: 0 };
+    for (const entry of roster) {
+      const googleId = String(entry.userId);
+      const fullName = entry.profile && entry.profile.name && entry.profile.name.fullName;
+      const email = String((entry.profile && entry.profile.emailAddress) || '').trim().toLowerCase();
+      seenIds.add(googleId);
+      if (!email) { result.skipped.push(`${shortName_(fullName)}: Classroom did not share an email`); continue; }
+      if (teachers.has(email)) { result.skipped.push(`${shortName_(fullName)}: is a teacher here`); continue; }
+      const existing = students.find((s) => s.email === email);
+      if (existing && existing.class_id !== classId) { result.skipped.push(`${existing.display_name}: already in another class here`); continue; }
+      if (existing) {
+        if (existing.google_id !== googleId) update_('Students', { ...existing, google_id: googleId });
+        result.matched++;
+      } else {
+        insert_('Students', { id: uuid_(), class_id: classId, email, display_name: shortName_(fullName), avatar: null, path: null, game_name: null, created_at: now_(), google_id: googleId });
+        result.added++;
+      }
+    }
+    result.gone = rows_('Students').filter((s) => s.class_id === classId && s.google_id && !seenIds.has(s.google_id)).length;
+    const current = rows_('Links').find((l) => l.class_id === classId);
+    update_('Links', { ...current, synced_at: now_() });
+    return result;
+  });
+}
+
+function dueTime_(work) {
+  if (!work.dueDate) return null;
+  const d = work.dueDate;
+  const t = work.dueTime || {};
+  return Date.UTC(d.year, d.month - 1, d.day, t.hours === undefined ? 23 : t.hours, t.minutes === undefined ? 59 : t.minutes);
+}
+
+function submissionState_(sub, due, now) {
+  if (sub.state === 'RETURNED' && sub.assignedGrade !== undefined) return 'graded';
+  if (sub.state === 'RETURNED') return 'done';
+  if (sub.state === 'TURNED_IN') return sub.late ? 'late' : 'done';
+  return due !== null && due < now ? 'missing' : 'assigned';
+}
+
+function classroomWork_(me, classId) {
+  ownerOnly_(me);
+  ownedClass_(me, classId);
+  const link = linkFor_(classId);
+  if (!link) return { linked: false };
+  const now = Date.now();
+  const work = allPages_((t) => Classroom.Courses.CourseWork.list(link.course_id, pageOpts_(t, { courseWorkStates: ['PUBLISHED'] })), 'courseWork');
+  const subs = allPages_((t) => Classroom.Courses.CourseWork.StudentSubmissions.list(link.course_id, '-', pageOpts_(t)), 'studentSubmissions');
+  const dueById = new Map(work.map((w) => [w.id, dueTime_(w)]));
+  const students = rows_('Students').filter((s) => s.class_id === classId);
+  const metas = metaWorks_();
+  const byGoogle = new Map();
+  const out = students.map((s) => {
+    const row = {
+      id: s.id, display_name: s.display_name, cells: {}, missing: 0,
+      core_done: metas.filter((w) => w.student_id === s.id && w.status !== 'in_progress' && isCoreLesson_(w.lesson_id)).length,
+    };
+    if (s.google_id) byGoogle.set(s.google_id, row);
+    return row;
+  });
+  for (const sub of subs) {
+    const row = byGoogle.get(String(sub.userId));
+    if (!row || !dueById.has(sub.courseWorkId)) continue;
+    const state = submissionState_(sub, dueById.get(sub.courseWorkId), now);
+    row.cells[sub.courseWorkId] = { state, grade: sub.assignedGrade, link: sub.alternateLink };
+    if (state === 'missing') row.missing++;
+  }
+  const assignments = work
+    .map((w) => ({ id: w.id, title: text_(w.title, 80), link: w.alternateLink, max: w.maxPoints, due: dueById.get(w.id) }))
+    .sort((a, b) => (b.due || 0) - (a.due || 0));
+  return { linked: true, course_name: link.course_name, assignments, students: out };
+}
+
+function studentsWithWork_(classId, metas) {
+  return rows_('Students').filter((s) => s.class_id === classId).map((s) => ({
+    id: s.id, display_name: s.display_name,
+    works: metas.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, updated_at: w.updated_at, submitted_at: w.submitted_at })),
+  }));
+}
+
+const paceFor_ = (classId) => {
+  const row = rows_('Pace').find((p) => p.class_id === classId);
+  return row ? { term_start: row.term_start, term_end: row.term_end } : null;
+};
+
+function classAlerts_(me, classId, includeClassroom) {
+  ownedClass_(me, classId);
+  const link = linkFor_(classId);
+  const result = { linked: !!link, course_name: link ? link.course_name : '', synced_at: link ? link.synced_at : '', students: paceAlerts_(studentsWithWork_(classId, metaWorks_()), paceFor_(classId)) };
+  if (includeClassroom && link && me.email === ownerEmail_()) {
+    try {
+      const work = classroomWork_(me, classId);
+      const levels = { behind: 0, watch: 1, ok: 2 };
+      for (const s of work.students) {
+        if (!s.missing) continue;
+        const a = result.students.find((x) => x.id === s.id);
+        a.reasons.push(`${s.missing} missing in Classroom`);
+        if (s.missing >= 3) a.level = 'behind';
+        else if (a.level === 'ok') a.level = 'watch';
+      }
+      result.students.sort((x, y) => levels[x.level] - levels[y.level] || x.done - y.done);
+    } catch (e) {
+      console.error(e && e.stack);
+      result.classroomError = true;
+    }
+  }
+  return result;
+}
+
+function alertLines_(me) {
+  const lines = [];
+  for (const c of rows_('Classes').filter((x) => x.teacher_email === me.email)) {
+    const needing = classAlerts_(me, c.id, true).students.filter((s) => s.level !== 'ok');
+    if (!needing.length) continue;
+    lines.push(c.name);
+    needing.forEach((s) => lines.push(`  ${s.display_name}: ${s.reasons.join('; ')}`));
+    lines.push('');
+  }
+  return lines;
+}
+
+const DIGEST_HANDLER = 'dailyProgressEmail';
+
+/** Runs from a daily trigger. It's reachable from a browser, so it refuses anyone but the owner. */
+function dailyProgressEmail() {
+  const owner = ownerEmail_();
+  const active = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
+  if (active && active !== owner) throw new Error('You do not have access to that.');
+  const today = new Date();
+  if (today.getDay() === 0 || today.getDay() === 6) return;
+  const props = PropertiesService.getScriptProperties();
+  const key = today.toISOString().slice(0, 10);
+  if (props.getProperty('DIGEST_LAST') === key) return;
+  props.setProperty('DIGEST_LAST', key);
+  const lines = alertLines_({ role: 'teacher', email: owner });
+  if (!lines.length) return;
+  MailApp.sendEmail(owner, 'Pixel Trail: students who need a check-in', `${lines.join('\n')}\n${ScriptApp.getService().getUrl() || ''}`);
+}
+
+const digestOn_ = () => ScriptApp.getProjectTriggers().some((t) => t.getHandlerFunction() === DIGEST_HANDLER);
+
 /** What a teacher set for today's class display. Text is limited, and standards must look like codes. */
 function cleanPlan_(p) {
   const when = String(p.timer_end || '');
@@ -370,6 +562,41 @@ function cleanPlan_(p) {
 }
 
 const TEACHER_ROUTES = {
+  listGoogleCourses: (me) => {
+    ownerOnly_(me);
+    const linked = new Set(rows_('Links').map((l) => l.course_id));
+    return myCourses_().map((c) => ({ id: c.id, name: c.name, section: c.section || '', linked: linked.has(c.id) }));
+  },
+  importCourses: (me, ids) => {
+    ownerOnly_(me);
+    const courses = myCourses_();
+    return (Array.isArray(ids) ? ids : []).map((id) => {
+      const course = courses.find((c) => c.id === id);
+      if (!course) throw new Error('That course was not found in your Google Classroom.');
+      return applyRoster_(me, course, courseRoster_(id));
+    });
+  },
+  classroomWork: classroomWork_,
+  classAlerts: classAlerts_,
+  alertSummary: (me) => Object.fromEntries(rows_('Classes').filter((c) => c.teacher_email === me.email).map((c) => {
+    const list = classAlerts_(me, c.id, false).students;
+    return [c.id, list.filter((s) => s.level !== 'ok').length];
+  })),
+  getPace: (me, classId) => { ownedClass_(me, classId); return paceFor_(classId); },
+  savePace: (me, classId, pace) => withLock_(() => {
+    ownedClass_(me, classId);
+    const valid = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? String(d) : '');
+    const clean = { class_id: classId, term_start: valid(pace && pace.term_start), term_end: valid(pace && pace.term_end), updated_at: now_() };
+    const row = rows_('Pace').find((p) => p.class_id === classId);
+    if (row) update_('Pace', { ...clean, _row: row._row });
+    else insert_('Pace', clean);
+  }),
+  getDigest: (me) => (me.email === ownerEmail_() ? { can: true, on: digestOn_() } : { can: false, on: false }),
+  setDigest: (me, on) => {
+    ownerOnly_(me);
+    ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === DIGEST_HANDLER).forEach((t) => ScriptApp.deleteTrigger(t));
+    if (on) ScriptApp.newTrigger(DIGEST_HANDLER).timeBased().everyDays(1).atHour(7).create();
+  },
   getClassPlan: (me, classId) => {
     ownedClass_(me, classId);
     const row = rows_('Daily').find((d) => d.class_id === classId);
@@ -401,6 +628,8 @@ const TEACHER_ROUTES = {
     deleteRows_('Awards', (a) => ids.has(a.student_id));
     deleteRows_('Sprites', (s) => s.class_id === id);
     deleteRows_('Daily', (d) => d.class_id === id);
+    deleteRows_('Links', (l) => l.class_id === id);
+    deleteRows_('Pace', (p) => p.class_id === id);
     deleteRows_('Students', (s) => s.class_id === id);
     deleteRows_('Classes', (c) => c.id === id);
   }),

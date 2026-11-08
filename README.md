@@ -89,6 +89,14 @@ To publish changes, use **Deploy → Manage deployments**, edit the deployment, 
 - Student code runs in a locked-down frame that can't reach this app, the Sheet, or the network. Loops that never end get stopped. AI games can also reach Teachable Machine's model servers, and the frame gets only image frames from the camera, never the camera itself. Playing someone else's game asks before sharing your camera.
 - Teachers can remove any shared game or sprite in their class. Sharing is always the student's choice.
 
+## Google Classroom
+
+On your Classes page, press **Import from Google Classroom** to bring in courses and students. Import again any time to add new students. It only reads from Classroom and never changes anything there. Only the teacher who deployed the app can use the connection.
+
+A class's **Assignments** tab shows every Classroom assignment and each student's status. **Keeping up** flags students who are behind the pace for your term dates, have gone quiet, have work to fix, or have missing Classroom work. You can turn on an email on school mornings, sent only when someone needs a check-in.
+
+After updating to this version, open the Apps Script editor, run any function once, and approve the new Classroom and email permissions. Then publish a new version. Your Workspace admin may need to allow the Classroom API.
+
 ## Display and project files
 
 The **Display** button lets each person choose light, dark, or high contrast, an editor style, larger text and code, wider spacing, plain headings, and read aloud. Choices are saved in that browser.

@@ -6,7 +6,15 @@ import { readFileSync } from 'node:fs';
 import { createServer } from '../tests/fake-gas.mjs';
 
 const OWNER = 'teacher@school.test';
-const server = createServer({ owner: OWNER, codeFile: '../dist/Code.gs', htmlDir: '../dist' });
+// Sample Google Classroom data, since the preview has no real Google account behind it.
+const person = (id, fullName, emailAddress) => ({ userId: id, profile: { name: { fullName }, emailAddress } });
+const classroom = {
+  courses: [{ id: 'gc1', name: 'Game Design A', section: 'Block 2' }, { id: 'gc2', name: 'Game Design B', section: 'Block 5' }],
+  rosters: { gc1: [person('u1', 'Ava Lopez', 'ava@school.test'), person('u2', 'Ben Tran', 'ben@school.test'), person('u3', 'Cy Park', 'cy@school.test')], gc2: [person('u2', 'Ben Tran', 'ben@school.test'), person('u4', 'Dee Fox', 'dee@school.test')] },
+  work: { gc1: [{ id: 'a1', title: 'Game plan', alternateLink: 'https://classroom.google.com', dueDate: { year: 2020, month: 9, day: 1 } }, { id: 'a2', title: 'Reflection', alternateLink: 'https://classroom.google.com', dueDate: { year: 2099, month: 1, day: 1 } }] },
+  subs: { gc1: [{ userId: 'u1', courseWorkId: 'a1', state: 'CREATED' }, { userId: 'u2', courseWorkId: 'a1', state: 'RETURNED', assignedGrade: 9 }, { userId: 'u3', courseWorkId: 'a1', state: 'TURNED_IN', late: true }, { userId: 'u1', courseWorkId: 'a2', state: 'CREATED' }] },
+};
+const server = createServer({ owner: OWNER, codeFile: '../dist/Code.gs', htmlDir: '../dist', classroom });
 const dist = (f) => readFileSync(new URL(`../dist/${f}`, import.meta.url), 'utf8');
 
 /** Do what HtmlService does with Index.html's template tags. */

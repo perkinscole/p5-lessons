@@ -34,8 +34,28 @@ class FakeSheet {
   setFrozenRows() {}
 }
 
+/** Stands in for the Classroom API. Serves `data` two items per page, to exercise paging. */
+function fakeClassroom(data) {
+  const page = (items, key, token) => {
+    const at = Number(token || 0);
+    const out = { [key]: items.slice(at, at + 2) };
+    if (at + 2 < items.length) out.nextPageToken = String(at + 2);
+    return out;
+  };
+  return {
+    Courses: {
+      list: (o) => page(data.courses || [], 'courses', o.pageToken),
+      Students: { list: (id, o) => page((data.rosters || {})[id] || [], 'students', o.pageToken) },
+      CourseWork: {
+        list: (id, o) => page((data.work || {})[id] || [], 'courseWork', o.pageToken),
+        StudentSubmissions: { list: (id, _w, o) => page((data.subs || {})[id] || [], 'studentSubmissions', o.pageToken) },
+      },
+    },
+  };
+}
+
 /** Create a server. `server.as(email)` returns a function that calls api() as that person. */
-export function createServer({ owner = 'teacher@school.test', bound = true, codeFile = '../gas/Code.gs', htmlDir = null } = {}) {
+export function createServer({ owner = 'teacher@school.test', bound = true, codeFile = '../gas/Code.gs', htmlDir = null, classroom = null } = {}) {
   const sheets = new Map();
   const spreadsheet = {
     getId: () => 'fake-sheet',
@@ -43,6 +63,8 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
     insertSheet: (n) => { const s = new FakeSheet(n); sheets.set(n, s); return s; },
   };
   let activeEmail = '';
+  const mail = [];
+  const triggers = [];
   const props = new Map();
   let created = 0;
   const sandbox = {
@@ -57,10 +79,20 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) ?? null, setProperty: (k, v) => props.set(k, v) }) },
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Utilities: { getUuid: () => randomUUID() },
+    Classroom: fakeClassroom(classroom || {}),
+    MailApp: { sendEmail: (to, subject, body) => mail.push({ to, subject, body }) },
+    ScriptApp: {
+      getService: () => ({ getUrl: () => 'https://script.test/exec' }),
+      getProjectTriggers: () => triggers,
+      deleteTrigger: (t) => { triggers.splice(triggers.indexOf(t), 1); },
+      newTrigger: (fn) => ({ timeBased: () => ({ everyDays: () => ({ atHour: () => ({ create: () => triggers.push({ getHandlerFunction: () => fn }) }) }) }) }),
+    },
     HtmlService: { createHtmlOutputFromFile: (name) => ({ getContent: () => readFileSync(new URL(`${htmlDir}/${name}.html`, import.meta.url), 'utf8') }) },
   };
   vm.createContext(sandbox);
-  vm.runInContext(readFileSync(new URL(codeFile, import.meta.url), 'utf8'), sandbox, { filename: 'Code.gs' });
+  let source = readFileSync(new URL(codeFile, import.meta.url), 'utf8');
+  if (codeFile === '../gas/Code.gs') source += `\n${readFileSync(new URL('../js/game/pace.js', import.meta.url), 'utf8').replace(/^export /gm, '')}`;
+  vm.runInContext(source, sandbox, { filename: 'Code.gs' });
 
   const raw = (email, method, args = []) => {
     activeEmail = email;
@@ -69,6 +101,9 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
   };
   return {
     sheets,
+    mail,
+    triggers,
+    run: (email, fn) => { activeEmail = email; return sandbox[fn](); },
     createdCount: () => created,
     raw,
     as: (email) => (method, ...args) => {

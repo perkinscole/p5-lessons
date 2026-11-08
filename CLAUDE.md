@@ -87,4 +87,6 @@ Constraints that follow from this:
 
 ## Not yet verified
 
-These need a real deployment: anything on real Apps Script, full-class quota limits, whether Apps Script's outer frame permits the camera, and loading an actual Teachable Machine model.
+`js/game/pace.js` runs on both sides: the build strips `export` and appends it to `dist/Code.gs`, so it can't import anything and its names end in `_`. Every Google Classroom route must check `ownerOnly_`, because the app runs with the deploying teacher's access.
+
+These need a real deployment: anything on real Apps Script, the Google Classroom API and daily email, full-class quota limits, whether Apps Script's outer frame permits the camera, and loading an actual Teachable Machine model.

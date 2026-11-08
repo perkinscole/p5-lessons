@@ -6,6 +6,7 @@ import { PATH_IDS, STAGES, SIDE_TRAILS, sequence, coreSequence, mapLayout, previ
 import { ALIGNMENT } from '../js/curriculum/alignment.js';
 import { checksFor } from '../js/curriculum/checks.js';
 import { recentAchievements } from '../js/game/rules.js';
+import { paceAlerts_, isCoreLesson_, weekdaysBetween_ } from '../js/game/pace.js';
 import { STANDARDS } from '../js/curriculum/standards.js';
 import { allLessons, buildSolution, buildThrough, applySkeleton, stepPasses, checkSummary, getLesson, stripComments, fallbackStarter, briefOf, filesThrough } from '../js/curriculum/engine.js';
 
@@ -219,6 +220,55 @@ test('helper files carry forward to later lessons', () => {
   assert.equal(filesThrough('m2', 'mind')['model.js'], undefined);
   assert.ok(filesThrough('p8', 'platformer')['sparks.js'], 'Beyond lessons follow the Summit');
   assert.deepEqual(filesThrough('t3', 'platformer'), {});
+});
+
+test('pace rules agree with the real trail about what counts as core', () => {
+  for (const path of PATH_IDS) {
+    const core = new Set(coreSequence(path));
+    assert.equal(core.size, 15);
+    for (const id of sequence(path)) assert.equal(isCoreLesson_(id), core.has(id), id);
+  }
+  assert.equal(isCoreLesson_('t2'), false);
+});
+
+test('keeping up: pace, inactivity, and sent-back work are flagged correctly', () => {
+  const now = new Date('2026-03-18T12:00:00');
+  const pace = { term_start: '2026-01-05', term_end: '2026-05-29' };
+  const done = (n, when) => ['t1', 't3', 't4', 't5', 't6', 'p1', 'p2', 'p3', 'c1', 'c2', 'p4', 'p5', 'c4', 'c5', 'c6'].slice(0, n).map((lesson_id) => ({ lesson_id, status: 'approved', updated_at: when }));
+  const recent = '2026-03-17T12:00:00Z';
+  const old = '2026-02-20T12:00:00Z';
+  const list = paceAlerts_([
+    { id: 'a', display_name: 'On Track', works: done(8, recent) },
+    { id: 'b', display_name: 'Two Behind', works: done(5, recent) },
+    { id: 'c', display_name: 'Far Behind', works: done(3, recent) },
+    { id: 'd', display_name: 'Went Quiet', works: done(8, old) },
+    { id: 'e', display_name: 'Never Started', works: [] },
+    { id: 'f', display_name: 'Beyond Only', works: [...done(8, recent), { lesson_id: 'p6', status: 'approved', updated_at: recent }] },
+  ], pace, now);
+  const by = Object.fromEntries(list.map((x) => [x.id, x]));
+  assert.equal(by.a.expected, 7);
+  assert.equal(by.a.level, 'ok');
+  assert.equal(by.b.level, 'watch');
+  assert.equal(by.c.level, 'behind');
+  assert.equal(by.d.level, 'behind');
+  assert.ok(by.d.reasons.some((r) => r.includes('school days')));
+  assert.equal(by.e.level, 'behind');
+  assert.ok(by.e.reasons.includes('Has not started'));
+  assert.equal(by.f.done, 8);
+  assert.equal(list.at(-1).level, 'ok');
+  assert.equal(list[0].level, 'behind');
+});
+
+test('keeping up: with no term dates, only real inactivity is flagged', () => {
+  const now = new Date('2026-03-18T12:00:00');
+  const [s] = paceAlerts_([{ id: 'a', display_name: 'A', works: [] }], null, now);
+  assert.equal(s.level, 'ok');
+  assert.equal(s.expected, null);
+});
+
+test('school days skip weekends', () => {
+  assert.equal(weekdaysBetween_(new Date('2026-03-13T12:00:00'), new Date('2026-03-16T12:00:00')), 1);
+  assert.equal(weekdaysBetween_(new Date('2026-03-09T12:00:00'), new Date('2026-03-16T12:00:00')), 5);
 });
 
 test('stripComments ignores commented code but keeps strings', () => {

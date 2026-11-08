@@ -38,7 +38,8 @@ const parts = Math.ceil(ml5.length / PART);
 for (let i = 0; i < parts; i++) writeFileSync(path(`dist/ML5_${i}.html`), ml5.slice(i * PART, (i + 1) * PART));
 const code = read('gas/Code.gs');
 if (!code.includes('const ML5_PARTS = 0;')) throw new Error('ML5_PARTS line is missing from Code.gs');
-writeFileSync(path('dist/Code.gs'), code.replace('const ML5_PARTS = 0;', `const ML5_PARTS = ${parts};`));
+const pace = read('js/game/pace.js').replace(/^export /gm, '');
+writeFileSync(path('dist/Code.gs'), `${code.replace('const ML5_PARTS = 0;', `const ML5_PARTS = ${parts};`)}\n${pace}`);
 copyFileSync(path('gas/appsscript.json'), path('dist/appsscript.json'));
 
 for (const f of readdirSync(path('dist'))) console.log(`${String(Math.round(statSync(path(`dist/${f}`)).size / 1024)).padStart(6)} KB  dist/${f}`);

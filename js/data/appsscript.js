@@ -18,7 +18,7 @@ function call(method, ...args) {
 const METHODS = [
   'listClasses', 'createClass', 'deleteClass', 'getClass', 'listStudents', 'addStudents', 'removeStudent', 'setStudentPath',
   'classBoard', 'updateProfile', 'myWorks', 'saveWork', 'submitWork', 'setShared', 'classWork', 'getWorkFull', 'saveGrade',
-  'getClassPlan', 'saveClassPlan', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'saveSprite', 'deleteSprite',
+  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'saveSprite', 'deleteSprite',
 ];
 
 /** ml5 is stored in pieces, because Apps Script files can't comfortably hold it whole. */
@@ -36,6 +36,7 @@ export function createAppsScriptStore() {
   const store = {
     mode: 'appsscript',
     usesPasscodes: false,
+    hasClassroom: true,
     // A whole class shares one script's quota, so students autosave far less often than in the demo.
     saveDelay: 30000,
     lastEmail: '',
