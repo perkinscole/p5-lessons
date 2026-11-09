@@ -218,6 +218,21 @@ function journeyTab(board, cls) {
   );
 }
 
+/** Lets students use the Music Maker, or closes it. It starts closed. */
+function musicToggle(cls) {
+  const open = !!cls.music_open;
+  return h('button.btn', {
+    'aria-pressed': open ? 'true' : 'false',
+    title: open ? 'Students can compose music. Press to close the Music Maker.' : 'Students can\'t use the Music Maker. Press to open it.',
+    onclick: async () => {
+      if (await attempt(() => app.store.setMusicOpen(cls.id, !open))) {
+        toast(open ? 'Music Maker closed for this class.' : 'Music Maker open for this class.');
+        render();
+      }
+    },
+  }, open ? '🎵 Music Maker: Open' : '🔒 Music Maker: Closed');
+}
+
 export async function viewClass(main, classId, tabParam) {
   const tab = tabParam || 'journey';
   // Asked for together, so they travel to the server as one trip.
@@ -235,7 +250,7 @@ export async function viewClass(main, classId, tabParam) {
         : tab === 'keeping' ? await keepingUpTab(cls, render)
           : journeyTab(board, cls);
   return h('div.stack',
-    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
+    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), musicToggle(cls), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
     h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('groups', 'Groups'), link('send', 'Classroom grades'), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
     content,
   );

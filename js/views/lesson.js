@@ -525,6 +525,8 @@ export async function viewLesson(main, id, previewPath) {
   const openSounds = () => openSoundPicker({
     onInsert: readOnly ? null : (line) => { cm.replaceSelection(`${line}\n`); cm.focus(); markDirty(); },
   });
+  // The teacher opens and closes the Music Maker for the class. A step that teaches it always can.
+  const musicAllowed = () => !isStudent || !!app.session?.class?.music_open;
   const openMusic = () => openMusicMaker({
     onAdd: readOnly ? null : (fileName, code, variable) => {
       if (extraDocs.has(fileName)) extraDocs.get(fileName).setValue(code);
@@ -670,7 +672,7 @@ export async function viewLesson(main, id, previewPath) {
         isStudent && !readOnly && h('button.btn', { onclick: cleanCopy }, 'Get a clean copy'),
         h('button.btn', { onclick: openPicker }, 'Sprites'),
         h('button.btn', { onclick: openSounds }, 'Sounds'),
-        h('button.btn', { onclick: openMusic }, 'Music'),
+        musicAllowed() && h('button.btn', { onclick: openMusic }, 'Music'),
         isStudent && !readOnly && h('button.btn', { onclick: toggleShare }, work?.shared ? 'In the Arcade ✓' : 'Share to Arcade'),
         preview && h('select.path-pick', { 'aria-label': 'Road to preview', onchange: (e) => go(`/lesson/${id}/${e.target.value}`) }, Object.values(PATHS).map((p) => h('option', { value: p.id, selected: p.id === path }, p.road))),
         preview && h('button.btn', { onclick: () => { openFile(MAIN); cm.setValue(buildSolution(id, path)); for (const [n, t] of Object.entries(filesThrough(id, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript')); drawFileBar(); run(); toast('Showing the answer key.'); } }, 'Show answer key'),

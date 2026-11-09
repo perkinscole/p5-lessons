@@ -17,7 +17,8 @@ const SPRITE_META = ['id', 'class_id', 'student_id', 'teacher_email', 'author_na
 
 const SCHEMA = {
   Teachers: ['email', 'display_name', 'created_at'],
-  Classes: ['id', 'teacher_email', 'name', 'created_at'],
+  // music_open: the teacher lets students use the Music Maker. Blank means closed.
+  Classes: ['id', 'teacher_email', 'name', 'created_at', 'music_open'],
   Students: ['id', 'class_id', 'email', 'display_name', 'avatar', 'path', 'game_name', 'created_at', 'google_id'],
   Works: [...WORK_META, ...chunkCols_(WORK_CELLS)],
   Grades: ['work_id', 'scores', 'total', 'max_total', 'feedback', 'graded_at'],
@@ -33,7 +34,7 @@ const SCHEMA = {
   Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
 };
 const NUMBERS = new Set(['stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
-const BOOLEANS = new Set(['auto_ok', 'shared', 'published', 'started']);
+const BOOLEANS = new Set(['auto_ok', 'shared', 'published', 'started', 'music_open']);
 const OBJECTS = new Set(['avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
 const ML5_PARTS = 5; // Set by the build: how many ML5_n files it made.
@@ -397,12 +398,18 @@ function mySongs_(me) {
   return rows_('Songs').filter(mine);
 }
 
+function musicOpen_(classId) {
+  const cls = rows_('Classes').find((c) => c.id === classId);
+  return !!(cls && cls.music_open);
+}
+
 function saveSong_(me, s) {
   const data = songData_(s.data);
   const name = text_(s.name, 40);
   if (!name) throw new Error('Give your song a name.');
   return withLock_(() => {
     let classId;
+    if (me.role === 'student' && !musicOpen_(me.student.class_id)) throw new Error('Your teacher has closed the Music Maker for now.');
     if (me.role === 'student') classId = me.student.class_id;
     else if (s.class_id) { ownedClass_(me, s.class_id); classId = s.class_id; } else classId = '';
     const row = {
@@ -870,6 +877,11 @@ const TEACHER_ROUTES = {
   libraryPart: libraryPart_,
   listClasses: (me) => rows_('Classes').filter((c) => c.teacher_email === me.email),
   getClass: (me, id) => ownedClass_(me, id),
+  setMusicOpen: (me, id, open) => withLock_(() => {
+    const cls = ownedClass_(me, id);
+    update_('Classes', { ...cls, music_open: !!open });
+    return !!open;
+  }),
   createClass: (me, name) => withLock_(() => {
     const c = { id: uuid_(), teacher_email: me.email, name: text_(name, 80), created_at: now_() };
     if (!c.name) throw new Error('Give your class a name.');

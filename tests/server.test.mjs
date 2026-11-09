@@ -16,11 +16,13 @@ function setup() {
   const teacher = server.as(OWNER);
   const cls = teacher('createClass', 'Period 3');
   teacher('addStudents', cls.id, [`Ari M, ${ARI}`, `Bea T <${BEA}>`]);
+  teacher('setMusicOpen', cls.id, true);
   // Add a second teacher the way a person would: a row in the Teachers tab.
   server.sheets.get('Teachers').appendRow([OTHER, 'Other', '2026-01-01']);
   const other = server.as(OTHER);
   const clsB = other('createClass', 'Other class');
   other('addStudents', clsB.id, [ZED]);
+  other('setMusicOpen', clsB.id, true);
   const ari = server.as(ARI);
   const bea = server.as(BEA);
   const zed = server.as(ZED);
@@ -607,4 +609,20 @@ test('a batch follows the same access rules as single calls', () => {
   assert.equal(server.raw(ARI, 'batch', [Array.from({ length: 13 }, () => ['myWorks', []])]).ok, false);
   assert.equal(server.raw(STRANGER, 'batch', [[['myWorks', []]]]).data[0].ok, false);
   assert.ok(!JSON.stringify(r).includes('BEA'));
+});
+
+test('the teacher opens and closes the Music Maker for each class', () => {
+  const { teacher, other, ari, zed, cls, clsB } = setup();
+  const song = { name: 'theme', data: JSON.stringify({ tempo: 120, scale: 'bright', lead: 'C5 . E5', bass: '', drums: 'k . s' }) };
+  assert.ok(ari('saveSong', song));
+  teacher('setMusicOpen', cls.id, false);
+  assert.throws(() => ari('saveSong', song), /closed the Music Maker/);
+  assert.equal(ari('session').class.music_open, false);
+  assert.ok(zed('saveSong', song), 'other classes keep their own setting');
+  denied(() => ari('setMusicOpen', cls.id, true));
+  denied(() => other('setMusicOpen', cls.id, true));
+  teacher('setMusicOpen', cls.id, true);
+  assert.ok(ari('saveSong', song));
+  assert.equal(teacher('createClass', 'New').music_open ?? false, false, 'a new class starts closed');
+  void clsB;
 });

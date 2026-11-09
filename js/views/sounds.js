@@ -1,6 +1,6 @@
 // The Sound Studio: a library of sound effects, an 8-bit music maker, and the class's songs.
 import { h, clear, toast, attempt, modal, confirmBox } from '../ui.js';
-import { app } from '../main.js';
+import { app, refreshSession } from '../main.js';
 import { installSynth, cleanSong, songCode } from '../game/synth.js';
 
 // The studio has its own synth. A student pressing Play here always means to hear it.
@@ -256,7 +256,10 @@ export function openMusicMaker({ suggestedName = 'theme', onAdd }) {
 }
 
 export async function viewSounds() {
+  if (app.session.role === 'student') await refreshSession();
   const isStudent = app.session.role === 'student';
+  // The teacher opens and closes the Music Maker for each class.
+  const locked = isStudent && !app.session.class?.music_open;
   const classes = isStudent ? [] : await app.store.listClasses();
   let classId = isStudent ? app.session.class.id : classes[0]?.id;
   const mineBox = h('div');
@@ -269,7 +272,9 @@ export async function viewSounds() {
       if (saved) { editing = saved; toast(`Saved ${name}.`); refresh(); }
     },
   });
-  const editorCard = h('section.card', maker.el);
+  const editorCard = locked
+    ? h('section.card.stack', h('h2', '🔒 The Music Maker is closed'), h('p', 'Your teacher has closed it for now. You can still listen to songs and use sound effects.'))
+    : h('section.card', maker.el);
   const openOnGrid = (song, name, row = null) => {
     editing = row;
     maker.load(song, name);
@@ -284,8 +289,8 @@ export async function viewSounds() {
       const song = JSON.parse(s.data);
       return tile(s.name, null, [
         preview(song),
-        h('button.btn.small', { type: 'button', onclick: () => openOnGrid(song, s.name, s) }, 'Edit'),
-        classId && h('button.btn.small', { type: 'button', onclick: async () => { await attempt(() => app.store.saveSong({ ...s, class_id: classId, published: !s.published })); toast(s.published ? 'Removed from the class library.' : 'Shared with your class.'); refresh(); } }, s.published ? 'Unshare' : 'Share'),
+        !locked && h('button.btn.small', { type: 'button', onclick: () => openOnGrid(song, s.name, s) }, 'Edit'),
+        !locked && classId && h('button.btn.small', { type: 'button', onclick: async () => { await attempt(() => app.store.saveSong({ ...s, class_id: classId, published: !s.published })); toast(s.published ? 'Removed from the class library.' : 'Shared with your class.'); refresh(); } }, s.published ? 'Unshare' : 'Share'),
         h('button.btn.small', { type: 'button', onclick: async () => { if (await confirmBox('Delete this song?', `"${s.name}" will be gone for good. Games already using it keep their copy.`, 'Delete', true)) { await attempt(() => app.store.deleteSong(s.id)); refresh(); } } }, 'Delete'),
       ]);
     })) : h('p.muted', 'Nothing here yet. Make one above!'));
@@ -293,7 +298,7 @@ export async function viewSounds() {
       const song = JSON.parse(s.data);
       return tile(s.name, s.author_name, [
         preview(song),
-        h('button.btn.small', { type: 'button', onclick: () => openOnGrid(song, s.name) }, 'Remix'),
+        !locked && h('button.btn.small', { type: 'button', onclick: () => openOnGrid(song, s.name) }, 'Remix'),
         !isStudent && h('button.btn.small', { type: 'button', onclick: async () => { if (await confirmBox('Remove from the class library?', `"${s.name}" will be deleted.`, 'Remove', true)) { await attempt(() => app.store.deleteSong(s.id)); refresh(); } } }, 'Remove'),
       ]);
     })) : h('p.muted', 'No shared songs yet.'));
@@ -311,6 +316,6 @@ export async function viewSounds() {
     !isStudent && classes.length > 1 && h('label.field.small', h('span', 'Class library for'), h('select', { onchange: (e) => { classId = e.target.value; refresh(); } }, classes.map((c) => h('option', { value: c.id }, c.name)))),
     h('section.stack', h('h2', 'Class songs'), h('p.muted.small', 'Made and shared by your class. Credit the composer if you use one.'), classBox),
     h('section.stack', h('h2', 'Starter songs'), h('p.muted.small', 'Free to use in any game, or remix them.'),
-      h('div.song-grid', STARTER_SONGS.map((s) => tile(s.name, null, [preview(s.song), h('button.btn.small', { type: 'button', onclick: () => openOnGrid(s.song, s.name) }, 'Remix')])))),
+      h('div.song-grid', STARTER_SONGS.map((s) => tile(s.name, null, [preview(s.song), !locked && h('button.btn.small', { type: 'button', onclick: () => openOnGrid(s.song, s.name) }, 'Remix')])))),
   );
 }

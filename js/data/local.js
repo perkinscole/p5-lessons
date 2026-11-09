@@ -164,6 +164,13 @@ export function createLocalStore() {
       save();
     },
     getClass: async (id) => clone(db.classes.find((c) => c.id === id)),
+    async setMusicOpen(id, open) {
+      const c = db.classes.find((x) => x.id === id && x.teacher_id === readSession()?.id);
+      if (!c) throw new Error('That class was not found.');
+      c.music_open = !!open;
+      save();
+      return c.music_open;
+    },
     listGoogleCourses: async () => [
       { id: 'demo-course', name: 'Period 3: Game Design', section: 'Demo', linked: true },
       { id: 'demo-course-2', name: 'Period 6: Game Design', section: 'Demo', linked: !!(db.links || {})['demo-class-6'] },
@@ -483,6 +490,7 @@ export function createLocalStore() {
     async saveSong(s) {
       db.songs = db.songs || [];
       const sess = me();
+      if (sess.role === 'student' && !db.classes.find((c) => c.id === sess.student.class_id)?.music_open) throw new Error('Your teacher has closed the Music Maker for now.');
       const owner = sess.role === 'student'
         ? { student_id: sess.student.id, class_id: sess.student.class_id, author_name: sess.student.display_name }
         : { teacher_id: sess.teacher.id, author_name: sess.teacher.display_name };
