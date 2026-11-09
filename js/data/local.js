@@ -4,6 +4,7 @@
 import { buildSolution, getLesson, checkSummary, filesThrough } from '../curriculum/engine.js';
 import { sequence } from '../curriculum/graph.js';
 import { paceAlerts_, isCoreLesson_ } from '../game/pace.js';
+import { attribute_, lineShares_ } from '../game/blame.js';
 
 const KEY = 'pixeltrail.demo.v1';
 const SESSION = 'pixeltrail.demo.session';
@@ -85,6 +86,25 @@ export function createLocalStore() {
   const mine = () => db.students.find((x) => x.id === readSession()?.id);
   const withGrade = (w) => ({ ...clone(w), grade: clone(db.grades.find((g) => g.work_id === w.id) || null) });
   const meta = ({ code, assets, ...w }) => w;
+  const teamOf = (sid, lessonId) => (db.teams || []).find((t) => t.lesson_id === lessonId && t.members.includes(sid));
+  const mirror = (studentId, lessonId, doc) => {
+    let w = db.works.find((x) => x.student_id === studentId && x.lesson_id === lessonId);
+    if (!w) { w = { id: uid(), student_id: studentId, lesson_id: lessonId, status: 'in_progress', stretch_done: 0, reflection: '', checks_passed: 0, checks_total: 0, quiz_right: 0, quiz_total: 0, auto_ok: false, shared: false, updated_at: now() }; db.works.push(w); }
+    if (w.status !== 'approved') Object.assign(w, { code: doc.code, assets: doc.assets || {}, files: doc.files || {} });
+  };
+  const contributionOf = (team, sid, change) => {
+    db.contributions = db.contributions || [];
+    let c = db.contributions.find((x) => x.team_id === team.id && x.student_id === sid);
+    if (!c) { c = { team_id: team.id, student_id: sid, saves: 0, added: 0, removed: 0, note: '' }; db.contributions.push(c); }
+    change(c);
+  };
+  const teamSummary = (team) => {
+    const shares = lineShares_(team.blame || {});
+    return { id: team.id, lesson_id: team.lesson_id, starter_lines: shares[0] || 0, members: team.members.map((id, i) => {
+      const c = (db.contributions || []).find((x) => x.team_id === team.id && x.student_id === id) || {};
+      return { id, display_name: db.students.find((s) => s.id === id)?.display_name || '', lines: shares[i + 1] || 0, saves: c.saves || 0, added: c.added || 0, removed: c.removed || 0, note: c.note || '' };
+    }) };
+  };
 
   return {
     mode: 'local',
@@ -252,8 +272,100 @@ export function createLocalStore() {
       return publicStudent(mine());
     },
     myWorks: async () => db.works.filter((w) => w.student_id === readSession()?.id).map(withGrade),
-    async saveWork(lessonId, patch) {
+    async teamFor(lessonId, prevByPath, opts = {}) {
       const sid = readSession().id;
+      const team = teamOf(sid, lessonId);
+      if (!team) return null;
+      if (opts.beat && team.driver_id === sid) { team.driver_until = Date.now() + 180000; save(); }
+      const lead = db.students.find((s) => s.id === team.members[0]);
+      const mine = (db.contributions || []).find((c) => c.team_id === team.id && c.student_id === sid);
+      const view = { id: team.id, lesson_id: lessonId, started: team.started, doc_at: team.doc_at, driver_id: team.driver_until > Date.now() ? team.driver_id : '', lead_path: lead?.path || null, my_note: mine?.note || '', members: team.members.map((id) => ({ id, display_name: db.students.find((s) => s.id === id)?.display_name || '' })) };
+      if (opts.stamp && opts.stamp === team.doc_at) return { ...view, same: true };
+      const byMember = team.members.map((id) => db.works.find((w) => w.student_id === id && w.lesson_id === lessonId)).find((w) => w?.code);
+      const prev = !byMember && lead && prevByPath?.[lead.path] && db.works.find((w) => w.student_id === lead.id && w.lesson_id === prevByPath[lead.path]);
+      const source = byMember || prev;
+      return { ...view, doc: source ? clone({ code: source.code, assets: source.assets || {}, files: source.files || {} }) : null };
+    },
+    async takeKeyboard(lessonId, base) {
+      const sid = readSession().id;
+      const team = teamOf(sid, lessonId);
+      if (!team) throw new Error('You are not in a group for this lesson.');
+      if (team.driver_until > Date.now() && team.driver_id !== sid) throw new Error('Someone else has the keyboard. Ask them to pass it.');
+      team.driver_id = sid;
+      team.driver_until = Date.now() + 180000;
+      if (!team.started) {
+        team.started = true;
+        if (base) {
+          team.members.forEach((id) => mirror(id, lessonId, base));
+          team.blame = attribute_({}, {}, { 'sketch.js': base.code || '', ...(base.files || {}) }, 0).blame;
+          team.doc_at = now();
+        }
+      }
+      save();
+      return this.teamFor(lessonId, null, {});
+    },
+    async passKeyboard(lessonId) {
+      const team = teamOf(readSession().id, lessonId);
+      if (team && team.driver_id === readSession().id) { team.driver_id = ''; team.driver_until = 0; save(); }
+    },
+    async listTeams(classId) {
+      return (db.teams || []).filter((t) => t.class_id === classId).map(teamSummary);
+    },
+    async saveTeams(classId, lessonId, groups) {
+      const key = (ids) => [...ids].sort().join(',');
+      const wanted = new Set(groups.map(key));
+      const current = (db.teams || []).filter((t) => t.class_id === classId && t.lesson_id === lessonId);
+      const kept = new Set(current.filter((t) => wanted.has(key(t.members))).map((t) => key(t.members)));
+      const dropped = new Set(current.filter((t) => !wanted.has(key(t.members))).map((t) => t.id));
+      db.teams = [...(db.teams || []).filter((t) => !dropped.has(t.id)), ...groups.filter((g) => !kept.has(key(g))).map((members) => ({ id: uid(), class_id: classId, lesson_id: lessonId, members, driver_id: '', driver_until: 0, blame: {}, started: false, doc_at: '' }))];
+      db.contributions = (db.contributions || []).filter((c) => !dropped.has(c.team_id));
+      save();
+    },
+    async gradeSyncStatus(classId) {
+      if (!(db.links || {})[classId]) return { linked: false };
+      const ids = new Set(db.students.filter((s) => s.class_id === classId).map((s) => s.id));
+      const approved = db.works.filter((w) => ids.has(w.student_id) && w.status === 'approved' && db.grades.some((g) => g.work_id === w.id));
+      const synced = db.gradeSync || {};
+      return { linked: true, items: [...new Set(approved.map((w) => w.lesson_id))].map((lessonId) => {
+        const here = approved.filter((w) => w.lesson_id === lessonId);
+        const sync = synced[`${classId}/${lessonId}`];
+        return { lesson_id: lessonId, approved: here.length, waiting: sync ? 0 : here.length, synced: !!sync, link: sync?.link || '', due: sync?.due || '' };
+      }) };
+    },
+    async pushGrades(classId, lessonId, { due }) {
+      const ids = new Set(db.students.filter((s) => s.class_id === classId).map((s) => s.id));
+      const sent = db.works.filter((w) => ids.has(w.student_id) && w.lesson_id === lessonId && w.status === 'approved').length;
+      db.gradeSync = { ...(db.gradeSync || {}), [`${classId}/${lessonId}`]: { link: 'https://classroom.google.com', due } };
+      save();
+      return { link: 'https://classroom.google.com', sent, skipped: [], failed: [] };
+    },
+    async saveWork(lessonId, incoming) {
+      const sid = readSession().id;
+      let patch = incoming;
+      const team = teamOf(sid, lessonId);
+      let lost = false;
+      if (team) {
+        const { contribution, ...rest } = incoming;
+        patch = rest;
+        if (incoming.status === 'submitted' && !String(contribution || '').trim()) throw new Error('Write what each person in your group did before you submit.');
+        if (patch.code !== undefined && !(team.driver_id === sid && team.driver_until > Date.now())) {
+          const { code, assets, files, ...own } = patch;
+          patch = own;
+          lost = true;
+        } else if (patch.code !== undefined) {
+          const was = db.works.find((x) => x.student_id === sid && x.lesson_id === lessonId) || {};
+          const files = (d) => ({ 'sketch.js': d.code || '', ...(d.files || {}) });
+          const credit = attribute_(files(was), team.blame || {}, files(patch), team.members.indexOf(sid) + 1);
+          if (credit.added || credit.removed) {
+            team.blame = credit.blame;
+            team.doc_at = now();
+            contributionOf(team, sid, (c) => { c.saves += 1; c.added += credit.added; c.removed += credit.removed; });
+            team.members.filter((id) => id !== sid).forEach((id) => mirror(id, lessonId, patch));
+          }
+          team.driver_until = Date.now() + 180000;
+        }
+        if (contribution !== undefined) contributionOf(team, sid, (c) => { c.note = contribution; });
+      }
       let w = db.works.find((x) => x.student_id === sid && x.lesson_id === lessonId);
       if (!w) {
         w = { id: uid(), student_id: sid, lesson_id: lessonId, code: '', assets: {}, status: 'in_progress', stretch_done: 0, reflection: '', checks_passed: 0, checks_total: 0, quiz_right: 0, quiz_total: 0, auto_ok: false, shared: false, submitted_at: null };
@@ -262,7 +374,7 @@ export function createLocalStore() {
       if (w.status === 'approved') throw new Error('This lesson was approved. Ask your teacher to reopen it.');
       Object.assign(w, patch, { updated_at: now() });
       save();
-      return clone(w);
+      return { ...clone(w), team_lost: lost };
     },
     async submitWork(lessonId, patch) {
       return this.saveWork(lessonId, { ...patch, status: 'submitted', submitted_at: now() });
@@ -279,13 +391,19 @@ export function createLocalStore() {
     async getWorkFull(id) {
       const w = db.works.find((x) => x.id === id);
       if (!w) return null;
-      return { ...withGrade(w), student: publicStudent(db.students.find((s) => s.id === w.student_id)) };
+      const team = teamOf(w.student_id, w.lesson_id);
+      return { ...withGrade(w), student: publicStudent(db.students.find((s) => s.id === w.student_id)), team: team ? teamSummary(team) : null };
     },
     async saveGrade(id, g) {
-      const { status, ...grade } = g;
-      db.grades = db.grades.filter((x) => x.work_id !== id);
-      db.grades.push({ work_id: id, ...grade, graded_at: now() });
-      db.works.find((w) => w.id === id).status = status;
+      const { status, to_team: toTeam, ...grade } = g;
+      const work = db.works.find((w) => w.id === id);
+      const team = toTeam && teamOf(work.student_id, work.lesson_id);
+      const targets = [work, ...(team ? db.works.filter((w) => team.members.includes(w.student_id) && w.lesson_id === work.lesson_id && w.id !== id && w.status === 'submitted') : [])];
+      for (const w of targets) {
+        db.grades = db.grades.filter((x) => x.work_id !== w.id);
+        db.grades.push({ work_id: w.id, ...grade, graded_at: now() });
+        w.status = status;
+      }
       save();
     },
     async giveAward(studentId, badgeId, note) {

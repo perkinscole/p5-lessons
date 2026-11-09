@@ -48,7 +48,23 @@ function fakeClassroom(data) {
       Students: { list: (id, o) => page((data.rosters || {})[id] || [], 'students', o.pageToken) },
       CourseWork: {
         list: (id, o) => page((data.work || {})[id] || [], 'courseWork', o.pageToken),
-        StudentSubmissions: { list: (id, _w, o) => page((data.subs || {})[id] || [], 'studentSubmissions', o.pageToken) },
+        // Like the real API: grades can only be written on coursework this app created.
+        create: (body, courseId) => {
+          data.created = data.created || [];
+          const work = { ...body, id: `made-${data.created.length + 1}`, courseId, alternateLink: 'https://classroom.test/a' };
+          data.created.push(work);
+          return work;
+        },
+        StudentSubmissions: {
+          list: (id, workId, o) => page(workId === '-' ? (data.subs || {})[id] || [] : (data.madeSubs || {})[id] || [], 'studentSubmissions', o.pageToken),
+          patch: (body, courseId, workId, subId, opts) => {
+            if (!(data.created || []).some((w) => w.id === workId)) throw new Error('ProjectPermissionDenied');
+            if (!opts.updateMask.includes('draftGrade') || !opts.updateMask.includes('assignedGrade')) throw new Error('bad mask');
+            data.patched = data.patched || [];
+            data.patched.push({ courseId, workId, subId, ...body });
+            return body;
+          },
+        },
       },
     },
   };
@@ -91,7 +107,9 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
   };
   vm.createContext(sandbox);
   let source = readFileSync(new URL(codeFile, import.meta.url), 'utf8');
-  if (codeFile === '../gas/Code.gs') source += `\n${readFileSync(new URL('../js/game/pace.js', import.meta.url), 'utf8').replace(/^export /gm, '')}`;
+  if (codeFile === '../gas/Code.gs') {
+    for (const f of ['pace', 'blame']) source += `\n${readFileSync(new URL(`../js/game/${f}.js`, import.meta.url), 'utf8').replace(/^export /gm, '')}`;
+  }
   vm.runInContext(source, sandbox, { filename: 'Code.gs' });
 
   const raw = (email, method, args = []) => {

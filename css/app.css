@@ -568,3 +568,10 @@ body.projecting .page { max-width: none; padding: 0; }
 .sound-play { flex: none; width: 32px; height: 32px; border: 2px solid var(--line); border-radius: 3px; background: var(--sun); color: #2b2350; cursor: pointer; }
 .song-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
 .song-tile { display: flex; flex-direction: column; gap: 4px; padding: 10px; background: var(--card); border: 2px solid var(--line); }
+
+/* Group projects */
+.team-bar:empty { display: none; }
+.team-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 10px; background: var(--paper-2); border: 2px solid var(--line); font-size: .9rem; }
+.team-turn { font-weight: 700; }
+.group-row { align-items: center; flex-wrap: wrap; }
+ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: column; gap: 4px; }

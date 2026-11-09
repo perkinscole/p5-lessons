@@ -24,13 +24,16 @@ const SCHEMA = {
   Awards: ['id', 'student_id', 'badge_id', 'note', 'created_at'],
   Sprites: [...SPRITE_META, ...chunkCols_(SPRITE_CELLS)],
   Songs: SONG_COLS,
+  Teams: ['id', 'class_id', 'lesson_id', 'members', 'driver_id', 'driver_until', 'blame', 'started', 'doc_at', 'created_at'],
+  Contributions: ['team_id', 'lesson_id', 'student_id', 'saves', 'added', 'removed', 'last_at', 'note'],
+  GradeSync: ['class_id', 'lesson_id', 'coursework_id', 'link', 'due', 'pushed_at', 'sent'],
   Daily: ['class_id', 'plan', 'updated_at'],
   Links: ['class_id', 'course_id', 'course_name', 'synced_at'],
   Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
 };
-const NUMBERS = new Set(['stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h']);
-const BOOLEANS = new Set(['auto_ok', 'shared', 'published']);
-const OBJECTS = new Set(['avatar', 'scores', 'plan']);
+const NUMBERS = new Set(['stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
+const BOOLEANS = new Set(['auto_ok', 'shared', 'published', 'started']);
+const OBJECTS = new Set(['avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
 const ML5_PARTS = 0; // Set by the build: how many ML5_n files it made.
 
@@ -508,6 +511,91 @@ function applyRoster_(me, course, roster) {
   });
 }
 
+// Sending grades to Classroom. Google only lets an app grade assignments that app created, so
+// Pixel Trail makes one assignment per lesson and remembers it in the GradeSync tab.
+function dueParts_(date) {
+  const [y, m, d] = String(date).split('-').map(Number);
+  const at = new Date(y, m - 1, d, 23, 59);
+  return { dueDate: { year: at.getUTCFullYear(), month: at.getUTCMonth() + 1, day: at.getUTCDate() }, dueTime: { hours: at.getUTCHours(), minutes: at.getUTCMinutes() } };
+}
+
+function approvedFor_(classId) {
+  const students = rows_('Students').filter((s) => s.class_id === classId);
+  const grades = rows_('Grades');
+  return metaWorks_().filter((w) => w.status === 'approved').map((w) => {
+    const student = students.find((s) => s.id === w.student_id);
+    const grade = student && grades.find((g) => g.work_id === w.id);
+    return grade ? { student, grade, lesson_id: w.lesson_id } : null;
+  }).filter(Boolean);
+}
+
+function gradeSyncStatus_(me, classId) {
+  ownerOnly_(me);
+  ownedClass_(me, classId);
+  if (!linkFor_(classId)) return { linked: false };
+  const approved = approvedFor_(classId);
+  const syncs = rows_('GradeSync').filter((g) => g.class_id === classId);
+  const lessons = [...new Set(approved.map((a) => a.lesson_id))];
+  return {
+    linked: true,
+    items: lessons.map((lessonId) => {
+      const here = approved.filter((a) => a.lesson_id === lessonId);
+      const sync = syncs.find((g) => g.lesson_id === lessonId);
+      const sent = (sync && sync.sent) || {};
+      return { lesson_id: lessonId, approved: here.length, waiting: here.filter((a) => sent[a.student.id] !== a.grade.total).length, synced: !!sync, link: sync ? sync.link : '', due: sync ? sync.due : '' };
+    }),
+  };
+}
+
+function pushGrades_(me, classId, lessonId, opts) {
+  ownerOnly_(me);
+  ownedClass_(me, classId);
+  const link = linkFor_(classId);
+  if (!link) throw new Error('Import this course from Google Classroom first.');
+  const lesson = String(lessonId);
+  const due = String((opts && opts.due) || '');
+  if (!/^[a-z]\d{1,2}$/.test(lesson)) throw new Error('Unknown lesson.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new Error('Choose a due date first.');
+  const approved = approvedFor_(classId).filter((a) => a.lesson_id === lesson);
+  if (!approved.length) throw new Error('No approved work to send for this lesson.');
+
+  const known = rows_('GradeSync').find((g) => g.class_id === classId && g.lesson_id === lesson);
+  let courseworkId = known && known.coursework_id;
+  let courseLink = known ? known.link : '';
+  if (!courseworkId) {
+    const created = Classroom.Courses.CourseWork.create({
+      title: `Pixel Trail: ${text_(opts.title, 150)}`,
+      description: 'Completed in Pixel Trail. Grades are sent from there.',
+      workType: 'ASSIGNMENT', state: 'PUBLISHED', maxPoints: approved[0].grade.max_total, ...dueParts_(due),
+    }, link.course_id);
+    courseworkId = String(created.id);
+    courseLink = created.alternateLink || '';
+  }
+  const subs = allPages_((t) => Classroom.Courses.CourseWork.StudentSubmissions.list(link.course_id, courseworkId, pageOpts_(t)), 'studentSubmissions');
+  const sent = { ...((known && known.sent) || {}) };
+  const out = { link: courseLink, sent: 0, skipped: [], failed: [] };
+  approved.forEach(({ student, grade }) => {
+    const sub = student.google_id && subs.find((x) => String(x.userId) === String(student.google_id));
+    if (!student.google_id) { out.skipped.push(`${student.display_name}: not imported from Classroom`); return; }
+    if (!sub) { out.skipped.push(`${student.display_name}: not in this Classroom assignment`); return; }
+    try {
+      Classroom.Courses.CourseWork.StudentSubmissions.patch(
+        { draftGrade: grade.total, assignedGrade: grade.total }, link.course_id, courseworkId, sub.id, { updateMask: 'draftGrade,assignedGrade' });
+      sent[student.id] = grade.total;
+      out.sent++;
+    } catch (e) {
+      out.failed.push(`${student.display_name}: ${text_(e && e.message, 160)}`);
+    }
+  });
+  withLock_(() => {
+    const row = { class_id: classId, lesson_id: lesson, coursework_id: courseworkId, link: courseLink, due, pushed_at: now_(), sent };
+    const current = rows_('GradeSync').find((g) => g.class_id === classId && g.lesson_id === lesson);
+    if (current) update_('GradeSync', { ...row, _row: current._row });
+    else insert_('GradeSync', row);
+  });
+  return out;
+}
+
 function dueTime_(work) {
   if (!work.dueDate) return null;
   const d = work.dueDate;
@@ -651,6 +739,10 @@ const TEACHER_ROUTES = {
     });
   },
   classroomWork: classroomWork_,
+  gradeSyncStatus: gradeSyncStatus_,
+  pushGrades: pushGrades_,
+  listTeams: listTeams_,
+  saveTeams: saveTeams_,
   classAlerts: classAlerts_,
   alertSummary: (me) => Object.fromEntries(rows_('Classes').filter((c) => c.teacher_email === me.email).map((c) => {
     const list = classAlerts_(me, c.id, false).students;
@@ -702,6 +794,8 @@ const TEACHER_ROUTES = {
     deleteRows_('Awards', (a) => ids.has(a.student_id));
     deleteRows_('Sprites', (s) => s.class_id === id);
     deleteRows_('Songs', (s) => s.class_id === id);
+    rows_('Teams').filter((t) => t.class_id === id).forEach(dropTeam_);
+    deleteRows_('GradeSync', (g) => g.class_id === id);
     deleteRows_('Daily', (d) => d.class_id === id);
     deleteRows_('Links', (l) => l.class_id === id);
     deleteRows_('Pace', (p) => p.class_id === id);
@@ -736,6 +830,12 @@ const TEACHER_ROUTES = {
     deleteRows_('Awards', (a) => a.student_id === id);
     deleteRows_('Sprites', (s) => s.student_id === id, SPRITE_META);
     deleteRows_('Songs', (s) => s.student_id === id);
+    deleteRows_('Contributions', (c) => c.student_id === id);
+    rows_('Teams').filter((t) => (t.members || []).includes(id)).forEach((t) => {
+      const members = t.members.filter((m) => m !== id);
+      if (members.length < 2) dropTeam_(t);
+      else update_('Teams', { ...t, members, driver_id: t.driver_id === id ? '' : t.driver_id });
+    });
     deleteRows_('Students', (s) => s.id === id);
   }),
   setStudentPath: (me, id, path) => withLock_(() => {
@@ -754,18 +854,27 @@ const TEACHER_ROUTES = {
     const w = metaWorks_().find((x) => x.id === id);
     if (!w) return null;
     const s = studentOfTeacher_(me, w.student_id);
-    return { ...fullWork_(w), grade: gradeFor_(id, rows_('Grades')), student: publicStudent_(s) };
+    const team = teamOf_(w.student_id, w.lesson_id);
+    return { ...fullWork_(w), grade: gradeFor_(id, rows_('Grades')), student: publicStudent_(s), team: team ? teamSummary_(team, rows_('Students'), rows_('Contributions')) : null };
   },
   saveGrade: (me, id, g) => withLock_(() => {
     const meta = metaWorks_().find((x) => x.id === id);
     if (!meta) throw new Error('That work was not found.');
     studentOfTeacher_(me, meta.student_id);
     if (!['approved', 'returned', 'submitted'].includes(g.status)) throw new Error('Unknown status.');
-    const grade = { work_id: id, scores: g.scores || {}, total: Number(g.total) || 0, max_total: Number(g.max_total) || 0, feedback: text_(g.feedback, 4000), graded_at: now_() };
-    const existing = rows_('Grades').find((x) => x.work_id === id);
-    if (existing) update_('Grades', { ...grade, _row: existing._row });
-    else insert_('Grades', grade);
-    update_('Works', { ...readRow_('Works', meta._row), status: g.status });
+    const grade = { scores: g.scores || {}, total: Number(g.total) || 0, max_total: Number(g.max_total) || 0, feedback: text_(g.feedback, 4000), graded_at: now_() };
+    const write = (workMeta) => {
+      const row = { ...grade, work_id: workMeta.id };
+      const existing = rows_('Grades').find((x) => x.work_id === workMeta.id);
+      if (existing) update_('Grades', { ...row, _row: existing._row });
+      else insert_('Grades', row);
+      update_('Works', { ...readRow_('Works', workMeta._row), status: g.status });
+    };
+    write(meta);
+    if (g.to_team) {
+      const team = teamOf_(meta.student_id, meta.lesson_id);
+      if (team) metaWorks_().filter((w) => team.members.includes(w.student_id) && w.lesson_id === meta.lesson_id && w.id !== id && w.status === 'submitted').forEach(write);
+    }
   }),
   giveAward: (me, studentId, badgeId, note) => withLock_(() => {
     studentOfTeacher_(me, studentId);
@@ -800,6 +909,168 @@ function cleanFiles_(files) {
   return out;
 }
 
+// Group projects -----------------------------------------------------------------------------------
+// Members share one project and take turns at the keyboard, so two people can't overwrite each other.
+// The server decides who is typing and credits each line, so a browser can't claim someone else's work.
+const TEAM_HOLD_MS = 180000;
+const ROAD_OF_ = { p: 'platformer', a: 'adventure', s: 'arcade', m: 'mind' };
+const EMPTY_DOC_ = '{"code":"","assets":{},"files":{}}';
+const teamOf_ = (studentId, lessonId) => rows_('Teams').find((t) => t.lesson_id === lessonId && (t.members || []).includes(studentId));
+const driverNow_ = (team) => (Number(team.driver_until) > Date.now() ? team.driver_id : '');
+const driving_ = (team, studentId) => driverNow_(team) === studentId;
+const readDoc_ = (meta) => JSON.parse(unpackChunks_(readRow_('Works', meta._row), WORK_CELLS) || EMPTY_DOC_);
+const docFiles_ = (doc) => ({ 'sketch.js': String(doc.code || ''), ...(doc.files || {}) });
+/** Line credit has to fit in one cell. A project too long for that simply stops tracking lines. */
+const safeBlame_ = (blame) => (JSON.stringify(blame).length > CELL_CHUNK ? {} : blame);
+
+function teamDoc_(team) {
+  const metas = metaWorks_();
+  for (const id of team.members) {
+    const meta = metas.find((w) => w.student_id === id && w.lesson_id === team.lesson_id);
+    if (meta) {
+      const doc = readDoc_(meta);
+      if (doc.code) return doc;
+    }
+  }
+  return null;
+}
+
+/** Copy the shared code to each member's own record, so grading and later lessons work as usual. */
+function mirrorDoc_(team, docText, skipId) {
+  const metas = metaWorks_();
+  team.members.filter((id) => id !== skipId).forEach((id) => {
+    const meta = metas.find((w) => w.student_id === id && w.lesson_id === team.lesson_id);
+    if (meta && meta.status === 'approved') return;
+    const row = meta ? readRow_('Works', meta._row) : { id: uuid_(), student_id: id, lesson_id: team.lesson_id, status: 'in_progress', stretch_done: 0, reflection: '', checks_passed: 0, checks_total: 0, quiz_right: 0, quiz_total: 0, auto_ok: false, shared: false, submitted_at: null, updated_at: now_() };
+    packChunks_(row, docText, WORK_CELLS);
+    if (meta) update_('Works', row);
+    else insert_('Works', row);
+  });
+}
+
+function creditMember_(team, studentId, change) {
+  const row = rows_('Contributions').find((c) => c.team_id === team.id && c.student_id === studentId);
+  const base = row || { team_id: team.id, lesson_id: team.lesson_id, student_id: studentId, saves: 0, added: 0, removed: 0, last_at: '', note: '' };
+  const next = { ...base, ...change(base) };
+  if (row) update_('Contributions', next);
+  else insert_('Contributions', next);
+}
+
+function teamFor_(me, lessonId, prevByPath, opts) {
+  const options = opts || {};
+  const id = me.student.id;
+  let team = teamOf_(id, lessonId);
+  if (!team) return null;
+  if (options.beat && driving_(team, id)) {
+    withLock_(() => {
+      const fresh = teamOf_(id, lessonId);
+      if (fresh && driving_(fresh, id)) update_('Teams', { ...fresh, driver_until: Date.now() + TEAM_HOLD_MS });
+    });
+  }
+  const students = rows_('Students');
+  const lead = students.find((s) => s.id === team.members[0]);
+  const mine = rows_('Contributions').find((c) => c.team_id === team.id && c.student_id === id);
+  const view = {
+    id: team.id, lesson_id: team.lesson_id, started: team.started, doc_at: team.doc_at, driver_id: driverNow_(team),
+    lead_path: lead ? lead.path : null, my_note: mine ? mine.note : '',
+    members: team.members.map((m) => ({ id: m, display_name: (students.find((s) => s.id === m) || {}).display_name || '' })),
+  };
+  if (options.stamp && options.stamp === team.doc_at) return { ...view, same: true };
+  let doc = teamDoc_(team);
+  if (!doc && lead && prevByPath && prevByPath[lead.path]) {
+    const prev = metaWorks_().find((w) => w.student_id === lead.id && w.lesson_id === String(prevByPath[lead.path]));
+    if (prev) doc = readDoc_(prev);
+  }
+  return { ...view, doc };
+}
+
+function takeKeyboard_(me, lessonId, base) {
+  const id = me.student.id;
+  withLock_(() => {
+    const team = teamOf_(id, lessonId);
+    if (!team) throw new Error('You are not in a group for this lesson.');
+    const other = driverNow_(team);
+    if (other && other !== id) throw new Error('Someone else has the keyboard. Ask them to pass it.');
+    const next = { ...team, driver_id: id, driver_until: Date.now() + TEAM_HOLD_MS };
+    if (!team.started) {
+      next.started = true;
+      let doc = teamDoc_(team);
+      if (!doc && base) {
+        doc = { code: String(base.code || ''), assets: base.assets || {}, files: cleanFiles_(base.files) };
+        const docText = JSON.stringify(doc);
+        if (docText.length > MAX_WORK_CHARS) throw new Error('This project is too big to save. Try removing an image.');
+        mirrorDoc_(team, docText, null);
+      }
+      // Whatever the group starts from counts as starter code, not as anyone's contribution.
+      if (doc) { next.blame = safeBlame_(attribute_({}, {}, docFiles_(doc), 0).blame); next.doc_at = now_(); }
+    }
+    update_('Teams', next);
+  });
+  return teamFor_(me, lessonId, null, {});
+}
+
+function passKeyboard_(me, lessonId) {
+  withLock_(() => {
+    const team = teamOf_(me.student.id, lessonId);
+    if (team && driving_(team, me.student.id)) update_('Teams', { ...team, driver_id: '', driver_until: 0 });
+  });
+}
+
+function teamSummary_(team, students, contribs) {
+  const shares = lineShares_(team.blame || {});
+  return {
+    id: team.id, lesson_id: team.lesson_id, starter_lines: shares[0] || 0,
+    members: team.members.map((id, i) => {
+      const c = contribs.find((x) => x.team_id === team.id && x.student_id === id) || {};
+      return { id, display_name: (students.find((s) => s.id === id) || {}).display_name || '', lines: shares[i + 1] || 0, saves: c.saves || 0, added: c.added || 0, removed: c.removed || 0, note: c.note || '' };
+    }),
+  };
+}
+
+function listTeams_(me, classId) {
+  ownedClass_(me, classId);
+  const students = rows_('Students');
+  const contribs = rows_('Contributions');
+  return rows_('Teams').filter((t) => t.class_id === classId).map((t) => teamSummary_(t, students, contribs));
+}
+
+function dropTeam_(team) {
+  deleteRows_('Contributions', (c) => c.team_id === team.id);
+  deleteRows_('Teams', (t) => t.id === team.id);
+}
+
+function saveTeams_(me, classId, lessonId, groups) {
+  const lesson = String(lessonId);
+  if (!/^[a-z]\d{1,2}$/.test(lesson)) throw new Error('Unknown lesson.');
+  return withLock_(() => {
+    ownedClass_(me, classId);
+    const roster = rows_('Students').filter((s) => s.class_id === classId);
+    const seen = new Set();
+    const road = /^[pasm]\d/.test(lesson) ? ROAD_OF_[lesson[0]] : null;
+    const clean = (Array.isArray(groups) ? groups : []).map((g) => {
+      const ids = (Array.isArray(g) ? g : []).map(String);
+      if (ids.length < 2 || ids.length > 3) throw new Error('Every group needs 2 or 3 students.');
+      ids.forEach((id) => {
+        const s = roster.find((x) => x.id === id);
+        if (!s) throw new Error('That student is not in this class.');
+        if (seen.has(id)) throw new Error(`${s.display_name} is in two groups.`);
+        if (road && s.path !== road) throw new Error(`${s.display_name} is on a different road, so they can't join this lesson.`);
+        seen.add(id);
+      });
+      return ids;
+    });
+    const key = (ids) => [...ids].sort().join(',');
+    const wanted = new Set(clean.map(key));
+    const current = rows_('Teams').filter((t) => t.class_id === classId && t.lesson_id === lesson);
+    // A group that didn't change keeps its record of who did what.
+    current.filter((t) => !wanted.has(key(t.members))).forEach(dropTeam_);
+    const kept = new Set(current.map((t) => key(t.members)));
+    clean.filter((ids) => !kept.has(key(ids))).forEach((members) => {
+      insert_('Teams', { id: uuid_(), class_id: classId, lesson_id: lesson, members, driver_id: '', driver_until: 0, blame: {}, started: false, doc_at: '', created_at: now_() });
+    });
+  });
+}
+
 function saveMyWork_(me, lessonId, patch, extra) {
   if (!/^[a-z]\d{1,2}$/.test(String(lessonId))) throw new Error('Unknown lesson.');
   const docText = JSON.stringify({ code: String(patch.code === undefined ? '' : patch.code), assets: patch.assets || {}, files: cleanFiles_(patch.files) });
@@ -807,6 +1078,32 @@ function saveMyWork_(me, lessonId, patch, extra) {
   return withLock_(() => {
     const existing = metaWorks_().find((w) => w.student_id === me.student.id && w.lesson_id === lessonId);
     if (existing && existing.status === 'approved') throw new Error('This lesson was approved. Ask your teacher to reopen it.');
+    let written = docText;
+    let lostTurn = false;
+    const team = teamOf_(me.student.id, lessonId);
+    if (team) {
+      const contribution = patch.contribution === undefined ? undefined : text_(patch.contribution, 2000);
+      if (extra && extra.status === 'submitted' && !String(contribution || '').trim()) throw new Error('Write what each person in your group did before you submit.');
+      const current = existing ? readDoc_(existing) : JSON.parse(EMPTY_DOC_);
+      const currentText = JSON.stringify(current);
+      if (driving_(team, me.student.id) && patch.code !== undefined) {
+        const held = { ...team, driver_until: Date.now() + TEAM_HOLD_MS };
+        if (docText !== currentText) {
+          const who = team.members.indexOf(me.student.id) + 1;
+          const credit = attribute_(docFiles_(current), team.blame || {}, docFiles_(JSON.parse(docText)), who);
+          mirrorDoc_(team, docText, me.student.id);
+          held.blame = safeBlame_(credit.blame);
+          held.doc_at = now_();
+          creditMember_(team, me.student.id, (c) => ({ saves: c.saves + 1, added: c.added + credit.added, removed: c.removed + credit.removed, last_at: now_() }));
+        }
+        update_('Teams', held);
+      } else {
+        // Only the person at the keyboard can change the code. Everyone else saves just their own answers.
+        written = currentText;
+        lostTurn = patch.code !== undefined;
+      }
+      if (contribution !== undefined) creditMember_(team, me.student.id, () => ({ note: contribution }));
+    }
     const row = {
       ...(existing || { id: uuid_(), student_id: me.student.id, lesson_id: lessonId, status: 'in_progress', shared: false, submitted_at: null }),
       stretch_done: Math.max(0, Math.min(3, Number(patch.stretch_done) || 0)),
@@ -819,13 +1116,13 @@ function saveMyWork_(me, lessonId, patch, extra) {
       updated_at: now_(),
       ...(extra || {}),
     };
-    packChunks_(row, docText, WORK_CELLS);
+    packChunks_(row, written, WORK_CELLS);
     if (existing) update_('Works', row);
     else insert_('Works', row);
     const out = {};
     WORK_META.forEach((f) => { out[f] = row[f]; });
-    const saved = JSON.parse(docText);
-    return { ...out, code: saved.code, assets: saved.assets, files: saved.files };
+    const saved = JSON.parse(written);
+    return { ...out, code: saved.code, assets: saved.assets, files: saved.files, team_lost: lostTurn };
   });
 }
 
@@ -856,6 +1153,9 @@ const STUDENT_ROUTES = {
     update_('Students', s);
     return publicStudent_(s);
   }),
+  teamFor: teamFor_,
+  takeKeyboard: takeKeyboard_,
+  passKeyboard: passKeyboard_,
   myWorks: (me) => {
     const grades = rows_('Grades');
     return metaWorks_().filter((w) => w.student_id === me.student.id).map((w) => ({ ...fullWork_(w), grade: gradeFor_(w.id, grades) }));

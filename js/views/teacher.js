@@ -10,6 +10,7 @@ import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { buildMap, legend, leaderboard } from './map.js';
 import { makeEditor } from './lesson.js';
 import { openImport, assignmentsTab, keepingUpTab } from './classroom.js';
+import { groupsTab, sendGradesTab, teamPanel } from './groups.js';
 import { badgeChip } from './student.js';
 
 export async function viewTeacherHome() {
@@ -229,12 +230,14 @@ export async function viewClass(main, classId, tabParam) {
   const needing = alerts.students.filter((s) => s.level !== 'ok').length;
   const content = tab === 'roster' ? rosterTab(cls, students, board, render)
     : tab === 'grades' ? gradebookTab(cls, students, works)
+      : tab === 'groups' ? await groupsTab(cls, students, render)
+      : tab === 'send' ? await sendGradesTab(cls, render).catch((e) => h('p.warn', e.message))
       : tab === 'assignments' ? await assignmentsTab(cls)
         : tab === 'keeping' ? await keepingUpTab(cls, render)
           : journeyTab(board, cls);
   return h('div.stack',
     h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
-    h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
+    h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('groups', 'Groups'), link('send', 'Send grades'), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
     content,
   );
 }
@@ -260,6 +263,8 @@ export async function viewReview(main, workId) {
 
   const total = () => rubric.reduce((a, r) => a + (scores[r.id] || 0), 0);
   const totalEl = h('strong');
+  const teammates = w.team ? w.team.members.filter((m) => m.id !== w.student_id).map((m) => m.display_name) : [];
+  const shareGrade = h('input', { type: 'checkbox' });
   const rubricRows = rubric.map((r) => {
     const row = h('div.levels', { role: 'radiogroup', 'aria-label': r.label });
     const draw = () => clear(row).append(...r.levels.map((label, i) => h('button.level', {
@@ -273,7 +278,7 @@ export async function viewReview(main, workId) {
 
   const finish = async (status) => {
     if (status === 'approved' && rubric.some((r) => !scores[r.id])) { toast('Score each row of the rubric first.', 'error'); return; }
-    const ok = await attempt(async () => { await app.store.saveGrade(w.id, { scores, total: total(), max_total: rubric.length * 4, feedback: feedback.value.trim(), status }); return true; });
+    const ok = await attempt(async () => { await app.store.saveGrade(w.id, { scores, total: total(), max_total: rubric.length * 4, feedback: feedback.value.trim(), status, to_team: shareGrade.checked }); return true; });
     if (ok) { toast(status === 'approved' ? 'Approved. +50 XP for the student.' : 'Sent back with your feedback.'); location.hash = nextHref; }
   };
 
@@ -291,7 +296,9 @@ export async function viewReview(main, workId) {
         w.quiz_total > 0 && h('p.small', `Quick checks right on the first try: ${w.quiz_right} of ${w.quiz_total}`),
       ),
       h('section.stack', h('h2', 'Code'), host),
+      w.team && teamPanel(w.team),
       h('section.card.stack.rubric', h('h2', 'Rubric'), standardsBlock(w.lesson_id), rubricRows, h('p', 'Total: ', totalEl), h('label.field', h('span', 'Feedback for the student (private)'), feedback),
+        teammates.length > 0 && h('label.check', shareGrade, h('span', `Give the same grade to ${teammates.join(' and ')}, if they have submitted`)),
         h('div.row', h('button.btn.primary', { onclick: () => finish('approved') }, 'Approve'), h('button.btn', { onclick: () => finish('returned') }, 'Send back for changes')),
       ),
     ),

@@ -8,6 +8,7 @@ import { checksFor } from '../js/curriculum/checks.js';
 import { recentAchievements } from '../js/game/rules.js';
 import { paceAlerts_, isCoreLesson_, weekdaysBetween_ } from '../js/game/pace.js';
 import { STANDARDS } from '../js/curriculum/standards.js';
+import { attribute_, lineShares_, matchLines_ } from '../js/game/blame.js';
 import { installSynth, cleanSong, songCode } from '../js/game/synth.js';
 import { buildWorld, place, isSolid, BOX } from '../js/game/world.js';
 import { allLessons, buildSolution, buildThrough, applySkeleton, stepPasses, checkSummary, getLesson, stripComments, fallbackStarter, briefOf, filesThrough } from '../js/curriculum/engine.js';
@@ -399,6 +400,20 @@ test('the synth reads notes and songs, and classmates\' songs cannot carry code'
   const evil = cleanSong({ tempo: '9;alert(1)', lead: 'C5 ";alert(1);// E5', bass: '', drums: '' });
   assert.equal(evil.lead, 'C5 E5');
   assert.equal(new Function(`${songCode(evil, 'theme')}return theme.lead;`)(), 'C5 E5');
+});
+
+test('line credit follows the person who typed each line', () => {
+  const first = attribute_({}, {}, { 'sketch.js': 'a\nb' }, 0);
+  const second = attribute_({ 'sketch.js': 'a\nb' }, first.blame, { 'sketch.js': 'a\n  new\nb' }, 1);
+  assert.deepEqual(lineShares_(second.blame), { 0: 2, 1: 1 });
+  assert.equal(second.added, 1);
+  // Changing only the spaces around a line doesn't take credit for it.
+  const third = attribute_({ 'sketch.js': 'a\n  new\nb' }, second.blame, { 'sketch.js': '    a\nnew\nb' }, 2);
+  assert.deepEqual(lineShares_(third.blame), { 0: 2, 1: 1 });
+  assert.equal(third.added, 0);
+  const removed = attribute_({ 'sketch.js': 'a\nb' }, first.blame, {}, 1);
+  assert.equal(removed.removed, 2);
+  assert.deepEqual(matchLines_(['x', 'y', 'z'], ['x', 'q', 'z']), [0, -1, 2]);
 });
 
 test('stripComments ignores commented code but keeps strings', () => {

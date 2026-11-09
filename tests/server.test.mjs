@@ -353,6 +353,114 @@ test('sharing is visible inside the class only, and a teacher can take it down',
   assert.equal(bea('arcade', cls.id).length, 0);
 });
 
+function teamSetup() {
+  const s = setup();
+  const named = (n) => s.teacher('listStudents', s.cls.id).find((x) => x.display_name.startsWith(n)).id;
+  return { ...s, ariId: named('Ari'), beaId: named('Bea') };
+}
+
+test('groups: 2 or 3 from one class, set only by the teacher', () => {
+  const { teacher, other, ari, cls, ariId, beaId } = teamSetup();
+  denied(() => teacher('saveTeams', cls.id, 'c6', [[ariId]]));
+  denied(() => teacher('saveTeams', cls.id, 'c6', [[ariId, ariId]]));
+  denied(() => teacher('saveTeams', cls.id, 'c6', [[ariId, 'someone-else']]));
+  denied(() => ari('saveTeams', cls.id, 'c6', [[ariId, beaId]]));
+  denied(() => other('saveTeams', cls.id, 'c6', [[ariId, beaId]]));
+  denied(() => ari('listTeams', cls.id));
+  denied(() => other('listTeams', cls.id));
+  denied(() => teacher('saveTeams', cls.id, 'p1', [[ariId, beaId]]));
+  teacher('saveTeams', cls.id, 'c6', [[ariId, beaId]]);
+  assert.equal(teacher('listTeams', cls.id).length, 1);
+});
+
+test('groups: one keyboard at a time, shared code, and each line credited to who typed it', () => {
+  const { teacher, ari, bea, zed, cls, ariId, beaId } = teamSetup();
+  teacher('saveTeams', cls.id, 'c6', [[ariId, beaId]]);
+  assert.equal(zed('teamFor', 'c6', null, {}), null);
+  denied(() => zed('takeKeyboard', 'c6', null));
+
+  ari('takeKeyboard', 'c6', { code: 'starter();', assets: {}, files: {} });
+  denied(() => bea('takeKeyboard', 'c6', null));
+
+  ari('saveWork', 'c6', { code: 'starter();\nariLine();\nariTwo();', assets: {}, files: {} });
+  assert.match(bea('teamFor', 'c6', null, {}).doc.code, /ariTwo/);
+
+  // Someone not at the keyboard can't change the code, and can't get credit for it.
+  const blocked = bea('saveWork', 'c6', { code: 'beaTakesOver();', assets: {}, files: {}, reflection: 'mine' });
+  assert.equal(blocked.team_lost, true);
+  assert.match(blocked.code, /ariLine/);
+  assert.equal(blocked.reflection, 'mine');
+
+  ari('passKeyboard', 'c6');
+  bea('takeKeyboard', 'c6', null);
+  bea('saveWork', 'c6', { code: 'starter();\nariLine();\nbeaLine();', assets: {}, files: {} });
+
+  const [team] = teacher('listTeams', cls.id);
+  const stats = (id) => team.members.find((m) => m.id === id);
+  assert.equal(team.starter_lines, 1, 'starter code is nobody\'s contribution');
+  assert.equal(stats(ariId).lines, 1);
+  assert.equal(stats(beaId).lines, 1);
+  assert.equal(stats(ariId).added, 2);
+  assert.equal(stats(beaId).removed, 1);
+
+  // Contribution records are for the teacher, and each student reports for themselves.
+  denied(() => bea('submitWork', 'c6', { reflection: 'done' }));
+  bea('submitWork', 'c6', { reflection: 'done', contribution: 'I fixed the ending.' });
+  assert.equal(JSON.stringify(ari('teamFor', 'c6', null, {})).includes('fixed the ending'), false);
+  assert.equal(teacher('listTeams', cls.id)[0].members.find((m) => m.id === beaId).note, 'I fixed the ending.');
+});
+
+test('a group grade can go to teammates who submitted, and only them', () => {
+  const { teacher, ari, bea, cls, ariId, beaId } = teamSetup();
+  teacher('saveTeams', cls.id, 'c6', [[ariId, beaId]]);
+  ari('takeKeyboard', 'c6', { code: 'x();', assets: {}, files: {} });
+  const a = ari('submitWork', 'c6', { code: 'x();\ny();', assets: {}, files: {}, contribution: 'I typed.' });
+  teacher('saveGrade', a.id, { scores: {}, total: 10, max_total: 12, feedback: '', status: 'approved', to_team: true });
+  const works = teacher('classWork', cls.id).filter((w) => w.lesson_id === 'c6');
+  assert.equal(works.find((w) => w.student_id === ariId).status, 'approved');
+  assert.notEqual(works.find((w) => w.student_id === beaId)?.status, 'approved');
+  bea('submitWork', 'c6', { contribution: 'I tested.' });
+  const b = teacher('classWork', cls.id).find((w) => w.lesson_id === 'c6' && w.student_id === beaId);
+  teacher('saveGrade', b.id, { scores: {}, total: 9, max_total: 12, feedback: '', status: 'approved' });
+  assert.equal(teacher('classWork', cls.id).find((w) => w.id === b.id).grade.total, 9, 'students can get different grades');
+});
+
+test('grades go only to an assignment this app created, with both grade fields', () => {
+  const data = classroomData();
+  const server = createServer({ owner: OWNER, classroom: data });
+  const t = server.as(OWNER);
+  t('listClasses');
+  server.sheets.get('Teachers').appendRow([OTHER, 'Other', '2026-01-01']);
+  const [r] = t('importCourses', ['c1']);
+  data.madeSubs = { c1: [{ id: 'sub1', userId: 'g1', courseWorkId: 'made-1' }] };
+  const s = server.as('ava@school.test');
+  denied(() => t('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' }));
+  const w = s('submitWork', 't1', { code: 'a', assets: {} });
+  t('saveGrade', w.id, { scores: {}, total: 11, max_total: 12, feedback: 'SECRET', status: 'approved' });
+
+  denied(() => s('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' }));
+  denied(() => server.as(OTHER)('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' }));
+  denied(() => t('pushGrades', r.class_id, 't1', { title: 'Hello', due: 'soon' }));
+
+  assert.equal(t('gradeSyncStatus', r.class_id).items[0].waiting, 1);
+  const out = t('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' });
+  assert.equal(out.sent, 1);
+  assert.equal(data.created.length, 1);
+  assert.equal(data.created[0].state, 'PUBLISHED');
+  assert.equal(data.created[0].maxPoints, 12);
+  assert.ok(data.created[0].dueDate && data.created[0].dueTime, 'PowerSchool needs a due date');
+  assert.deepEqual(data.patched[0], { courseId: 'c1', workId: 'made-1', subId: 'sub1', draftGrade: 11, assignedGrade: 11 });
+  assert.equal(JSON.stringify(data.created).includes('SECRET'), false, 'feedback stays private');
+  assert.equal(t('gradeSyncStatus', r.class_id).items[0].waiting, 0);
+
+  // Sending again updates the same assignment rather than making a second one.
+  t('saveGrade', w.id, { scores: {}, total: 12, max_total: 12, feedback: '', status: 'approved' });
+  assert.equal(t('gradeSyncStatus', r.class_id).items[0].waiting, 1);
+  t('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' });
+  assert.equal(data.created.length, 1);
+  assert.equal(data.patched[1].assignedGrade, 12);
+});
+
 test('song rules: only real notes, owner edits, class sees published, teacher can remove', () => {
   const { ari: lyra, bea: milo, zed, teacher, cls } = setup();
   const data = JSON.stringify({ tempo: 120, scale: 'bright', lead: 'C5 . E5', bass: '', drums: 'k . s' });

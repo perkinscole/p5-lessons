@@ -88,6 +88,10 @@ Constraints that follow from this:
 
 ## Not yet verified
 
-`js/game/pace.js` runs on both sides: the build strips `export` and appends it to `dist/Code.gs`, so it can't import anything and its names end in `_`. Every Google Classroom route must check `ownerOnly_`, because the app runs with the deploying teacher's access.
+`js/game/pace.js` and `js/game/blame.js` run on both sides: the build strips `export` and appends them to `dist/Code.gs`, so they can't import anything and their names end in `_`. Every Google Classroom route must check `ownerOnly_`, because the app runs with the deploying teacher's access.
 
-These need a real deployment: anything on real Apps Script, the Google Classroom API and daily email, full-class quota limits, whether Apps Script's outer frame permits the camera, and loading an actual Teachable Machine model.
+Group projects share one document: only the student holding the keyboard (the `Teams` row's `driver_id`) can change code, the server credits lines in `blame.js`, and the code is mirrored to each member's `Works` row so grading and later lessons don't need to know about groups.
+
+Grades can only be written to Classroom assignments this app's Google Cloud project created, so `pushGrades_` makes its own and records them in `GradeSync`. Changing the script's Cloud project would make those assignments unwritable.
+
+These need a real deployment: anything on real Apps Script, the Google Classroom API (including grade writes on students who haven't turned anything in) and daily email, full-class quota limits, whether Apps Script's outer frame permits the camera, and loading an actual Teachable Machine model.

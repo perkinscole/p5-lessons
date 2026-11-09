@@ -3,7 +3,7 @@ import { h, clear, md, toast, attempt, modal, debounce, confirmBox } from '../ui
 import { app, go } from '../main.js';
 import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
-import { PATHS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
+import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
 import { statsFor, XP, isDone } from '../game/rules.js';
@@ -97,6 +97,7 @@ export async function viewLesson(main, id, previewPath) {
   const isStudent = app.session.role === 'student';
   let me = null;
   let work = null;
+  let team = null;
   let path = previewPath || lesson.path || 'platformer';
   let code;
   let assets = {};
@@ -106,7 +107,10 @@ export async function viewLesson(main, id, previewPath) {
     me = await loadMe();
     path = me.student.path;
     const roadOrder = sequence(path);
-    if (isSideTrail(id)) {
+    team = await app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {});
+    if (team) {
+      // The teacher put this student in a group for this lesson, so it is open to them.
+    } else if (isSideTrail(id)) {
       if (!sideTrailOpen(id, me.done)) { toast('This side trail opens after the lesson before it.'); go('/map'); return null; }
     } else {
       if (!roadOrder.includes(id)) { go(me.done.has('t6') && !path ? '/road' : '/'); return null; }
@@ -126,13 +130,27 @@ export async function viewLesson(main, id, previewPath) {
       startFiles = prevWork ? prevWork.files || {} : (prevId ? filesThrough(prevId, path) : {});
       assets = prevWork ? prevWork.assets || {} : {};
     }
+    if (team && team.doc) {
+      code = team.doc.code;
+      assets = team.doc.assets || {};
+      startFiles = team.doc.files || {};
+    } else if (team && !work?.code) {
+      const leadPath = team.lead_path || path;
+      const prevId = previousGameLesson(id, leadPath);
+      code = fallbackStarter(lesson, prevId, leadPath);
+      startFiles = prevId ? filesThrough(prevId, leadPath) : {};
+      assets = {};
+    }
   } else {
     code = fallbackStarter(lesson, previousGameLesson(id, path), path);
     const prevGame = previousGameLesson(id, path);
     if (prevGame) startFiles = filesThrough(prevGame, path);
   }
 
-  const readOnly = isStudent && work?.status === 'approved';
+  const approved = isStudent && work?.status === 'approved';
+  let driving = !!team && team.driver_id === me.student.id;
+  let readOnly = approved || (!!team && !driving);
+  let applyingRemote = false;
   const preview = !isStudent;
   // The walkthrough: steps with short questions woven in, one screen at a time.
   const quizzes = checksFor(id);
@@ -143,7 +161,7 @@ export async function viewLesson(main, id, previewPath) {
   let stretchDone = work?.stretch_done || 0;
   let dirty = false;
   const stdPanel = standardsPanel(id, preview);
-  const status = h('span.save-state', { 'aria-live': 'polite' }, preview ? 'Teacher preview: nothing is saved' : readOnly ? 'Approved: read only' : 'All saved');
+  const status = h('span.save-state', { 'aria-live': 'polite' }, preview ? 'Teacher preview: nothing is saved' : approved ? 'Approved: read only' : 'All saved');
 
   // Run panel -----------------------------------------------------------------------------------
   const consoleBox = h('div.console', { 'aria-live': 'polite' }, h('span.muted', 'Press Run to see your code work.'));
@@ -186,6 +204,10 @@ export async function viewLesson(main, id, previewPath) {
     errorMark = null;
   }
   const fileBar = h('div.file-bar');
+  const teamBar = h('div.team-bar', { 'aria-live': 'polite' });
+  const contribution = h('textarea', { rows: 2, value: team?.my_note || '', readOnly: approved, oninput: () => markDirty(), 'aria-label': 'What each person in your group did', placeholder: 'I wrote... My partner...' });
+  const codePatch = (src) => (team && !driving ? {} : { code: src, assets, files: extraFiles() });
+  const teamPatch = () => (team ? { contribution: contribution.value } : {});
   function openFile(name) {
     activeFile = extraDocs.has(name) ? name : MAIN;
     cm.swapDoc(docFor(activeFile));
@@ -291,12 +313,13 @@ export async function viewLesson(main, id, previewPath) {
   }
 
   const persist = async () => {
-    if (preview || readOnly) return;
+    if (preview || approved) return;
     const src = mainCode();
     const c = checkSummary(lesson, allCode());
     try {
-      work = await app.store.saveWork(id, { code: src, assets, files: extraFiles(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() });
+      work = await app.store.saveWork(id, { ...codePatch(src), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() });
       dirty = false;
+      if (work.team_lost) { driving = false; applyRole(); pollTeam(); }
       status.textContent = 'All saved';
       status.classList.remove('bad');
     } catch (e) {
@@ -309,7 +332,7 @@ export async function viewLesson(main, id, previewPath) {
   function quizPatch() { return { quiz_right: quizRight, quiz_total: answered.size === quizzes.length ? quizzes.length : 0 }; }
   const saveSoon = debounce(persist, app.store.saveDelay || 1500);
   const markDirty = () => {
-    if (preview || readOnly) return;
+    if (preview || approved || applyingRemote) return;
     dirty = true;
     status.textContent = 'Not saved yet';
     saveSoon();
@@ -318,7 +341,7 @@ export async function viewLesson(main, id, previewPath) {
   // Steps ---------------------------------------------------------------------------------------
   const stepBox = h('div.step-body');
   const dots = h('ol.step-dots');
-  const reflect = h('textarea', { rows: 3, value: work?.reflection || '', readOnly, oninput: markDirty, 'aria-label': 'Your reflection' });
+  const reflect = h('textarea', { rows: 3, value: work?.reflection || '', readOnly: approved, oninput: markDirty, 'aria-label': 'Your reflection' });
   const progress = () => lesson.steps.map((s) => stepPasses(s, allCode()));
 
   const drawDots = () => {
@@ -374,16 +397,17 @@ export async function viewLesson(main, id, previewPath) {
   const finishPane = () => {
     const c = checkSummary(lesson, allCode());
     const boxes = lesson.stretch.map((g, i) => h('label.check', h('input', {
-      type: 'checkbox', checked: i < stretchDone, disabled: readOnly,
+      type: 'checkbox', checked: i < stretchDone, disabled: approved,
       onchange: (e) => { stretchDone += e.target.checked ? 1 : -1; stretchDone = Math.max(0, Math.min(3, stretchDone)); markDirty(); },
     }), md(g)));
     return h('div.stack',
       h('h2', 'Finish up'),
       h('div.read-row', md(lesson.reflect), readButton(() => lesson.reflect)),
       reflect,
+      team && h('label.field', h('span', 'What did each person in your group do?'), contribution),
       h('details.hint', h('summary', `Done early? Stretch goals (+${XP.stretch} XP each)`), h('div.stretches', boxes)),
       !preview && c.passed < c.total && h('p.warn', `${c.passed} of ${c.total} steps done.`),
-      !preview && !readOnly && h('button.btn.primary.big', { onclick: submit }, work && isDone(work) ? 'Submit again' : 'Submit lesson'),
+      !preview && !approved && h('button.btn.primary.big', { onclick: submit }, work && isDone(work) ? 'Submit again' : 'Submit lesson'),
     );
   };
 
@@ -463,6 +487,79 @@ export async function viewLesson(main, id, previewPath) {
     },
   });
 
+  // Group projects: one shared project, one person typing at a time.
+  let turnStarted = 0;
+  function drawTeamBar() {
+    if (!team) return;
+    const holder = team.members.find((m) => m.id === team.driver_id);
+    clear(teamBar).append(...[
+      h('span', h('strong', 'Group: '), team.members.map((m) => m.display_name).join(', ')),
+      h('span.team-turn', driving ? 'You have the keyboard.' : holder ? `${holder.display_name} has the keyboard.` : 'The keyboard is free.'),
+      !approved && driving && h('button.btn.small', { type: 'button', onclick: passTurn }, 'Pass the keyboard'),
+      !approved && !driving && !holder && h('button.btn.small.primary', { type: 'button', onclick: takeTurn }, 'Take the keyboard'),
+    ].filter(Boolean));
+  }
+  function applyRole() {
+    readOnly = approved || !driving;
+    cm.setOption('readOnly', readOnly);
+    drawTeamBar();
+    drawFileBar();
+    drawStep();
+    drawHead();
+  }
+  function applyRemote(doc) {
+    applyingRemote = true;
+    if (doc.code !== mainDoc.getValue()) mainDoc.setValue(doc.code || '');
+    const incoming = doc.files || {};
+    for (const name of [...extraDocs.keys()]) {
+      if (incoming[name] === undefined) { if (activeFile === name) openFile(MAIN); extraDocs.delete(name); }
+    }
+    for (const [name, text] of Object.entries(incoming)) {
+      if (!extraDocs.has(name)) extraDocs.set(name, window.CodeMirror.Doc(text, 'javascript'));
+      else if (extraDocs.get(name).getValue() !== text) extraDocs.get(name).setValue(text);
+    }
+    assets = doc.assets || {};
+    drawFileBar();
+    applyingRemote = false;
+  }
+  async function pollTeam() {
+    let fresh;
+    try { fresh = await app.store.teamFor(id, null, { stamp: team.doc_at, beat: driving }); } catch (_) { return; }
+    if (!fresh) return;
+    const was = driving;
+    const { doc, same, ...view } = fresh;
+    team = { ...team, ...view };
+    driving = team.driver_id === me.student.id;
+    if (!driving && doc) applyRemote(doc);
+    if (was !== driving) applyRole();
+    else drawTeamBar();
+    if (driving && turnStarted && Date.now() - turnStarted > 600000) {
+      turnStarted = 0;
+      toast('You have been typing for 10 minutes. Time to swap?');
+    }
+  }
+  async function takeTurn() {
+    const base = team.started ? null : { code: mainCode(), assets, files: extraFiles() };
+    const fresh = await attempt(() => app.store.takeKeyboard(id, base));
+    if (!fresh) { pollTeam(); return; }
+    const { doc, ...view } = fresh;
+    team = { ...team, ...view };
+    if (doc) applyRemote(doc);
+    driving = true;
+    turnStarted = Date.now();
+    applyRole();
+    cm.focus();
+  }
+  async function passTurn() {
+    saveSoon.cancel();
+    if (dirty) await persist();
+    if (await attempt(async () => { await app.store.passKeyboard(id); return true; })) {
+      driving = false;
+      team = { ...team, driver_id: '' };
+      applyRole();
+    }
+  }
+
   const toggleShare = async () => {
     if (preview) { toast('Students share from here.'); return; }
     await persist();
@@ -481,9 +578,10 @@ export async function viewLesson(main, id, previewPath) {
       const sure = await confirmBox('Some checks are not passing', `${c.passed} of ${c.total} checks pass. Your teacher will see that. Sometimes the checker misses a different but correct way of doing things, so you can still submit if you think it works.`, 'Submit anyway');
       if (!sure) return;
     }
+    if (team && !contribution.value.trim()) { toast('Write what each person in your group did first.', 'error'); return; }
     saveSoon.cancel();
     const before = statsFor({ ...me.row, path, works: me.row.works });
-    const saved = await attempt(() => app.store.submitWork(id, { code: mainCode(), assets, files: extraFiles(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() }));
+    const saved = await attempt(() => app.store.submitWork(id, { ...codePatch(mainCode()), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() }));
     if (!saved) return;
     work = saved;
     dirty = false;
@@ -563,7 +661,7 @@ export async function viewLesson(main, id, previewPath) {
         'aria-label': 'Code editor',
         ondragover: (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); },
         ondrop: (e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); e.stopPropagation(); addUploads([...e.dataTransfer.files]); } },
-      }, fileBar, editorHost),
+      }, teamBar, fileBar, editorHost),
       h('section.game-pane', { 'aria-label': 'Your game' },
         h('div.game-frame', player.el),
         consoleBox,
@@ -579,11 +677,15 @@ export async function viewLesson(main, id, previewPath) {
 
   const beforeUnload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
   window.addEventListener('beforeunload', beforeUnload);
+  drawTeamBar();
+  const teamTimer = team ? setInterval(pollTeam, 20000) : null;
   app.cleanup = async () => {
+    clearInterval(teamTimer);
     window.removeEventListener('beforeunload', beforeUnload);
     document.body.classList.remove('in-workspace');
     saveSoon.cancel();
     if (dirty) await persist();
+    if (team && driving) app.store.passKeyboard(id).catch(() => {});
     cm.stopSettings();
     stopSpeaking();
     player.destroy();
