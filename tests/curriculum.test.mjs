@@ -474,3 +474,28 @@ test('every lesson has a short big question for the class display', async () => 
     assert.ok(q.split(/\s+/).length <= 18, `${l.id}: big question is over 18 words`);
   }
 });
+
+test('placeFor finds where a step goes in the student\'s own code', async () => {
+  const { placeFor } = await import('../js/curriculum/engine.js');
+  const src = 'function setup() {\n  createCanvas(400, 400);\n}\n\nfunction draw() {\n    background(135,206,235);\n  ellipse(1, 2, 3, 4);\n}\n';
+  assert.deepEqual(placeFor(src, { after: 'background(135, 206, 235);' }), { line: 6, how: 'after' });
+  assert.deepEqual(placeFor(src, { before: 'ellipse(1, 2, 3, 4);' }), { line: 7, how: 'before' });
+  assert.deepEqual(placeFor(src, { endOf: 'function draw() {' }), { line: 8, how: 'before' });
+  assert.deepEqual(placeFor(src, { replace: 'createCanvas(400, 400);' }), { line: 2, how: 'replace' });
+  assert.deepEqual(placeFor(src, { end: true }), { line: 8, how: 'end' });
+  assert.equal(placeFor(src, { after: 'nothing like this' }), null);
+  // Every step with an anchor can be placed in the code the student has just before it.
+  let missing = [];
+  for (const l of allLessons()) {
+    for (const path of l.path ? [l.path] : ['platformer', 'adventure', 'arcade', 'mind']) {
+      l.steps.forEach((step, i) => {
+        const at = step.at || step.edits?.[0]?.at;
+        if (!at) return;
+        let before;
+        try { before = buildThrough(l.id, path, i); } catch (_) { return; }
+        if (!placeFor(before, at)) missing.push(`${l.id}/${path} step ${i + 1}`);
+      });
+    }
+  }
+  assert.deepEqual([...new Set(missing)], []);
+});

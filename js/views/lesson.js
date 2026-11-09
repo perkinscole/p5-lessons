@@ -1,8 +1,9 @@
 // The workspace: lesson steps on the left, code in the middle, the running game on the right.
 import { h, clear, md, toast, attempt, modal, debounce, confirmBox } from '../ui.js';
 import { app, go } from '../main.js';
-import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough } from '../curriculum/engine.js';
+import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
+import { explainError, warnings } from '../game/debug.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
@@ -170,13 +171,20 @@ export async function viewLesson(main, id, previewPath) {
   let errorMark = null;
   const player = createPlayer((ev) => {
     if (ev.type === 'error') {
-      const where = ev.line ? (ev.file && ev.file !== 'sketch.js' ? `${ev.file}, line ${ev.line}` : `Line ${ev.line}`) : null;
-      logLine(h('div.err', where && h('button.linejump', { onclick: () => { openFile(ev.file || MAIN); cm.setCursor(ev.line - 1, 0); cm.focus(); } }, where), ' ', md(ev.message)));
-      if (ev.line) {
+      // Look at the student's own code for a clearer message and the line that's really wrong.
+      const file = ev.file || MAIN;
+      const doc = docFor(file);
+      const better = explainError(ev.raw, doc.getValue(), ev.line);
+      const line = (better && better.line) || ev.line;
+      const where = line ? (file !== MAIN ? `${file}, line ${line}` : `Line ${line}`) : null;
+      const lineText = line && line <= doc.lineCount() ? doc.getLine(line - 1).trim() : '';
+      logLine(h('div.err',
+        h('div', where && h('button.linejump', { onclick: () => { openFile(file); cm.setCursor(line - 1, 0); cm.focus(); } }, where), ' ', md(better ? better.message : ev.message)),
+        lineText && h('pre.err-code', lineText)));
+      if (line && line <= doc.lineCount()) {
         clearErrorMark();
-        const doc = docFor(ev.file || MAIN);
-        doc.addLineClass(ev.line - 1, 'background', 'error-line');
-        errorMark = { doc, line: ev.line - 1 };
+        doc.addLineClass(line - 1, 'background', 'error-line');
+        errorMark = { doc, line: line - 1 };
       }
     } else if (ev.type === 'log') logLine(h('div.log', ev.message));
     else if (ev.type === 'warn') logLine(h('div.warn', ev.message));
@@ -185,6 +193,7 @@ export async function viewLesson(main, id, previewPath) {
   const run = () => {
     clearErrorMark();
     clear(consoleBox);
+    for (const w of warnings(mainCode())) logLine(h('div.warn', md(w)));
     player.run(mainCode(), assets, extraFiles());
     if (dirty) { saveSoon.cancel(); persist(); } // Pressing Run also saves.
   };
@@ -413,7 +422,43 @@ export async function viewLesson(main, id, previewPath) {
     );
   };
 
+  // Where this step's code goes, as a line number in the student's own code.
+  const PLACE_TEXT = {
+    after: (n) => `New line after line ${n}`,
+    before: (n) => `New line before line ${n}`,
+    replace: (n) => `Change line ${n}`,
+    top: () => 'At the very top, line 1',
+    end: (n) => `At the very bottom, after line ${n}`,
+  };
+  let placeMarks = [];
+  const clearPlace = () => { placeMarks.forEach((m) => m()); placeMarks = []; };
+  const stepAt = (s) => s.at || (s.edits && s.edits[0] && s.edits[0].at);
+  const placeOf = (s) => (s && !s.reveal && stepAt(s) && !(s.check && stepPasses(s, allCode())) ? placeFor(mainCode(), stepAt(s)) : null);
+  const placeBox = h('div.step-place');
+  function showPlace(place) {
+    clearPlace();
+    openFile(MAIN);
+    const line = place.line - 1;
+    mainDoc.addLineClass(line, 'background', 'place-line');
+    const marker = h('div.place-marker', place.how === 'replace' ? '▲ change this line' : '▼ your new line goes here');
+    const above = place.how === 'before' || place.how === 'top';
+    const widget = cm.addLineWidget(line, marker, { above });
+    placeMarks.push(() => mainDoc.removeLineClass(line, 'background', 'place-line'), () => widget.clear());
+    const ch = above ? 0 : mainDoc.getLine(line).length;
+    cm.setCursor({ line, ch });
+    cm.scrollIntoView({ line, ch }, 80);
+    cm.focus();
+  }
+  function drawPlace() {
+    clear(placeBox);
+    const item = flow[stepIndex];
+    const place = item && item.step ? placeOf(item.step) : null;
+    if (!place) return;
+    placeBox.append(h('span.place-text', '📍 ', PLACE_TEXT[place.how](place.line)), !readOnly && h('button.btn.small', { onclick: () => showPlace(place) }, 'Show me'));
+  }
+
   const drawStep = () => {
+    clearPlace();
     drawDots();
     clear(stepBox);
     stopSpeaking();
@@ -449,6 +494,7 @@ export async function viewLesson(main, id, previewPath) {
     stepBox.append(...[
       h('h2', s.title),
       h('div.step-do', h('div.read-row', md(brief), readButton(() => brief))),
+      placeBox,
       skeletonArea || '',
       revealArea || '',
       s.provides && !readOnly && h('button.btn.primary', { disabled: extraDocs.has(s.provides.name), onclick: () => addProvided(s.provides) }, extraDocs.has(s.provides.name) ? `${s.provides.name} added ✓` : 'Add the finished file'),
@@ -466,6 +512,7 @@ export async function viewLesson(main, id, previewPath) {
         h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); run(); } }, 'Next'),
       ),
     ].filter(Boolean));
+    drawPlace();
   };
 
   // Actions ---------------------------------------------------------------------------------------
@@ -637,6 +684,7 @@ export async function viewLesson(main, id, previewPath) {
 
   const onChange = debounce(() => {
     drawDots();
+    drawPlace();
     const item = flow[stepIndex];
     const el = stepBox.querySelector('.step-check');
     if (item?.step?.check && el) {
@@ -645,7 +693,7 @@ export async function viewLesson(main, id, previewPath) {
       el.textContent = ok ? '✓ Done' : 'Not done yet';
     }
   }, 350);
-  cm.on('change', () => { markDirty(); onChange(); });
+  cm.on('change', () => { clearPlace(); markDirty(); onChange(); });
 
   const feedback = work?.grade?.feedback || (work?.status === 'returned');
   const page = h('div.workspace',
