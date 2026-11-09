@@ -78,8 +78,11 @@ function runJob(job) {
 }
 
 (async () => {
-  const queue = [...jobs];
-  await Promise.all(Array.from({ length: 4 }, async () => {
+  // ?only=t1,mind/m6 runs just those, and ?at=1 runs one at a time, for slow machines.
+  const q = new URLSearchParams(location.search);
+  const only = q.get('only')?.split(',');
+  const queue = jobs.filter((j) => !only || only.includes(j.key));
+  await Promise.all(Array.from({ length: Number(q.get('at')) || 4 }, async () => {
     while (queue.length) results.push(await runJob(queue.shift()));
   }));
   const bad = results.filter((r) => r.errors.length || r.colors === null || r.colors < 2);

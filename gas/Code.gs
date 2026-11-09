@@ -200,11 +200,16 @@ function unpackChunks_(row, count) {
 
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
+  const asked = Date.now();
   try {
     lock.waitLock(20000);
   } catch (_) {
+    console.warn('LOCK_TIMEOUT: waited 20 s for a turn to save');
     throw new Error('The class is saving a lot right now. Trying again soon.');
   }
+  // Shows in Apps Script's Executions log, so a pilot can see saves queuing up before they fail.
+  const waited = Date.now() - asked;
+  if (waited > 3000) console.warn(`LOCK_SLOW: waited ${waited} ms for a turn to save`);
   try {
     const result = fn();
     SpreadsheetApp.flush();

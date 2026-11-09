@@ -139,9 +139,11 @@ window.SPRITES = new Proxy(${JSON.stringify(assets || {})}, { get(t, k) {
   return ${JSON.stringify(PLACEHOLDER)};
 } });
 (function () {
-  let start = performance.now(); let count = 0;
-  setInterval(function () { start = performance.now(); }, 250);
+  // Time how long the current task has been looping. A microtask clears the mark once the task
+  // returns, so slow or throttled timers can't make a working game look stuck.
+  let start = 0; let count = 0; let armed = false;
   window.__lp = function () {
+    if (!armed) { armed = true; start = performance.now(); Promise.resolve().then(function () { armed = false; }); }
     if (++count % 2048 === 0 && performance.now() - start > 2500) {
       throw new Error('LOOP_TOO_LONG');
     }

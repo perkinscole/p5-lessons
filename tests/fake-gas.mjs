@@ -84,7 +84,7 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
   const props = new Map();
   let created = 0;
   const sandbox = {
-    console: { error() {}, log() {} },
+    console: { error() {}, log() {}, warn() {} },
     Session: { getActiveUser: () => ({ getEmail: () => activeEmail }), getEffectiveUser: () => ({ getEmail: () => owner }) },
     SpreadsheetApp: {
       getActiveSpreadsheet: () => (bound ? spreadsheet : null),

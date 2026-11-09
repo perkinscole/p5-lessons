@@ -74,6 +74,8 @@ To publish changes, use **Deploy → Manage deployments**, edit the deployment, 
 
 ### Before using this with a class
 
+Work through [PILOT.md](PILOT.md), a step-by-step checklist for the first deployment.
+
 - **Try it with a few students first.** Everyone's activity runs under your account's Google quotas, and only about 30 requests can run at once. Students autosave every 30 seconds and whenever they press Run, to stay well under that. If a class sees "couldn't save" messages, tell me, because this limit is the one most likely to need tuning.
 - **Test the Mind Road yourself first.** It needs the camera and teachablemachine.withgoogle.com. If the camera is blocked, arrow keys still work, and the nearest neighbor and neural network lessons need no camera at all.
 - **Check with your IT team.** Your Workspace admin may limit Apps Script web apps, or block the Piskel link. The built-in sprite editor doesn't need Piskel. The custom fonts come from Google, and the app falls back to standard fonts if they're blocked.
@@ -151,7 +153,7 @@ Lessons with no `starter` continue the student's own game. If you edit one, keep
 | `npm test` | Checks every lesson, and attacks the server's access rules |
 | `npm run build` | Remakes `dist/` |
 
-To run every lesson's answer key in the real sandbox, run `npm start` and open http://localhost:8080/tests/lessons.html with the tab visible.
+To run every lesson's answer key in the real sandbox, run `npm start` and open http://localhost:8080/tests/lessons.html with the tab visible. Add `?only=t1,mind/m6` to run just those lessons, or `?at=1` to run one at a time on a slow machine.
 
 `tests/fake-gas.mjs` imitates Google's services, including the cell size limit and formula behavior. It is a model of Apps Script, so a real deployment can still behave differently.
 
