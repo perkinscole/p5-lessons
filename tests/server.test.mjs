@@ -551,3 +551,18 @@ test('the built files load the way Apps Script loads them', () => {
   const original = readFileSync(new URL('../vendor/ml5.min.js', import.meta.url), 'utf8');
   assert.equal(ml5, original.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--'));
 });
+
+test('Apps Script gets no large inline JavaScript to rewrite', () => {
+  // Apps Script rewrites inline scripts and broke the bundle that way, so real code ships as base64.
+  for (const f of ['Index', 'Styles', 'P5', 'App']) {
+    const html = readFileSync(new URL(`../dist/${f}.html`, import.meta.url), 'utf8');
+    for (const [, attrs, body] of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
+      if (/text\/plain/.test(attrs)) {
+        if (/base64/.test(attrs)) assert.match(body, /^[A-Za-z0-9+/=\s]*$/, `${f}: base64 block`);
+        continue;
+      }
+      assert.ok(body.length < 4000, `${f}: inline script of ${body.length} characters`);
+      assert.doesNotMatch(body, /`/, `${f}: template literal in an inline script`);
+    }
+  }
+});

@@ -69,7 +69,7 @@ let p5Text = null;
 const loadP5 = () => {
   // On Apps Script, the build puts p5 into the page, with its script tags already made safe.
   const packed = document.getElementById('p5-src');
-  if (packed) return Promise.resolve(packed.textContent);
+  if (packed) return Promise.resolve(packed.dataset.encoding === 'base64' ? fromBase64(packed.textContent) : packed.textContent);
   if (!p5Text) {
     p5Text = fetch(new URL('../vendor/p5.min.js', import.meta.url))
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
@@ -78,6 +78,8 @@ const loadP5 = () => {
   }
   return p5Text;
 };
+/** The build stores p5 as base64, so Apps Script can't rewrite it. */
+const fromBase64 = (t) => new TextDecoder().decode(Uint8Array.from(atob(t.replace(/\s+/g, '')), (c) => c.charCodeAt(0)));
 // ml5 is large, so it is fetched only when a game actually uses it.
 let ml5Text = null;
 let ml5Loader = () => fetch(new URL('../vendor/ml5.min.js', import.meta.url)).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); });
