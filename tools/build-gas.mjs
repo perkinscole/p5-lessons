@@ -29,13 +29,17 @@ const css = await build({ stdin: { contents: read('vendor/codemirror/codemirror.
 
 writeFileSync(path('dist/App.html'), `<script>${safeInline(cm)}</script>\n<script>${safeInline(app.outputFiles[0].text)}</script>\n`);
 writeFileSync(path('dist/Styles.html'), `<style>${css.outputFiles[0].text}</style>\n`);
-writeFileSync(path('dist/P5.html'), safeInline(read('vendor/p5.min.js')));
+// Apps Script rejects an HTML file that is bare script text, so libraries go inside a
+// text/plain script tag. The browser reads them out as text.
+const asText = (t, id) => `<script type="text/plain"${id ? ` id="${id}"` : ''}>${t}</script>\n`;
+writeFileSync(path('dist/P5.html'), asText(safeInline(read('vendor/p5.min.js')), 'p5-src'));
 copyFileSync(path('gas/Index.html'), path('dist/Index.html'));
 // ml5 is about 4 MB, so it travels in pieces about the size of the p5 file.
-const ml5 = read('vendor/ml5.min.js');
+// Made safe before splitting, so no piece can end its script tag early.
+const ml5 = safeInline(read('vendor/ml5.min.js'));
 const PART = 900000;
 const parts = Math.ceil(ml5.length / PART);
-for (let i = 0; i < parts; i++) writeFileSync(path(`dist/ML5_${i}.html`), ml5.slice(i * PART, (i + 1) * PART));
+for (let i = 0; i < parts; i++) writeFileSync(path(`dist/ML5_${i}.html`), asText(ml5.slice(i * PART, (i + 1) * PART)));
 const code = read('gas/Code.gs');
 if (!code.includes('const ML5_PARTS = 0;')) throw new Error('ML5_PARTS line is missing from Code.gs');
 const pace = ['js/game/pace.js', 'js/game/blame.js'].map((f) => read(f).replace(/^export /gm, '')).join('\n');

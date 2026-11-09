@@ -49,7 +49,8 @@ function doGet() {
 function libraryPart_(me, i) {
   const n = Number(i);
   if (!Number.isInteger(n) || n < 0 || n >= ML5_PARTS) return '';
-  return HtmlService.createHtmlOutputFromFile(`ML5_${n}`).getContent();
+  // Each piece is stored inside a text/plain script tag, which Apps Script needs. Send just the text.
+  return HtmlService.createHtmlOutputFromFile(`ML5_${n}`).getContent().replace(/^\s*<script[^>]*>/, '').replace(/<\/script>\s*$/, '');
 }
 
 function include_(name) {

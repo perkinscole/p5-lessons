@@ -1,6 +1,7 @@
 // Attacks gas/Code.gs the way a curious student with the browser console could.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createServer } from './fake-gas.mjs';
 
 const OWNER = 'teacher@school.test';
@@ -536,4 +537,17 @@ test('it also works as a standalone script, creating its own Sheet once', () => 
   t('createClass', 'B');
   assert.equal(server.createdCount(), 1);
   assert.equal(t('listClasses').length, 2);
+});
+
+test('the built files load the way Apps Script loads them', () => {
+  const server = createServer({ owner: OWNER, codeFile: '../dist/Code.gs', htmlDir: '../dist' });
+  for (const name of ['Styles', 'P5', 'App']) assert.ok(server.run(OWNER, 'include_', name).length > 1000, name);
+  const teacher = server.as(OWNER);
+  const cls = teacher('createClass', 'P');
+  teacher('addStudents', cls.id, [`Ari M, ${ARI}`]);
+  const ari = server.as(ARI);
+  let ml5 = '';
+  for (let i = 0; ; i++) { const part = ari('libraryPart', i); if (!part) break; ml5 += part; }
+  const original = readFileSync(new URL('../vendor/ml5.min.js', import.meta.url), 'utf8');
+  assert.equal(ml5, original.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--'));
 });

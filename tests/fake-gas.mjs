@@ -103,7 +103,12 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
       deleteTrigger: (t) => { triggers.splice(triggers.indexOf(t), 1); },
       newTrigger: (fn) => ({ timeBased: () => ({ everyDays: () => ({ atHour: () => ({ create: () => triggers.push({ getHandlerFunction: () => fn }) }) }) }) }),
     },
-    HtmlService: { createHtmlOutputFromFile: (name) => ({ getContent: () => readFileSync(new URL(`${htmlDir}/${name}.html`, import.meta.url), 'utf8') }) },
+    HtmlService: { createHtmlOutputFromFile: (name) => {
+      const text = readFileSync(new URL(`${htmlDir}/${name}.html`, import.meta.url), 'utf8');
+      // Real Apps Script refuses a file that starts as bare text, such as raw JavaScript.
+      if (!/^\s*</.test(text)) throw new Error(`Malformed HTML content: ${text.slice(0, 40)}`);
+      return { getContent: () => text };
+    } },
   };
   vm.createContext(sandbox);
   let source = readFileSync(new URL(codeFile, import.meta.url), 'utf8');
@@ -121,7 +126,7 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
     sheets,
     mail,
     triggers,
-    run: (email, fn) => { activeEmail = email; return sandbox[fn](); },
+    run: (email, fn, ...args) => { activeEmail = email; return sandbox[fn](...args); },
     createdCount: () => created,
     raw,
     as: (email) => (method, ...args) => {
