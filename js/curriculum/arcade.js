@@ -24,10 +24,12 @@ function draw() {
   steps: [
     {
       title: 'A speed variable', mins: 3,
-      say: 'Name the ship\'s speed once, so you can tune your whole game by changing one number.',
+      reveal: true,
+      say: 'Name the ship\'s speed once, so you can retune your game by changing one number. Make a variable called `shipSpeed` and set it to 5.',
       code: 'let shipSpeed = 5;',
       at: { after: 'let playerSize = 40;' },
       check: /let\s+\w*[sS]peed\w*\s*=/,
+      hint: 'Use `let`, like your other variables.',
     },
     {
       title: 'Fly left and right', mins: 8,
@@ -45,20 +47,24 @@ function draw() {
     },
     {
       title: 'Stay on the screen', mins: 4,
-      say: '`constrain(value, low, high)` keeps a number inside a range.',
+      reveal: true,
+      say: 'Keep the ship on the screen. `constrain(value, low, high)` keeps a number inside a range. Use it on `playerX`.',
       code: '  playerX = constrain(playerX, 0, width - playerSize);\n',
       at: { before: '// player' },
       check: /constrain\s*\(/,
+      hint: 'The highest value allowed is `width - playerSize`.',
     },
     {
       title: 'Flickering engine', mins: 8,
-      say: '`random(a, b)` gives a new number every time it runs. Since `draw()` runs 60 times a second, that makes a flicker. Add a flame at the very end of `draw()`, using the ship\'s position so it follows along.',
+      reveal: true,
+      say: 'Add a flame under the ship: a triangle whose tip uses `random`, so it changes every frame. Use `playerX` and `playerY` so it follows the ship.',
       code: `
   // engine flame
   fill(255, random(100, 220), 40);
   triangle(playerX + 10, playerY + playerSize, playerX + 30, playerY + playerSize, playerX + 20, playerY + playerSize + random(8, 20));`,
       at: { endOf: 'function draw' },
       check: /random\s*\(/,
+      hint: '`random(8, 20)` added to the bottom of the ship makes a good flame tip.',
     },
     {
       title: 'Pick your mission', mins: 7,
@@ -95,7 +101,8 @@ lesson({
     },
     {
       title: 'Send it flying', mins: 8,
-      say: 'If the bullet is active, move it up and draw it. Up means **smaller** y, so we subtract. Add this above `// player`.',
+      reveal: true,
+      say: 'When `bulletActive` is true, move the bullet up and draw it as a thin rectangle. Remember that up means a **smaller** `y`.',
       code: `  // bullet
   if (bulletActive) {
     bulletY = bulletY - 8;
@@ -105,19 +112,23 @@ lesson({
 `,
       at: { before: '// player' },
       check: /if\s*\(\s*\w+\s*\)\s*\{[\s\S]*-\s*\d/,
+      hint: 'Inside `if (bulletActive) {`, subtract 8 from `bulletY`, then use `rect`.',
     },
     {
       title: 'End of its life', mins: 5,
-      say: 'If you fire once, you can never fire again, because the bullet stays active forever, far above the screen. Add a check inside the `if (bulletActive)` block.',
+      reveal: true,
+      say: 'Once you fire, you can never fire again, because the bullet stays active far above the screen. When it passes the top, set `bulletActive` to `false`.',
       code: `    if (bulletY < 0) {
       bulletActive = false;
     }`,
       at: { after: 'rect(bulletX, bulletY, 4, 14);' },
       check: /=\s*false[\s\S]*\w+\s*=\s*false|if\s*\(\s*\w+\s*<\s*-?\d+/,
+      hint: 'The top of the screen is `y = 0`. Put your check inside the `if (bulletActive)` block.',
     },
     {
       title: 'Count your shots', mins: 5,
-      say: 'Count how many shots you have fired, and show it on screen. It helps you check that your code runs exactly once per shot.',
+      reveal: true,
+      say: 'Count how many shots you have fired, and show it on screen. It proves your code runs exactly once per shot.',
       edits: [
         { code: 'let shots = 0;', at: { after: 'let bulletActive = false;' } },
         { code: '    shots = shots + 1;', at: { after: 'bulletActive = true;' } },
@@ -130,6 +141,7 @@ lesson({
 shots = shots + 1;        // when you fire
 text("Shots: " + shots, 10, 24);   // in draw()`,
       check: /text\s*\([^)]*\+/,
+      hint: 'Make a variable, add 1 where the shot fires, and use `text` at the end of `draw()`.',
     },
     {
       title: 'Tune your weapon', mins: 3,
@@ -188,7 +200,8 @@ let enemySpeed = 2;`,
     },
     {
       title: 'Win and lose', mins: 6,
-      say: 'You lose if the enemy reaches your ship, and win at 100 points.',
+      reveal: true,
+      say: 'You lose if the enemy reaches your ship, and you win at 100 points. Set `lost` or `won` to `true` when each one happens.',
       code: `  // win or lose
   if (enemyY + 30 > playerY) {
     lost = true;
@@ -199,10 +212,12 @@ let enemySpeed = 2;`,
 `,
       at: { before: '// player' },
       check: [/lost\s*=\s*true/, /won\s*=\s*true/],
+      hint: 'The bottom of the enemy is `enemyY + 30`. Compare it to `playerY`.',
     },
     {
       title: 'Show what happened', mins: 5,
-      say: 'Show the score and the ending. Add this at the end of `draw()`.',
+      reveal: true,
+      say: 'Press **Add the starter code** to show the score. Then finish the TODOs, so the game says when the player wins or loses.',
       code: `
   // score and messages
   fill(255);
@@ -216,6 +231,18 @@ let enemySpeed = 2;`,
   }`,
       at: { endOf: 'function draw' },
       check: /if\s*\(\s*(?:won|lost)/,
+      hint: 'Write `if (won) {`, then use `text` inside it.',
+      skeleton: [
+        { code: `
+  // score and messages
+  fill(255);
+  textSize(18);
+  text("Score: " + score, 290, 24);
+  // TODO: If won is true, show a winning message with text().
+
+  // TODO: If lost is true, show a losing message.
+`, at: { endOf: 'function draw' } },
+      ],
     },
     {
       title: 'Playtest the balance', mins: 5,

@@ -10,6 +10,7 @@ import { paceAlerts_, isCoreLesson_, weekdaysBetween_ } from '../js/game/pace.js
 import { STANDARDS } from '../js/curriculum/standards.js';
 import { attribute_, lineShares_, matchLines_ } from '../js/game/blame.js';
 import { installSynth, cleanSong, songCode } from '../js/game/synth.js';
+import { reviewFor } from '../js/curriculum/review.js';
 import { buildWorld, place, isSolid, BOX } from '../js/game/world.js';
 import { allLessons, buildSolution, buildThrough, applySkeleton, stepPasses, checkSummary, getLesson, stripComments, fallbackStarter, briefOf, filesThrough } from '../js/curriculum/engine.js';
 
@@ -414,6 +415,48 @@ test('line credit follows the person who typed each line', () => {
   const removed = attribute_({ 'sketch.js': 'a\nb' }, first.blame, {}, 1);
   assert.equal(removed.removed, 2);
   assert.deepEqual(matchLines_(['x', 'y', 'z'], ['x', 'q', 'z']), [0, -1, 2]);
+});
+
+test('every lesson asks students to read code, and every question fits its lesson', () => {
+  for (const l of allLessons()) {
+    const qs = checksFor(l.id);
+    assert.ok(qs.some((q) => q.code), `${l.id} has no read-the-code question`);
+    for (const q of qs) assert.ok(q.after >= 0 && q.after < l.steps.length, `${l.id}: question after step ${q.after}`);
+  }
+});
+
+test('warm-ups come from an earlier lesson, never the one just before', () => {
+  for (const path of PATH_IDS) {
+    const order = sequence(path);
+    order.forEach((id, i) => {
+      const q = reviewFor(id, path);
+      if (i < 2) { assert.equal(q, null, id); return; }
+      assert.ok(q, `${path}/${id} has no warm-up`);
+      const from = order.slice(0, i - 1).flatMap(checksFor).map((x) => x.q);
+      assert.ok(from.includes(q.q), `${path}/${id}: warm-up is not from an earlier lesson`);
+    });
+  }
+});
+
+test('students write code themselves at the first fork, and hunt bugs in the core', () => {
+  const coding = (ids) => ids.flatMap((id) => getLesson(id).steps).filter((s) => s.code !== undefined || s.edits || s.show !== undefined);
+  for (const road of ['p', 'a', 's', 'm']) {
+    const steps = coding([1, 2, 3].map((n) => `${road}${n}`));
+    assert.ok(steps.filter((s) => s.reveal).length / steps.length >= 0.3, `${road}: too few try-first steps`);
+  }
+  const core = coreSequence('platformer');
+  const hunts = core.filter((id) => getLesson(id).steps.some((s) => s.title === 'Bug hunt'));
+  assert.ok(hunts.length >= 4, `only ${hunts.length} bug hunts`);
+  assert.ok(core.some((id) => getLesson(id).steps.some((s) => /console\.log/.test(s.say || ''))), 'console.log is never taught');
+});
+
+test('the capstone asks for a plan and has no walkthrough for the new feature', () => {
+  const titles = getLesson('c6').steps;
+  const plan = titles.find((s) => s.title === 'Make a plan card');
+  const build = titles.find((s) => s.title === 'Build your feature');
+  assert.ok(plan && plan.skeleton);
+  assert.ok(build && build.code === undefined && !build.edits && build.mins >= 15);
+  assert.ok(titles.indexOf(plan) < titles.indexOf(build));
 });
 
 test('stripComments ignores commented code but keeps strings', () => {

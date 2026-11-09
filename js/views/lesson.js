@@ -9,6 +9,7 @@ import { loadMe, badgeChip } from './student.js';
 import { statsFor, XP, isDone } from '../game/rules.js';
 import { openSpritePicker } from './sprites.js';
 import { openSoundPicker, openMusicMaker } from './sounds.js';
+import { reviewFor } from '../curriculum/review.js';
 import { onSettings, getSettings, readButton, speak, stopSpeaking } from '../settings.js';
 import { alignmentFor, standardByCode } from '../curriculum/alignment.js';
 
@@ -153,8 +154,9 @@ export async function viewLesson(main, id, previewPath) {
   let applyingRemote = false;
   const preview = !isStudent;
   // The walkthrough: steps with short questions woven in, one screen at a time.
-  const quizzes = checksFor(id);
-  const flow = lesson.steps.flatMap((step, i) => [{ step, n: i }, ...quizzes.filter((q) => q.after === i).map((quiz) => ({ quiz }))]);
+  const warmUp = reviewFor(id, path);
+  const quizzes = [...(warmUp ? [warmUp] : []), ...checksFor(id)];
+  const flow = [...(warmUp ? [{ quiz: warmUp }] : []), ...lesson.steps.flatMap((step, i) => [{ step, n: i }, ...quizzes.filter((q) => q.after === i).map((quiz) => ({ quiz }))])];
   const answered = new Set(work && work.quiz_total === quizzes.length && quizzes.length ? quizzes : []);
   let quizRight = work?.quiz_right || 0;
   let stepIndex = 0;
@@ -389,6 +391,7 @@ export async function viewLesson(main, id, previewPath) {
     }, md(text))));
     return h('div.stack',
       h('p.eyebrow', 'Quick check'),
+      q.review && h('p.eyebrow', 'From an earlier lesson'),
       h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
       q.code && h('pre.snippet', h('code', q.code)),
       buttons, feedback, nav);

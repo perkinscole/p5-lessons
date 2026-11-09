@@ -15,7 +15,7 @@ export const ALIGNMENT = {
   t2: { anchor: [], support: [CT('d.5'), CT('d.6')], evidence: 'Moves a line to see that order changes the result, then explains how the computer reads code. Foundational.' },
   t3: { anchor: [], support: [CT('b.2'), CT('d.4')], evidence: 'Reflection predicts what happens if the variable is created inside draw(). Foundational.' },
   t4: { anchor: [], support: [CT('b.2'), CT('d.4')], evidence: 'Output changes with mouse input; first if statement and expressions. Foundational.' },
-  t5: { anchor: [CT('b.5')], support: [CT('b.1'), CT('b.2')], evidence: 'Writes all four wall checks, then fixes the check so the edge of the ball, not its center, is the boundary.' },
+  t5: { anchor: [CT('b.5')], support: [CT('d.6'), CT('b.1'), CT('b.2')], evidence: 'Writes all four wall checks, then fixes the check so the edge of the ball, not its center, is the boundary.' },
   t6: { anchor: [CT('b.1')], support: [CT('b.3'), CT('d.4'), CT('d.6')], evidence: 'A working game built from the draw loop, compound conditions, and a difficulty rule of the student\'s own.' },
 
   p1: { anchor: [CT('e.2')], support: [CT('e.1'), CT('d.6')], evidence: 'Changes gravity and jump values to explore the simulation, then explains how gravity, velocity, and position connect.' },
@@ -54,12 +54,12 @@ export const ALIGNMENT = {
   m7: { anchor: [CT('d.2')], support: [CT('a.1'), CT('b.1')], evidence: 'Bot class hides behavior; compares rule-based and learning bots when the player changes habits.' },
   m8: { anchor: [CAS('c.1')], support: [CAS('c.4'), CT('b.1'), CT('d.3')], evidence: 'Builds a confusion table, tests on another person, and argues who could be harmed if such a model made real decisions.' },
 
-  c1: { anchor: [CT('a.2')], support: [CT('d.2'), CT('d.4')], evidence: 'Writes a function with parameters, reuses it, then writes a second function of their own.' },
+  c1: { anchor: [CT('a.2')], support: [CT('d.6'), CT('d.2'), CT('d.4')], evidence: 'Writes a function with parameters, reuses it, then writes a second function of their own.' },
   c2: { anchor: [DTC('a.3'), CT('d.2')], support: [DTC('a.4')], evidence: 'Brings a PNG sprite sheet into a program; drawPlayer() hides the drawing detail.' },
   c3: { anchor: [CT('a.1')], support: [CT('d.2'), CT('b.1')], evidence: 'Chooses a new property for a class; reflection lists the properties and methods for something in their own game.' },
   c4: { anchor: [CT('d.2')], support: [CT('b.3'), CT('b.1')], evidence: 'draw() becomes a controller that hides each game state behind a function.' },
-  c5: { anchor: [CT('d.3'), CT('b.2')], support: [CT('b.4'), CT('d.1'), CT('c.4')], evidence: 'Writes selection sort, predicts comparisons for 32 bars, tests the prediction, and explains the growth.' },
-  c6: { anchor: [CT('d.4'), CT('d.6'), DTC('b.1')], support: [CT('b.3'), DTC('a.4')], evidence: 'Complete game using all required constructs, revised after a cross-road playtest, and published to the class.' },
+  c5: { anchor: [CT('d.3'), CT('b.2')], support: [CT('d.6'), CT('b.4'), CT('d.1'), CT('c.4')], evidence: 'Writes selection sort, predicts comparisons for 32 bars, tests the prediction, and explains the growth.' },
+  c6: { anchor: [CT('d.4'), CT('d.6'), DTC('b.1')], support: [CT('b.3'), DTC('a.4')], evidence: 'Plans and builds a new feature of their own without a walkthrough, in a complete game using all required constructs, revised after a cross-road playtest, and published to the class.' },
 
   e1: { anchor: [CT('b.1')], support: [CT('b.2'), CT('d.6')], evidence: 'Uses conditionals to detect the moment a value changes; predicts and tests what happens without the if; revises the game so it still works with sound off.' },
   e2: { anchor: [DTC('a.4'), CAS('b.9')], support: [CAS('b.1'), DTC('a.2'), CT('a.1')], evidence: 'Composes an original theme and brings it into a game; licenses it; explains why a pop song can\'t be published in a game, and what an MP3 stores that the song text does not.' },

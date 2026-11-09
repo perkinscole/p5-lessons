@@ -25,7 +25,7 @@ function draw() {
 `,
   steps: [
     {
-      title: 'Name some code', mins: 7,
+      title: 'Name some code', mins: 6,
       say: 'You have been *calling* functions like `rect()` for weeks. Now you will **write** one. Move your tree code into a new function at the bottom:',
       edits: [
         { code: '  drawTree();', at: { replace: `  // one tree
@@ -54,7 +54,7 @@ function drawTree() {
       hint: 'Writing a function does nothing by itself. You also have to call it from draw().',
     },
     {
-      title: 'Give it a parameter', mins: 8,
+      title: 'Give it a parameter', mins: 7,
       say: 'Calling `drawTree()` twice just draws the same tree on top of itself. A **parameter** is a variable the caller fills in. Add `x` in the parentheses, and use it in the math. The numbers are relative to `x` now.',
       edits: [
         { code: `function drawTree(x) {
@@ -84,7 +84,7 @@ drawTree(220);`,
       check: /function\s+(?!setup|draw\b)\w+\s*\(\s*\w+/,
     },
     {
-      title: 'More parameters', mins: 7,
+      title: 'More parameters', mins: 6,
       say: 'Add a `size` parameter too, so you can have big trees and small trees. Multiply every measurement by `size`. A size of 1 is normal, and 2 is double.',
       edits: [
         { code: `function drawTree(x, size) {
@@ -116,7 +116,7 @@ drawTree(320, 0.7);`,
       check: /function\s+(?!setup|draw\b)\w+\s*\(\s*\w+\s*,\s*\w+/,
     },
     {
-      title: 'A function that answers', mins: 7,
+      title: 'A function that answers', mins: 6,
       say: 'Some functions **return** an answer rather than drawing anything. This one picks a shade of green from a size. `return` hands the value back to wherever the function was called. Use it in your tree.',
       edits: [
         { code: `function leafGreen(size) {
@@ -133,7 +133,7 @@ fill(40, leafGreen(size), 70);`,
       check: /return\s+[^;]+;/,
     },
     {
-      title: 'Grow your forest', mins: 6,
+      title: 'Grow your forest', mins: 5,
       say: 'Write a **second function of your own**, like `drawRock`, `drawHouse`, or `drawCloud`, with at least one parameter. Call it a few times to finish your scene. In your next lesson you will use functions in your own game.',
       reveal: true,
       edits: [
@@ -154,6 +154,32 @@ drawCloud(90, 60);
 drawCloud(290, 100);`,
       check: /(?:function\s+(?!setup|draw\b)\w+\s*\(\s*\w+[\s\S]*){3,}/,
       hint: 'You need one more function with a parameter, for 3 in total.',
+    },
+    {
+      title: 'Bug hunt', mins: 5,
+      reveal: true,
+      say: 'Press **Add the starter code**. Three bushes should appear in three places, but you only see one. The function gets `x` and never uses it. Find it and fix it.',
+      edits: [
+        { code: `function drawBush(x) {
+  fill(50, 140, 80);
+  ellipse(x, 310, 50, 36);
+}`, at: { end: true } },
+        { code: `  drawBush(60);
+  drawBush(170);
+  drawBush(340);`, at: { endOf: 'function draw' } },
+      ],
+      check: /ellipse\s*\(\s*x\s*,\s*310/,
+      hint: 'Which number in `ellipse` should change from bush to bush?',
+      skeleton: [
+        { code: `// TODO: Bug hunt! Why do all three bushes land in one spot?
+function drawBush(x) {
+  fill(50, 140, 80);
+  ellipse(60, 310, 50, 36);
+}`, at: { end: true } },
+        { code: `  drawBush(60);
+  drawBush(170);
+  drawBush(340);`, at: { endOf: 'function draw' } },
+      ],
     },
   ],
   stretch: ['Add a `color` parameter to your tree.', 'Remove `noLoop()`, and make the trees sway using `frameCount`.', 'Use `randomSeed(42)` and `random()` to place a forest of 10 trees.'],
@@ -399,7 +425,8 @@ lesson({
     },
     {
       title: 'An ending screen', mins: 7,
-      say: 'Show a different message for winning and losing. Display the score too, which makes players want to try again.',
+      reveal: true,
+      say: 'Write a function called `showEnding`. It should clear the screen, say whether the player won or lost, show the score, and say to click to play again.',
       code: `function showEnding() {
   background(20);
   fill(255);
@@ -417,10 +444,12 @@ lesson({
 }`,
       at: { end: true },
       check: /function\s+showEnding/,
+      hint: 'Look back at `showTitle`. Then use `if (won)` and `else` for the two messages.',
     },
     {
       title: 'Click to change state', mins: 4,
-      say: '`mousePressed()` runs once per click. Clicking on any screen other than the game starts a fresh round, using your `resetGame()` from before.',
+      reveal: true,
+      say: '`mousePressed()` runs once per click. When the player clicks on any screen except the game, call `resetGame()` and change the state to `"play"`.',
       code: `function mousePressed() {
   if (gameState !== "play") {
     resetGame();
@@ -429,6 +458,7 @@ lesson({
 }`,
       at: { end: true },
       check: /function\s+mousePressed/,
+      hint: 'Inside `mousePressed`, check `gameState !== "play"`.',
     },
     {
       title: 'Decorate your screens', mins: 3,
@@ -462,7 +492,7 @@ function draw() {
 `,
   steps: [
     {
-      title: 'Search for the best', mins: 8,
+      title: 'Search for the best', mins: 7,
       reveal: true,
       say: 'To find the highest score, walk the list and remember the best one seen so far. This is **linear search**. (The `scores.push` line in your starter adds each number to the end of the list.) Press **Add the starter code**, then finish the TODO. The function returns the **index** of the largest value, starting from a given position.',
       code: `function findBest(start) {
@@ -490,7 +520,7 @@ function draw() {
       ],
     },
     {
-      title: 'Swap two items', mins: 6,
+      title: 'Swap two items', mins: 5,
       say: 'To swap two values you need a temporary spot, just as you would need a spare cup to swap the drinks in two glasses. Add this helper.',
       code: `function swap(a, b) {
   let temp = scores[a];
@@ -501,7 +531,7 @@ function draw() {
       check: /let\s+\w+\s*=\s*\w+\[\s*\w+\s*\]/,
     },
     {
-      title: 'One sorting step', mins: 7,
+      title: 'One sorting step', mins: 6,
       reveal: true,
       say: 'Here is **selection sort**: find the best of what is left, swap it to the front, then repeat from the next position. `sortedUpTo` marks how much of the list is finished. Press **Add the starter code**, then write the three lines that do one step.',
       edits: [
@@ -539,7 +569,7 @@ function sortStep() {
       ],
     },
     {
-      title: 'Watch it run', mins: 5,
+      title: 'Watch it run', mins: 4,
       say: 'Run a step every half second, so you can see each swap. Finished bars turn gold. `frameCount % 30 === 0` is true once every 30 frames.',
       edits: [
         { code: `
@@ -566,7 +596,7 @@ if (i < sortedUpTo) {
       check: /frameCount\s*%/,
     },
     {
-      title: 'Count the work', mins: 5,
+      title: 'Count the work', mins: 4,
       say: 'How much work does sorting take? Add a counter inside the `findBest` loop, and display it. Try 16 bars, then 32, and see how it grows. That growth is called an algorithm\'s **complexity**.',
       edits: [
         { code: 'let comparisons = 0;', at: { after: 'let sortedUpTo = 0;' } },
@@ -580,6 +610,36 @@ if (i < sortedUpTo) {
 comparisons = comparisons + 1;      // inside findBest's loop
 text("Comparisons: " + comparisons, 10, 24);   // in draw()`,
       check: /text\s*\([^)]*\+/,
+    },
+    {
+      title: 'Bug hunt', mins: 5,
+      reveal: true,
+      say: 'Press **Add the starter code**. The total should be a number, but it says `NaN`, which means "not a number". Use `console.log` inside the loop to see the last value. Then fix the loop.',
+      edits: [
+        { code: `function totalScore() {
+  let total = 0;
+  for (let n = 0; n < scores.length; n = n + 1) {
+    total = total + scores[n];
+  }
+  return total;
+}`, at: { end: true } },
+        { code: `  fill(255);
+  text("Total: " + totalScore(), 10, 44);`, at: { endOf: 'function draw' } },
+      ],
+      check: /n\s*<\s*scores\.length/,
+      hint: 'A list of 16 items has positions 0 to 15. What is at position 16?',
+      skeleton: [
+        { code: `function totalScore() {
+  let total = 0;
+  // TODO: Bug hunt! The total says NaN. Add console.log(scores[n]); inside the loop to see why.
+  for (let n = 0; n <= scores.length; n = n + 1) {
+    total = total + scores[n];
+  }
+  return total;
+}`, at: { end: true } },
+        { code: `  fill(255);
+  text("Total: " + totalScore(), 10, 44);`, at: { endOf: 'function draw' } },
+      ],
     },
     {
       title: 'Predict, then test', mins: 4,
@@ -601,7 +661,7 @@ lesson({
       at: { replace: 'text("MY GAME", 200, 160);' },
     },
     {
-      title: 'Add the sparks file', mins: 8,
+      title: 'Add the sparks file', mins: 3,
       say: '**Particles** are tiny objects that burst out, fade, and vanish. The hard part is already written for you, in a file of its own. Press **Add the finished file**. Look at the tabs above your code to find it.',
       provides: { name: 'sparks.js', code: `// A finished helper file. You can use it without changing it.
 // Beyond the Summit, you can learn to write code like this yourself.
@@ -652,7 +712,7 @@ function updateSparks() {
       hint: 'You only need two things from this file: burst(x, y) and updateSparks().',
     },
     {
-      title: 'Burst on a score', mins: 8,
+      title: 'Burst on a score', mins: 3,
       say: 'Your game is different from everyone else\'s, but all of them have a `score`. So we watch it: when it goes up, burst! Add the variable at the top, and the code at the end of `playGame`.',
       edits: [
         { code: 'let lastScore = 0;\n', at: { top: true } },
@@ -676,23 +736,43 @@ updateSparks();`,
       hint: 'Try moving the burst to where the action happens, like an enemy or a coin. Use its position in place of 60, 24.',
     },
     {
-      title: 'Your polish list', mins: 10,
-      say: 'Choose **two** from this list, or invent your own:\n\n- A screen shake when something big happens (try `translate(random(-3, 3), random(-3, 3))`)\n- A best score that lasts between rounds\n- A second sprite for enemies or items\n- Sound: press **Sounds** at the top to add `playSound("coin");` where something happens\n- A "how to play" screen\n- Your own hard level, wave, or map',
+      title: 'Make a plan card', mins: 7,
+      reveal: true,
+      say: 'Your game needs **one new feature** that no lesson showed you. Press **Add the starter code**, then fill in your plan: what it is, what the player does, and which code you will change.',
+      code: `let myPlan = {
+  feature: "A shield that blocks one hit",
+  player: "Press S to turn it on",
+  changes: "A shield variable, a key check, and the place where the player gets hurt",
+};`,
+      at: { top: true },
+      check: [/feature:\s*"(?!TODO)[^"]+"/, /player:\s*"(?!TODO)[^"]+"/, /changes:\s*"(?!TODO)[^"]+"/],
+      hint: 'Pick something small enough to finish today. One good feature beats three broken ones.',
+      skeleton: [
+        { code: `let myPlan = {
+  feature: "TODO: What is your new feature?",
+  player: "TODO: What does the player do to use it?",
+  changes: "TODO: Which variables or functions will you add or change?",
+};`, at: { top: true } },
+      ],
     },
     {
-      title: 'Playtest and fix', mins: 8,
+      title: 'Build your feature', mins: 15,
+      say: 'This is the hardest part of the course, and the best. Nobody is giving you the code, so that is normal. Work in small pieces, and press Run after each one.\n\nStuck for an idea?\n\n- A shield, double jump, or dash\n- A timer that adds pressure\n- A power-up that lasts a few seconds\n- A new enemy, door, or moving hazard\n- A combo that scores more for quick catches\n- Sound: press **Sounds** at the top\n- A screen shake (try `translate(random(-3, 3), random(-3, 3))`)',
+    },
+    {
+      title: 'Playtest and fix', mins: 7,
       say: 'Swap seats with someone from a **different road**. Watch them play without giving hints. Note one thing that confused them, then fix it. Real studios do this constantly.',
     },
     {
-      title: 'Publish!', mins: 4, action: 'share',
+      title: 'Publish!', mins: 3, action: 'share',
       say: 'Press **Share to Arcade** at the top, so your class can play your game. Then submit this lesson, and go play what your classmates built.',
     },
   ],
   stretch: ['Play 3 classmates\' games and tell each of them one thing you liked.', 'Read another road\'s code. What did they do differently?', 'Start a sequel!'],
-  reflect: 'Look back at your first lesson. What are you most proud of? What would you build next?',
+  reflect: 'Look at your plan card. What changed while you built it, and why? What are you most proud of?',
   rubric: [
     { id: 'works', label: 'It runs', levels: ['Crashes or empty', 'Runs with errors', 'Complete game', 'Polished, no bugs found'] },
     { id: 'concept', label: 'Shows learning', levels: ['Few concepts', 'Some concepts', 'Functions, arrays, and classes used well', 'Includes an algorithm of their own'] },
-    { id: 'own', label: 'Own vision', levels: ['Unchanged from lessons', 'Small changes', 'Clear theme and own art', 'Goes well beyond the lessons'] },
+    { id: 'own', label: 'Own feature', levels: ['No new feature', 'Planned, but does not work yet', 'Works and matches the plan', 'Works, and was improved after playtesting'] },
   ],
 });

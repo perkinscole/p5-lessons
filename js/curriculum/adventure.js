@@ -24,10 +24,12 @@ function draw() {
   steps: [
     {
       title: 'A speed variable', mins: 3,
-      say: 'Instead of writing the same number in many places, name it once. Later you will change one number and your whole game will feel different.',
+      reveal: true,
+      say: 'Name a number once, and you can retune your whole game by changing it. Make a variable called `speed` and set it to 3.',
       code: 'let speed = 3;',
       at: { after: 'let playerSize = 30;' },
       check: /let\s+speed/,
+      hint: 'Use `let`, like your other variables.',
     },
     {
       title: 'Walk in four directions', mins: 9,
@@ -51,12 +53,14 @@ function draw() {
     },
     {
       title: 'Stay in the world', mins: 4,
-      say: '`constrain(value, low, high)` keeps a value inside a range. Keep your hero on the map.',
+      reveal: true,
+      say: 'Keep your hero on the map. `constrain(value, low, high)` keeps a number inside a range. Use it on both `playerX` and `playerY`.',
       code: `  playerX = constrain(playerX, 0, width - playerSize);
   playerY = constrain(playerY, 0, height - playerSize);
 `,
       at: { before: '// player' },
       check: /constrain\s*\(/,
+      hint: 'The highest value allowed is `width - playerSize`.',
     },
     {
       title: 'Add a pond', mins: 8,
@@ -89,7 +93,8 @@ lesson({
   steps: [
     {
       title: 'Describe a wall', mins: 4,
-      say: 'A wall is a rectangle, so it needs four numbers. Add them at the top, then draw the wall above the `// player` comment.',
+      reveal: true,
+      say: 'A wall is a rectangle, so it needs four numbers. Make variables named `wallX`, `wallY`, `wallW`, and `wallH`. Then draw the wall above the `// player` comment.',
       edits: [
         { code: 'let wallX = 150;\nlet wallY = 60;\nlet wallW = 40;\nlet wallH = 220;', at: { after: 'let speed = 3;' } },
         { code: `  // wall
@@ -106,6 +111,7 @@ let wallH = 220;
 fill(100, 80, 70);
 rect(wallX, wallY, wallW, wallH);`,
       check: /rect\s*\(\s*wall/,
+      hint: 'Try 150, 60, 40, and 220. Then use all four in one `rect`.',
     },
     {
       title: 'Remember where you were', mins: 5,
@@ -206,7 +212,8 @@ let treasureY = 40;`,
     },
     {
       title: 'Lava pit', mins: 6,
-      say: 'Add a danger that sets `lost`. We use a circle check here because it is a round pit.',
+      reveal: true,
+      say: 'Add a danger: a round lava pit at (100, 200). Use `dist` to set `lost` to `true` when the player touches it.',
       code: `  // lava pit
   fill(230, 80, 30);
   ellipse(100, 200, 60, 60);
@@ -216,10 +223,12 @@ let treasureY = 40;`,
 `,
       at: { before: '// player' },
       check: /lost\s*=\s*true/,
+      hint: 'The pit is 60 wide. Check if `dist` from the player to the pit is under 35.',
     },
     {
       title: 'The treasure', mins: 6,
-      say: 'Place the prize behind the door. Reaching it wins the game, but only if you have the key.',
+      reveal: true,
+      say: 'Draw the prize at `treasureX` and `treasureY`. The player wins only if they have the key **and** they are close to the prize.',
       code: `  // treasure
   fill(255, 240, 120);
   rect(treasureX - 12, treasureY - 10, 24, 20);
@@ -229,10 +238,12 @@ let treasureY = 40;`,
 `,
       at: { before: '// player' },
       check: /won\s*=\s*true/,
+      hint: 'Join `hasKey` and a `dist` check with `&&`. Under 30 counts as close.',
     },
     {
       title: 'Show what happened', mins: 6,
-      say: 'Add a score and end messages at the end of `draw()`. Then playtest it: try to win without the key.',
+      reveal: true,
+      say: 'Press **Add the starter code** to show the score. Finish the TODOs, so the game says when the player wins or loses. Then try to win without the key.',
       code: `
   // score and messages
   fill(255);
@@ -249,6 +260,18 @@ let treasureY = 40;`,
   }`,
       at: { endOf: 'function draw' },
       check: /if\s*\(\s*(?:won|lost)/,
+      hint: 'Write `if (won) {`, then use `text` inside it.',
+      skeleton: [
+        { code: `
+  // score and messages
+  fill(255);
+  textSize(18);
+  text("Score: " + score, 10, 24);
+  // TODO: If won is true, show a winning message with text().
+
+  // TODO: If lost is true, show a losing message.
+`, at: { endOf: 'function draw' } },
+      ],
     },
   ],
   stretch: ['Add a second key and a second door.', 'Make the lava pulse in size using `sin(frameCount * 0.05)`.', 'Make the key float and glint.'],

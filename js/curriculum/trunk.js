@@ -314,11 +314,11 @@ function draw() {
 `,
   steps: [
     {
-      title: 'Spot the problem', mins: 3,
+      title: 'Spot the problem', mins: 2,
       say: 'Run it. The ball leaves forever. To stop that, the code has to ask a question every frame: **has the ball passed the wall?**',
     },
     {
-      title: 'Bounce off the right wall', mins: 8,
+      title: 'Bounce off the right wall', mins: 7,
       say: 'If the ball is past the right edge, flip its direction. Multiplying speed by `-1` turns 3 into -3, which moves it left. `width` is the canvas width, provided by p5.',
       code: `
   if (ballX > width) {
@@ -328,7 +328,7 @@ function draw() {
       check: /if\s*\([^)]*>[^)]*\)/,
     },
     {
-      title: 'All four walls', mins: 8,
+      title: 'All four walls', mins: 7,
       say: 'Now do the other walls yourself. You need **four** checks in all. `<` means less than, and `height` is the canvas height. Remember the top of the canvas is `y = 0`.',
       reveal: true,
       code: `  if (ballX < 0) {
@@ -353,7 +353,7 @@ function draw() {
       hint: 'Your ball might be a different size. Use half of its width.',
     },
     {
-      title: 'Change color when it bounces', mins: 6,
+      title: 'Change color when it bounces', mins: 5,
       say: 'A condition can do anything, not just flip the speed. Make the ball change color on the bottom half of the canvas. **else** handles the other case:',
       code: `  if (ballY > height / 2) {
     fill(255, 100, 120);
@@ -364,7 +364,7 @@ function draw() {
       check: /\belse\b/,
     },
     {
-      title: 'Add a bounce counter', mins: 6,
+      title: 'Add a bounce counter', mins: 5,
       say: 'Add a variable that counts bounces off the right wall, and show it with `text`. Inside your if, add 1 to it. This is the same trick every score in every game uses.',
       reveal: true,
       edits: [
@@ -382,6 +382,32 @@ bounces = bounces + 1;   // inside your if
 text("Bounces: " + bounces, 10, 26);   // in draw()`,
       check: /text\s*\([^)]*\+/,
       hint: 'Use "Bounces: " + yourVariable as the text.',
+    },
+    {
+      title: 'Bug hunt', mins: 5,
+      reveal: true,
+      say: 'Press **Add the starter code**. It has a bug: the square should turn red when the mouse is on the right half of the canvas. Find the wrong number and fix it.',
+      code: `
+  // mouse side light
+  if (mouseX > 200) {
+    fill(220, 60, 60);
+  } else {
+    fill(60, 120, 220);
+  }
+  rect(10, 40, 30, 30);`,
+      at: { endOf: 'function draw' },
+      check: /mouseX\s*>\s*(?:200|width\s*\/\s*2)/,
+      hint: 'The canvas is 400 wide. Where is its middle?',
+      skeleton: [
+        { code: `
+  // TODO: Bug hunt! This square should turn red on the right half of the canvas. It never does.
+  if (mouseX > 600) {
+    fill(220, 60, 60);
+  } else {
+    fill(60, 120, 220);
+  }
+  rect(10, 40, 30, 30);`, at: { endOf: 'function draw' } },
+      ],
     },
   ],
   stretch: ['Speed the ball up a little on every bounce.', 'Add a second ball with its own four variables.', 'Make the ball bounce off a paddle at your mouse.'],
@@ -416,7 +442,7 @@ function draw() {
 `,
   steps: [
     {
-      title: 'Send another star', mins: 5,
+      title: 'Send another star', mins: 4,
       say: 'Only one star falls, and then nothing. When it passes the bottom, put it back at the top in a **random** spot. `random(a, b)` gives a number between a and b.',
       code: `
   if (starY > height) {
@@ -442,7 +468,7 @@ text("Score: " + score, 10, 28);    // in draw()`,
       check: /text\s*\([^)]*\+/,
     },
     {
-      title: 'Did we catch it?', mins: 11,
+      title: 'Did we catch it?', mins: 9,
       say: 'This is **collision detection**, one of the most important ideas in games. A catch means *all* of these are true: the star is low enough, **and** it is right of the basket\'s left side, **and** it is left of the right side.\n\n`&&` means **and**: every part must be true.',
       code: `
   if (starY > 350 && starX > basketX - 40 && starX < basketX + 40) {
@@ -455,7 +481,7 @@ text("Score: " + score, 10, 28);    // in draw()`,
       hint: 'Put && between each of the three comparisons.',
     },
     {
-      title: 'Add lives', mins: 7,
+      title: 'Add lives', mins: 6,
       say: 'A missed star should cost something. Add `lives`, subtract one in the "passed the bottom" check, and display it.',
       edits: [
         { code: 'let lives = 3;', at: { after: 'let score = 0;' } },
@@ -468,7 +494,7 @@ text("Lives: " + lives, 300, 28);`,
       check: /(\w+)\s*(?:=\s*\1\s*-|-=|--)/,
     },
     {
-      title: 'Game over', mins: 6,
+      title: 'Game over', mins: 5,
       say: 'The round should end when lives run out **or** when the player reaches 20 points. `||` means **or**: the condition is true if either side is true. `noLoop()` stops `draw()` from repeating. Add this at the end of `draw()`:',
       code: `
   if (lives <= 0 || score >= 20) {
@@ -494,6 +520,27 @@ starY = starY + fallSpeed;        // instead of + 4
 fallSpeed = fallSpeed + 0.3;      // on each catch`,
       check: /\w+\s*(?:=\s*\w+\s*\+\s*\d*\.\d+|\+=\s*\d*\.\d+)|fallSpeed/i,
       hint: 'Create a variable for the speed, then add a small amount to it inside the catch check.',
+    },
+    {
+      title: 'Bug hunt', mins: 5,
+      reveal: true,
+      say: 'Press **Add the starter code**, then catch some stars. Your score gets stuck! Add `console.log(score);` above the bug to watch the number below your game. One `=` **sets** a value, and `===` **compares** two values. Fix the `if`.',
+      code: `
+  // halfway message
+  if (score === 5) {
+    text("Halfway!", 160, 60);
+  }`,
+      at: { endOf: 'function draw' },
+      check: /score\s*(?:===|==|>=)\s*5/,
+      hint: 'Look at what is between `score` and `5` in the `if`.',
+      skeleton: [
+        { code: `
+  // halfway message
+  // TODO: Bug hunt! Catch a star and watch your score get stuck. Fix the if.
+  if (score = 5) {
+    text("Halfway!", 160, 60);
+  }`, at: { endOf: 'function draw' } },
+      ],
     },
   ],
   stretch: ['Add a bad star (a different color) that costs a life when you catch it.', 'Let players restart: look up `keyPressed()` and `loop()`.', 'Keep and show a best score.'],

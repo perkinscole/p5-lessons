@@ -45,14 +45,17 @@ function draw() {
     },
     {
       title: 'Remember if you can jump', mins: 4,
-      say: 'Soon the player will need to know whether they are standing on something. Add a variable that holds a **boolean**, which can only be `true` or `false`. Booleans are perfect for yes-or-no questions.',
+      reveal: true,
+      say: 'Soon the player needs to know whether they are standing on something. Make a variable called `onGround` that starts as `false`. A **boolean** can only be `true` or `false`.',
       code: 'let onGround = false;',
       at: { after: 'let gravity = 0.6;' },
       check: /let\s+onGround|let\s+\w+\s*=\s*(?:true|false)/,
+      hint: 'Use `let`, like your other variables, with the value `false`.',
     },
     {
       title: 'Land on the ground', mins: 8,
-      say: 'The player falls straight through the floor. The ground starts at `y = 360`, and the player\'s feet are at `playerY + playerSize`. If the feet go below the ground, put them back on top and stop falling.',
+      reveal: true,
+      say: 'The player falls straight through the floor. The ground starts at `y = 360`, and the feet are at `playerY + playerSize`. If the feet pass the ground, put the player back on top, stop the fall, and set `onGround` to `true`.',
       code: `
   // landing on the ground
   if (playerY + playerSize > 360) {
@@ -62,6 +65,7 @@ function draw() {
   }`,
       at: { after: 'playerY = playerY + playerVY;' },
       check: /if\s*\([^)]*playerSize[^)]*>/,
+      hint: 'Inside an `if`, set `playerY` to `360 - playerSize`, and set `playerVY` to 0.',
     },
     {
       title: 'Jump!', mins: 7,
@@ -105,14 +109,17 @@ lesson({
     },
     {
       title: 'Stay on the screen', mins: 4,
-      say: '`constrain(value, low, high)` keeps a number inside a range. Add it after your running code.',
+      reveal: true,
+      say: 'Keep the player on the screen. `constrain(value, low, high)` keeps a number inside a range. Use it on `playerX`, after your running code.',
       code: '  playerX = constrain(playerX, 0, width - playerSize);\n',
       at: { before: '// physics' },
       check: /constrain\s*\(/,
+      hint: 'The highest `playerX` allowed is `width - playerSize`.',
     },
     {
       title: 'Describe a platform', mins: 5,
-      say: 'A platform is a rectangle, so it needs four numbers. Add these variables, then draw it just after the ground.',
+      reveal: true,
+      say: 'A platform is a rectangle, so it needs four numbers. Make variables named `platX`, `platY`, `platW`, and `platH`. Then draw it just after the ground.',
       edits: [
         { code: 'let platX = 220;\nlet platY = 260;\nlet platW = 120;\nlet platH = 20;', at: { after: 'let onGround = false;' } },
         { code: `
@@ -129,6 +136,7 @@ let platH = 20;
 fill(140, 90, 50);
 rect(platX, platY, platW, platH);`,
       check: /rect\s*\(\s*plat/,
+      hint: 'Try 220, 260, 120, and 20. Then use all four in one `rect`.',
     },
     {
       title: 'Airborne by default', mins: 3,
@@ -215,7 +223,8 @@ let goalX = 360;`,
     },
     {
       title: 'Plant the flag', mins: 7,
-      say: 'The flag only counts once the coin is taken, so players have to climb the platform first.',
+      reveal: true,
+      say: 'Draw a flag at `goalX`. The player wins only if the coin is taken **and** the player has reached the flag. Set `won` to `true` when both happen.',
       code: `  // goal flag
   fill(60);
   rect(goalX, 280, 6, 80);
@@ -227,10 +236,12 @@ let goalX = 360;`,
 `,
       at: { before: '// player' },
       check: /won\s*=\s*true/,
+      hint: 'Join two conditions with `&&`: `coinTaken` and `playerX + playerSize > goalX`.',
     },
     {
       title: 'Show what happened', mins: 6,
-      say: 'Add a score display and end messages at the very end of `draw()`.',
+      reveal: true,
+      say: 'Press **Add the starter code** to show the score. Then finish the TODOs, so the game says when the player wins or loses.',
       code: `
   // score and messages
   fill(0);
@@ -244,6 +255,18 @@ let goalX = 360;`,
   }`,
       at: { endOf: 'function draw' },
       check: /if\s*\(\s*(?:won|lost)/,
+      hint: 'Write `if (won) {`, then use `text` inside it.',
+      skeleton: [
+        { code: `
+  // score and messages
+  fill(0);
+  textSize(18);
+  text("Score: " + score, 10, 24);
+  // TODO: If won is true, show a winning message with text().
+
+  // TODO: If lost is true, show a losing message.
+`, at: { endOf: 'function draw' } },
+      ],
     },
     {
       title: 'Playtest your level', mins: 5,

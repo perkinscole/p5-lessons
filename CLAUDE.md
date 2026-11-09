@@ -66,7 +66,7 @@ A new lesson needs entries beyond its own definition, and the tests enforce all 
 
 - Step `mins` must add up to the lesson's `mins`.
 - `alignment.js` needs an entry with standards and evidence.
-- `checks.js` needs at least two questions, 18 words or fewer each.
+- `checks.js` needs at least two questions, 18 words or fewer each, and at least one that shows code to read. `review.js` reuses those code questions as warm-ups in later lessons, so they must stand on their own.
 - Each step's instruction must be 26 words or fewer. `briefOf` picks it automatically from `say`. To set one by hand, add it to `briefs.js`.
 - A `reveal: true` step hides its code, so `say` must state a goal and can't point at the code. Its `check` must fail before the student has done the step. Beware of checks that an earlier lesson's code already satisfies.
 - A `skeleton` must be valid code containing `TODO`s, and its step's check must fail until those are finished.

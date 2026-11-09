@@ -54,12 +54,14 @@ function draw() {
     },
     {
       title: 'Stay in the arena', mins: 3,
-      say: '`constrain(value, low, high)` keeps a value inside a range.',
+      reveal: true,
+      say: 'Keep the player in the arena. `constrain(value, low, high)` keeps a number inside a range. Use it on both `playerX` and `playerY`.',
       code: `  playerX = constrain(playerX, 0, width - playerSize);
   playerY = constrain(playerY, 0, height - playerSize);
 `,
       at: { before: '// player' },
       check: /constrain\s*\(/,
+      hint: 'The highest value allowed is `width - playerSize`.',
     },
     {
       title: 'Write the bot\'s rules', mins: 10,
@@ -132,7 +134,8 @@ let coinY = 120;`,
     },
     {
       title: 'Getting caught', mins: 6,
-      say: 'If the bot gets close enough, the player loses. Add this above `// player`.',
+      reveal: true,
+      say: 'Use `dist` to set `lost` to `true` when the bot is closer than 28 to the player.',
       code: `  // caught?
   if (dist(playerX, playerY, botX, botY) < 28) {
     lost = true;
@@ -140,10 +143,12 @@ let coinY = 120;`,
 `,
       at: { before: '// player' },
       check: /lost\s*=\s*true/,
+      hint: '`dist` takes both spots: `playerX, playerY, botX, botY`.',
     },
     {
       title: 'Winning and the score', mins: 7,
-      say: 'You win at 100 points. Add this at the very end of `draw()`.',
+      reveal: true,
+      say: 'Press **Add the starter code** to show the score. Then finish the TODOs: winning takes 100 points, and the game should say when the player wins or loses.',
       code: `
   if (score >= 100) {
     won = true;
@@ -161,6 +166,20 @@ let coinY = 120;`,
   }`,
       at: { endOf: 'function draw' },
       check: /won\s*=\s*true/,
+      hint: 'Write `if (score >= 100) {`, then set `won` to `true` inside it.',
+      skeleton: [
+        { code: `
+  // TODO: If score is at least 100, set won to true.
+
+  // score and messages
+  fill(255);
+  textSize(18);
+  text("Score: " + score, 10, 24);
+  // TODO: If won is true, show a winning message with text().
+
+  // TODO: If lost is true, show a losing message.
+`, at: { endOf: 'function draw' } },
+      ],
     },
     {
       title: 'Playtest for fairness', mins: 9,
@@ -218,7 +237,8 @@ function startModel(url) {
     },
     {
       title: 'Steer with your model', mins: 7,
-      say: 'The model\'s answer is just text in `label`, so your code can treat it like any other input. Change all four conditions so a key **or** the model can move the player.',
+      reveal: true,
+      say: 'The model\'s answer is just text in `label`, so your code can treat it like any other input. Make each arrow check also work when `label` names that direction.',
       edits: [
         { code: 'if (keyIsDown(LEFT_ARROW) || label === "left") {', at: { replace: 'if (keyIsDown(LEFT_ARROW)) {' } },
         { code: 'if (keyIsDown(RIGHT_ARROW) || label === "right") {', at: { replace: 'if (keyIsDown(RIGHT_ARROW)) {' } },
@@ -231,7 +251,7 @@ if (keyIsDown(RIGHT_ARROW) || label === "right") {
 if (keyIsDown(UP_ARROW) || label === "up") {
 if (keyIsDown(DOWN_ARROW) || label === "down") {`,
       check: /(?:\|\|\s*label\s*===?[\s\S]*){4,}/,
-      hint: 'Your class names must match exactly, including lowercase letters.',
+      hint: '`||` means **or**. Try `keyIsDown(LEFT_ARROW) || label === "left"`.',
     },
     {
       title: 'Show what the model sees', mins: 3,
