@@ -105,10 +105,9 @@ export async function viewLesson(main, id, previewPath) {
   let startFiles = {};
 
   if (isStudent) {
-    me = await loadMe();
+    [me, team] = await Promise.all([loadMe(), app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {})]);
     path = me.student.path;
     const roadOrder = sequence(path);
-    team = await app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {});
     if (team) {
       // The teacher put this student in a group for this lesson, so it is open to them.
     } else if (isSideTrail(id)) {

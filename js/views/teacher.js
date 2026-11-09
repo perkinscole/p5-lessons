@@ -14,8 +14,7 @@ import { groupsTab, sendGradesTab, teamPanel } from './groups.js';
 import { badgeChip } from './student.js';
 
 export async function viewTeacherHome() {
-  const classes = await app.store.listClasses();
-  const alerts = app.store.alertSummary ? await app.store.alertSummary() : {};
+  const [classes, alerts] = await Promise.all([app.store.listClasses(), app.store.alertSummary ? app.store.alertSummary() : {}]);
   const name = h('input', { required: true, maxlength: 80, placeholder: 'Period 3: Game Design', 'aria-label': 'New class name' });
   return h('div.stack',
     h('div.row.between', h('h1', 'Your classes'), app.store.hasClassroom && h('button.btn', { onclick: () => openImport(render) }, 'Import from Google Classroom')),
@@ -221,12 +220,12 @@ function journeyTab(board, cls) {
 
 export async function viewClass(main, classId, tabParam) {
   const tab = tabParam || 'journey';
-  const cls = await app.store.getClass(classId);
+  // Asked for together, so they travel to the server as one trip.
+  const [cls, students, board, works, alerts] = await Promise.all([app.store.getClass(classId), app.store.listStudents(classId), app.store.classBoard(classId), app.store.classWork(classId),
+    app.store.classAlerts ? app.store.classAlerts(classId, false) : { students: [] }]);
   if (!cls) throw new Error('That class was not found.');
-  const [students, board, works] = await Promise.all([app.store.listStudents(classId), app.store.classBoard(classId), app.store.classWork(classId)]);
   const waiting = works.filter((w) => w.status === 'submitted').length;
   const link = (id, label) => h('a.tab', { href: `#/class/${classId}/${id}`, role: 'tab', 'aria-selected': tab === id ? 'true' : 'false' }, label);
-  const alerts = app.store.classAlerts ? await app.store.classAlerts(classId, false) : { students: [] };
   const needing = alerts.students.filter((s) => s.level !== 'ok').length;
   const content = tab === 'roster' ? rosterTab(cls, students, board, render)
     : tab === 'grades' ? gradebookTab(cls, students, works)

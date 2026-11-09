@@ -11,10 +11,12 @@ export class SessionEnded extends Error {}
 
 /** Everything a student screen needs about the signed-in student. */
 export async function loadMe() {
-  await refreshSession();
+  // Start everything at once using the class we already know, so it all travels as one trip.
+  const known = app.session?.class?.id;
+  const [, works, knownBoard] = await Promise.all([refreshSession(), app.store.myWorks(), known ? app.store.classBoard(known) : null]);
   if (app.session?.role !== 'student') throw new SessionEnded();
   const { student, class: cls } = app.session;
-  const [works, board] = await Promise.all([app.store.myWorks(), app.store.classBoard(cls.id)]);
+  const board = known === cls.id ? knownBoard : await app.store.classBoard(cls.id);
   const row = board.find((b) => b.id === student.id) || { works: [], awards: [] };
   const done = new Set(works.filter(isDone).map((w) => w.lesson_id));
   return { student, cls, works, board, row, done, stats: statsFor({ ...row, path: student.path }) };

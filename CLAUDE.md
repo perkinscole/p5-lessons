@@ -40,7 +40,7 @@ Plain ES modules with no framework. `index.html` runs them directly in demo mode
 
 ### Two data stores, one interface
 
-`js/main.js` uses `js/data/appsscript.js` when `window.google.script` exists, and `js/data/local.js` otherwise. Any new data operation must be added to both, and to the `METHODS` list in `appsscript.js`.
+`js/main.js` uses `js/data/appsscript.js` when `window.google.script` exists, and `js/data/local.js` otherwise. Any new data operation must be added to both, and to the `METHODS` list in `appsscript.js`. Each trip to Apps Script costs about a second, so `appsscript.js` sends calls made at the same moment as one `batch` and reuses read-only answers for 15 seconds. A new read-only method goes in `READS`; any other call clears that cache. Views should start all their calls together with `Promise.all`.
 
 `gas/Code.gs` is the real server:
 

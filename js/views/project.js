@@ -129,10 +129,10 @@ function openSetup(plan, lessons, onSave) {
 }
 
 export async function viewProject(main, classId) {
-  const cls = await app.store.getClass(classId);
+  const [cls, firstBoard, savedPlan] = await Promise.all([app.store.getClass(classId), app.store.classBoard(classId), app.store.getClassPlan(classId)]);
   if (!cls) throw new Error('That class was not found.');
-  let board = await app.store.classBoard(classId);
-  let plan = currentPlan(await app.store.getClassPlan(classId));
+  let board = firstBoard;
+  let plan = currentPlan(savedPlan);
 
   const clock = h('div.pj-clock', { 'aria-live': 'off' });
   const panels = h('div.pj-panels');

@@ -566,3 +566,18 @@ test('Apps Script gets no large inline JavaScript to rewrite', () => {
     }
   }
 });
+
+test('a batch follows the same access rules as single calls', () => {
+  const { server, cls, ids } = setup();
+  const r = server.raw(ARI, 'batch', [[['myWorks', []], ['classWork', [cls.id]], ['getWorkFull', [ids.bea]], ['batch', [[]]], ['session', []]]]);
+  assert.equal(r.ok, true);
+  const [mine, classWork, other, nested, session] = r.data;
+  assert.equal(mine.ok, true);
+  assert.equal(classWork.ok, false);
+  assert.equal(other.ok, false);
+  assert.equal(nested.ok, false);
+  assert.equal(session.data.role, 'student');
+  assert.equal(server.raw(ARI, 'batch', [Array.from({ length: 13 }, () => ['myWorks', []])]).ok, false);
+  assert.equal(server.raw(STRANGER, 'batch', [[['myWorks', []]]]).data[0].ok, false);
+  assert.ok(!JSON.stringify(r).includes('BEA'));
+});

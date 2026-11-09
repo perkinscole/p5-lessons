@@ -63,13 +63,35 @@ function api(method, argsJson) {
   try {
     const me = whoAmI_();
     const routes = me.role === 'teacher' ? TEACHER_ROUTES : me.role === 'student' ? STUDENT_ROUTES : {};
-    if (method === 'session') return reply_(sessionFor_(me));
-    if (!Object.prototype.hasOwnProperty.call(routes, method)) throw new Error('You do not have access to that.');
-    return reply_(routes[method](me, ...JSON.parse(argsJson || '[]')));
+    if (method === 'batch') return reply_(runBatch_(me, routes, JSON.parse(argsJson || '[]')[0]));
+    return reply_(route_(me, routes, method, JSON.parse(argsJson || '[]')));
   } catch (e) {
     console.error(`${method}: ${e && e.stack}`);
     return JSON.stringify({ ok: false, error: String((e && e.message) || e) });
   }
+}
+
+function route_(me, routes, method, args) {
+  if (method === 'session') return sessionFor_(me);
+  if (!Object.prototype.hasOwnProperty.call(routes, method)) throw new Error('You do not have access to that.');
+  if (!Array.isArray(args)) throw new Error('Bad request.');
+  return routes[method](me, ...args);
+}
+
+/** Several calls in one trip, since each trip costs about a second. Each still goes through route_. */
+function runBatch_(me, routes, calls) {
+  if (!Array.isArray(calls) || calls.length > 12) throw new Error('Too many requests at once.');
+  return calls.map((c) => {
+    const method = Array.isArray(c) ? String(c[0]) : '';
+    try {
+      if (method === 'batch') throw new Error('You do not have access to that.');
+      const data = route_(me, routes, method, c[1]);
+      return { ok: true, data: data === undefined ? null : data };
+    } catch (e) {
+      console.error(`${method}: ${e && e.stack}`);
+      return { ok: false, error: String((e && e.message) || e) };
+    }
+  });
 }
 
 const reply_ = (data) => JSON.stringify({ ok: true, data: data === undefined ? null : data });
