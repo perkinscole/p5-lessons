@@ -21,6 +21,7 @@ const BRIEFS = {
   'm2/Winning and the score': 'Press **Add the starter code**, then finish the TODOs. Winning takes 100 points.',
   'c4/An ending screen': 'Write a function called `showEnding` with a win or lose message and the score.',
   't2/Make it yours': 'Add at least **two new features**, and make this monster your own.',
+  't1/How a line of code is built': 'Look at line 6. Find its parts: the **name**, the `( )`, the **commas**, and the `;` at the end.',
   't3/Why draw() matters': '`setup()` runs once. `draw()` runs 60 times a second. Press Run and watch.',
   't5/Bounce off the right wall': 'Flip the direction when the ball passes the right wall.',
   't5/All four walls': 'Write the other three wall checks yourself.',

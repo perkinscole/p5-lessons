@@ -2,7 +2,7 @@
 import { lesson } from './engine.js';
 
 lesson({
-  id: 't1', title: 'Hello, Canvas', mins: 35, concepts: ['coordinates', 'function calls', 'color'],
+  id: 't1', title: 'Hello, Canvas', mins: 40, concepts: ['coordinates', 'function calls', 'color'],
   hook: 'Every game you have ever played is a grid of tiny dots. Today you learn to tell the computer exactly where to put them, and you draw your first scene.',
   starter: `function setup() {
   createCanvas(400, 400);
@@ -16,6 +16,16 @@ function draw() {
     {
       title: 'Meet the grid', mins: 5,
       say: 'Press **Run**. The blue square is your **canvas**, 400 dots wide and 400 tall.\n\nPositions are written `(x, y)`. `x` counts dots from the left. `y` counts dots from the **top**, so bigger `y` means lower down. Most people expect the opposite, so keep this one in mind.',
+    },
+    {
+      title: 'How a line of code is built', mins: 5,
+      say: 'Every drawing line is built the same way: a **name**, then `( )` holding numbers split by **commas**, then a `;` to end it.\n\nCode between `{` and `}` belongs to the function just above it, so `background` belongs to `draw()`. Every `{` needs a `}`, and every `(` needs a `)`. The lines inside are pushed in with spaces so you can see what belongs where.\n\nComputers are picky about these marks. One missing comma or bracket, and nothing runs.',
+      show: `background(135, 206, 235);
+
+background  the name
+( )         hold numbers
+,           between numbers
+;           ends the line`,
     },
     {
       title: 'Add a sun', mins: 5,
@@ -162,7 +172,7 @@ function draw() {
     },
     {
       title: 'Create a variable', mins: 6,
-      say: 'A **variable** is a labeled box that holds a value. Put this at the very top, **outside** any function, so it survives between frames:',
+      say: 'A **variable** is a labeled box that holds a value. `let` makes a new box, `saucerX` is its name, `=` puts a value in it, and `;` ends the line. Put this at the very top, **outside** any function, so it survives between frames:',
       code: 'let saucerX = 50;\n',
       at: { top: true },
       check: /\blet\s+\w+\s*=/,
@@ -256,7 +266,7 @@ ellipse(mouseX + 20, mouseY - 10, 30, 30);`,
     },
     {
       title: 'Check the mouse with if', mins: 7,
-      say: 'Time for your first **if**. The code inside the braces runs only when the condition is true. `mouseIsPressed` is true while the button is held down. Add this so the creature opens its mouth on a click:',
+      say: 'Time for your first **if**. The question goes in the `( )` right after `if`. The code inside the `{ }` runs only when the answer is true. `mouseIsPressed` is true while the button is held down. Add this so the creature opens its mouth on a click:',
       code: `
   if (mouseIsPressed) {
     fill(60, 20, 20);

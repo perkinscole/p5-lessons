@@ -4,9 +4,11 @@ const Q = (after, q, options, answer, why, code) => ({ after, q, options, answer
 
 export const CHECKS = {
   t1: [
-    Q(2, 'Where does this square appear?', ['Bottom right', 'Top left', 'Center'], 1, 'x and y both start at 0, the top left corner.', 'rect(0, 0, 50, 50);'),
-    Q(1, 'Which way does a bigger `y` move a shape?', ['Up', 'Down', 'Right'], 1, 'y counts down from the top.'),
-    Q(3, 'Where does a `rect` start drawing?', ['Its center', 'Its bottom edge', 'Its top-left corner'], 2, 'x and y are the top-left corner.'),
+    Q(1, 'What goes between the numbers inside the parentheses?', ['A semicolon', 'A comma', 'Nothing'], 1, 'Commas split the numbers. A semicolon ends the line.', 'ellipse(340, 60, 70, 70);'),
+    Q(1, 'Which mark is missing from this line?', ['A comma', 'A )', 'A ;'], 1, 'Every ( needs a matching ).', 'rect(0, 320, 400, 80;'),
+    Q(3, 'Where does this square appear?', ['Bottom right', 'Top left', 'Center'], 1, 'x and y both start at 0, the top left corner.', 'rect(0, 0, 50, 50);'),
+    Q(2, 'Which way does a bigger `y` move a shape?', ['Up', 'Down', 'Right'], 1, 'y counts down from the top.'),
+    Q(4, 'Where does a `rect` start drawing?', ['Its center', 'Its bottom edge', 'Its top-left corner'], 2, 'x and y are the top-left corner.'),
   ],
   t2: [
     Q(1, 'What color is this square?', ['Green', 'Blue', 'Red'], 2, 'The first number in fill is red.', 'fill(255, 0, 0);\nrect(10, 10, 20, 20);'),
@@ -15,11 +17,13 @@ export const CHECKS = {
   ],
   t3: [
     Q(0, 'How often does `draw()` run?', ['Once', 'Only when you click', 'About 60 times a second'], 2, 'setup() runs once. draw() keeps repeating.'),
+    Q(1, 'In this line, what is the variable\'s name?', ['let', 'score', '0'], 1, '`let` makes the box, `score` names it, and 0 goes in it.', 'let score = 0;'),
     Q(3, 'After this runs, what is `x`?', ['7', '5', '2'], 0, '= means "becomes." x becomes 5 + 2.', 'let x = 5;\nx = x + 2;'),
   ],
   t4: [
     Q(1, 'The mouse is at x = 100. Where is this circle?', ['x = 100', 'x = 120', 'x = 80'], 1, 'The computer works out 100 + 20.', 'ellipse(mouseX + 20, 200, 30, 30);'),
     Q(2, 'When does this code run?', ['All the time', 'Only while the mouse is pressed', 'Only once'], 1, 'if runs its code only when the condition is true.', 'if (mouseIsPressed) {\n  fill(0);\n}'),
+    Q(2, 'What is wrong with this code?', ['Nothing', 'The { is never closed', 'It needs a comma'], 1, 'Every { needs a matching }.', 'if (mouseX > 200) {\n  fill(255, 0, 0);'),
   ],
   t5: [
     Q(1, 'If `speedX` is 3, what is it after this line?', ['3', '0', '-3'], 2, 'Multiplying by -1 flips the direction.', 'speedX = speedX * -1;'),
