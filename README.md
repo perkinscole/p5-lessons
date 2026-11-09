@@ -107,7 +107,7 @@ In a lesson, students can add up to 8 extra code files and upload images, using 
 
 ## Projecting a class
 
-On a class page, press **Project this class** for a display to leave up during student-led work. It shows where everyone is on the trail, what to work on, the question of the day, time left, recent achievements, and the day's standards for visitors and administrators. **Set up today** lets you type your own items. Anything left blank fills in from where students are, and a blank question comes from the lesson check questions. It never shows scores or feedback.
+On a class page, press **Project this class** for a display to leave up during student-led work. It shows where everyone is on the trail, what to work on, the question of the day, time left, recent achievements, and the day's standards for visitors and administrators. **Set up today** lets you type your own items. Anything left blank fills in from where students are, and a blank question is the big question for the lesson most students are on, about why the day's idea matters. It never shows scores or feedback.
 
 ## Grading and points
 

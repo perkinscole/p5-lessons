@@ -1,12 +1,12 @@
 // The class display: what a teacher projects during student-led work time.
 // Everything here is safe to show the room: no scores, feedback, or emails.
-import { h, clear, md, modal, toast, attempt } from '../ui.js';
+import { h, clear, modal, toast, attempt } from '../ui.js';
 import { app, go } from '../main.js';
 import { readButton } from '../settings.js';
 import { getLesson } from '../curriculum/engine.js';
 import { PATHS, STAGES, stageOf, isSideTrail } from '../curriculum/graph.js';
 import { alignmentFor, coverage, standardByCode } from '../curriculum/alignment.js';
-import { checksFor } from '../curriculum/checks.js';
+import { bigQuestionFor } from '../curriculum/big.js';
 import { recentAchievements } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { stageSceneStyle } from '../game/world.js';
@@ -28,14 +28,10 @@ export function lessonsInUse(board) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ id, n }));
 }
 
-function dayNumber() {
-  return Math.floor(Date.now() / 86400000);
-}
-
-/** A check question from whatever most of the class is working on, stable for the day. */
+/** The big question of the lesson most of the class is on: what today is really about. */
 function suggestedQuestion(lessons) {
-  const pool = lessons.slice(0, 3).flatMap(({ id }) => checksFor(id));
-  return pool.length ? pool[dayNumber() % pool.length] : null;
+  for (const { id } of lessons) if (bigQuestionFor(id)) return { q: bigQuestionFor(id), id };
+  return null;
 }
 
 function autoStandards(lessons) {
@@ -137,7 +133,6 @@ export async function viewProject(main, classId) {
   if (!cls) throw new Error('That class was not found.');
   let board = await app.store.classBoard(classId);
   let plan = currentPlan(await app.store.getClassPlan(classId));
-  let showAnswer = false;
 
   const clock = h('div.pj-clock', { 'aria-live': 'off' });
   const panels = h('div.pj-panels');
@@ -188,16 +183,11 @@ export async function viewProject(main, classId) {
   function questionPanel(lessons) {
     const bank = plan.question ? null : suggestedQuestion(lessons);
     return h('section.pj-panel.pj-question',
-      h('div.read-row', h('h2', 'Question of the day'), readButton(() => (plan.question || (bank ? `${bank.q} ${bank.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}` : '')))),
+      h('div.read-row', h('h2', 'Question of the day'), readButton(() => plan.question || (bank ? bank.q : ''))),
       plan.question
         ? h('p.pj-q', plan.question)
         : bank
-          ? [
-            h('div.pj-q', md(bank.q)),
-            bank.code && h('pre.snippet.pj-code', h('code', bank.code)),
-            h('ol.pj-options', { type: 'A' }, bank.options.map((o, i) => h('li', { class: showAnswer && i === bank.answer ? 'right' : '' }, md(o)))),
-            h('button.pj-reveal', { onclick: () => { showAnswer = !showAnswer; draw(); } }, showAnswer ? 'Hide answer' : 'Show answer'),
-          ]
+          ? [h('p.pj-q', bank.q), h('p.pj-from', getLesson(bank.id).title)]
           : h('p.pj-empty', 'Set a question for today.'),
     );
   }

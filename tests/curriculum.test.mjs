@@ -464,3 +464,13 @@ test('stripComments ignores commented code but keeps strings', () => {
   assert.equal(stripComments('"// keep"'), '"// keep"');
   assert.equal(stripComments('x /* gone */ y'), 'x  y');
 });
+
+test('every lesson has a short big question for the class display', async () => {
+  const { BIG_QUESTIONS } = await import('../js/curriculum/big.js');
+  for (const l of allLessons()) {
+    const q = BIG_QUESTIONS[l.id];
+    assert.ok(q, `${l.id} needs a big question in big.js`);
+    assert.match(q, /\?$/, `${l.id}: a big question ends with a question mark`);
+    assert.ok(q.split(/\s+/).length <= 18, `${l.id}: big question is over 18 words`);
+  }
+});
