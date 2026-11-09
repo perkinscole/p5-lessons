@@ -81,7 +81,7 @@ function draw() {
       reveal: true,
       code: `  // my extra rule
   if (dist(botX, botY, playerX, playerY) < 100) {
-    botSpeed = 2.5;
+    botSpeed = 2;
   } else {
     botSpeed = 1.5;
   }
@@ -89,7 +89,7 @@ function draw() {
 `,
       at: { before: '// bot rules' },
       check: /\{\s*botSpeed\s*=/,
-      hint: 'Inside an if statement, set botSpeed to a new number.',
+      hint: 'Inside an if statement, set botSpeed to a new number. Around 2 is a fair sprint. Much faster and nobody can win.',
     },
     {
       title: 'Beat your own bot', mins: 4,
@@ -176,8 +176,8 @@ lesson({
   hook: 'Now you hand the job to machine learning. You will teach a model to recognize your gestures from examples, then use it to steer your game with your body. No rules about what a hand looks like. Just examples.',
   steps: [
     {
-      title: 'Train your model', mins: 13, action: 'teachable',
-      say: 'Open **Teachable Machine** and choose an Image Project with the Standard model. Make three classes, named exactly `left`, `right`, and `still`. Use your webcam to record about 50 pictures of a different gesture for each one, then press **Train Model**.\n\nTry it in the preview. When it works, choose **Export Model**, then **Upload my model**, and copy the link it gives you.',
+      title: 'Train your model', mins: 15, action: 'teachable',
+      say: 'Open **Teachable Machine** and choose an Image Project with the Standard model. Make five classes, named exactly `left`, `right`, `up`, `down`, and `still`. Use your webcam to record about 30 pictures of a different gesture for each one, then press **Train Model**.\n\nTry it in the preview. When it works, choose **Export Model**, then **Upload my model**, and copy the link it gives you.',
     },
     {
       title: 'Paste in your model\'s link', mins: 3,
@@ -218,15 +218,19 @@ function startModel(url) {
     },
     {
       title: 'Steer with your model', mins: 7,
-      say: 'The model\'s answer is just text in `label`, so your code can treat it like any other input. Change the left and right conditions so a key **or** the model can move the player.',
+      say: 'The model\'s answer is just text in `label`, so your code can treat it like any other input. Change all four conditions so a key **or** the model can move the player.',
       edits: [
         { code: 'if (keyIsDown(LEFT_ARROW) || label === "left") {', at: { replace: 'if (keyIsDown(LEFT_ARROW)) {' } },
         { code: 'if (keyIsDown(RIGHT_ARROW) || label === "right") {', at: { replace: 'if (keyIsDown(RIGHT_ARROW)) {' } },
+        { code: 'if (keyIsDown(UP_ARROW) || label === "up") {', at: { replace: 'if (keyIsDown(UP_ARROW)) {' } },
+        { code: 'if (keyIsDown(DOWN_ARROW) || label === "down") {', at: { replace: 'if (keyIsDown(DOWN_ARROW)) {' } },
       ],
       show: `if (keyIsDown(LEFT_ARROW) || label === "left") {
 ...
-if (keyIsDown(RIGHT_ARROW) || label === "right") {`,
-      check: /\|\|\s*label\s*===?/,
+if (keyIsDown(RIGHT_ARROW) || label === "right") {
+if (keyIsDown(UP_ARROW) || label === "up") {
+if (keyIsDown(DOWN_ARROW) || label === "down") {`,
+      check: /(?:\|\|\s*label\s*===?[\s\S]*){4,}/,
       hint: 'Your class names must match exactly, including lowercase letters.',
     },
     {
@@ -245,11 +249,11 @@ if (keyIsDown(RIGHT_ARROW) || label === "right") {`,
       check: /text\s*\([^)]*label/,
     },
     {
-      title: 'Test it on someone else', mins: 7,
+      title: 'Test it on someone else', mins: 5,
       say: 'Have a partner try your model, without retraining it. Then change the lighting or background behind you. Write down when it fails. A model only knows what its examples showed it, so its mistakes tell you what was missing from your data.',
     },
   ],
-  stretch: ['Add `up` and `down` classes and use them too.', 'Add a gesture that triggers a speed boost.', 'Retrain with examples from three different people, and compare.'],
+  stretch: ['Add a `boost` class that makes you faster while you hold it.', 'Add a gesture that triggers a speed boost.', 'Retrain with examples from three different people, and compare.'],
   reflect: 'Your model is a simplified model of "reading a gesture." What did it pay attention to that it should not have? What did you, the human, have to do that the machine could not do alone?',
   rubric: [
     { id: 'works', label: 'It runs', levels: ['Crashes or empty', 'Runs, model not connected', 'Model steers the game', 'Model steers it reliably'] },

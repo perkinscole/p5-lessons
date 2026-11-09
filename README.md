@@ -14,7 +14,7 @@ Everyone starts together, then chooses a road. The roads teach the same concepts
 | Second Fork (by road) | 2 | For loops, arrays, objects |
 | Crossings (shared) | 2 | Game states, searching and sorting |
 | The Summit (shared) | 1 | Polish, playtest, publish |
-| **Beyond the Summit** (optional) | 4 more | Changing lists, classes, a deep algorithm on each road |
+| **Beyond the Summit** (optional) | 12 more | Sound effects and music, changing lists, classes, a deep algorithm on each road, then the Low Poly Road: a 3D world you can walk through |
 
 The roads are **The High Road** (platformer), **The Wild Road** (top-down adventure), **The Star Road** (arcade shooter), and **The Mind Road** (AI). Monster Maker is an optional side trail that never holds anyone back.
 

@@ -34,6 +34,8 @@ export const BADGES = [
   { id: 'states', icon: '🎬', name: 'The Director', desc: 'Added title and ending screens', earned: any('c4') },
   { id: 'algorithm', icon: '🧩', name: 'Algorithmist', desc: 'Wrote your first real algorithm', earned: any('p8', 'a8', 's8', 'm5', 'c5') },
   { id: 'sorter', icon: '📊', name: 'The Sorter', desc: 'Wrote a sorting algorithm', earned: any('c5') },
+  { id: 'composer', icon: '🎵', name: 'Composer', desc: 'Wrote a theme song for your game', earned: any('e2') },
+  { id: 'low-poly', icon: '🔺', name: 'Polygon Pioneer', desc: 'Built a whole 3D world', earned: all(['d1', 'd2', 'd3', 'd4', 'd5']) },
   { id: 'high-road', icon: '⛰️', name: 'High Road Hero', desc: 'Finished every High Road lesson', earned: all(ROAD.platformer) },
   { id: 'wild-road', icon: '🌲', name: 'Wild Road Hero', desc: 'Finished every Wild Road lesson', earned: all(ROAD.adventure) },
   { id: 'star-road', icon: '🚀', name: 'Star Road Hero', desc: 'Finished every Star Road lesson', earned: all(ROAD.arcade) },

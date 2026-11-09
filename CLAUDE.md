@@ -60,7 +60,7 @@ Plain ES modules with no framework. `index.html` runs them directly in demo mode
 - A lesson with no `starter` continues the student's own game. `graph.js` (`previousGameLesson`) finds what it continues from. Shared lessons (`c2`, `c4`, `c6`) apply to every road, so all roads must keep the names `playerX`, `playerY`, `playerSize`, `score`, `won`, `lost`, `resetGame()`, the comments `// player` and `// score and messages`, and the line `rect(playerX, playerY, playerSize, playerSize);`.
 - After `c4`, the game's main function is `playGame`, not `draw`.
 - A step's `provides: { name, code }` hands the student a finished helper file. Use it when a lesson needs code from a concept not taught yet. Extra files load before `sketch.js` and carry forward (`filesThrough`), and checks run against all of a project's files.
-- `graph.js` defines `STAGES`, the roads, and `SIDE_TRAILS`. Each student's order is the core then Beyond. Beyond lessons run after the capstone (`c6`), so their anchors must still exist in code that has been through it.
+- `graph.js` defines `STAGES`, the roads, and `SIDE_TRAILS`. Each student's order is the core then Beyond. Beyond lessons run after the capstone (`c6`), so their anchors must still exist in code that has been through it. The Low Poly Road (`d1` to `d5`, last in Beyond) is a fresh 3D project in WEBGL that doesn't depend on any road.
 
 A new lesson needs entries beyond its own definition, and the tests enforce all of these:
 
@@ -80,6 +80,7 @@ Code support is meant to fade across the roads, and a test enforces that.
 Constraints that follow from this:
 
 - p5 and ml5 are written inline into each game's page. A frame with no origin can't reliably load scripts, and some browsers refuse outright.
+- `js/game/synth.js`'s `installSynth` is written into game frames as text with `toString()`, so it must stay self-contained. Songs are text and are filtered to note names on both client and server, because a shared song becomes code in a classmate's project.
 - ml5 is about 4 MB, so it loads only when the code contains `ml5.`, and the build splits it into `ML5_n` files that the server sends one at a time.
 - ml5 needs an in-memory `localStorage` stand-in and `setBackend('webgl')`, both added in `buildDoc`.
 - The sandbox can't open a camera. `createCapture` is replaced with a canvas, and the parent page sends in image frames. Other people's games use `askCamera` to ask the viewer first.

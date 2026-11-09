@@ -219,11 +219,11 @@ let treasureY = 40;`,
     },
     {
       title: 'The treasure', mins: 6,
-      say: 'Place the prize behind the door. Reaching it wins the game.',
+      say: 'Place the prize behind the door. Reaching it wins the game, but only if you have the key.',
       code: `  // treasure
   fill(255, 240, 120);
   rect(treasureX - 12, treasureY - 10, 24, 20);
-  if (dist(playerX + 15, playerY + 15, treasureX, treasureY) < 30) {
+  if (hasKey && dist(playerX + 15, playerY + 15, treasureX, treasureY) < 30) {
     won = true;
   }
 `,
@@ -232,7 +232,7 @@ let treasureY = 40;`,
     },
     {
       title: 'Show what happened', mins: 6,
-      say: 'Add a score and end messages at the end of `draw()`. Then move your walls so the treasure really can only be reached through the door. Playtest it!',
+      say: 'Add a score and end messages at the end of `draw()`. Then playtest it: try to win without the key.',
       code: `
   // score and messages
   fill(255);
@@ -332,8 +332,8 @@ lesson({
       say: 'An **object** bundles related values under one name: `{ x: 150, y: 60 }`. You read them with a dot: `wall.x`.\n\nAn **array** is an ordered list inside `[ ]`. Together, they make a list of walls! Replace your four wall variables with this:',
       code: `let walls = [
   { x: 150, y: 60, w: 40, h: 220 },
-  { x: 260, y: 0, w: 40, h: 160 },
-  { x: 260, y: 200, w: 140, h: 30 },
+  { x: 300, y: 0, w: 40, h: 60 },
+  { x: 300, y: 140, w: 40, h: 260 },
 ];`,
       at: { replace: 'let wallX = 150;\nlet wallY = 60;\nlet wallW = 40;\nlet wallH = 220;' },
       check: /let\s+\w+\s*=\s*\[\s*\{/,
@@ -392,9 +392,9 @@ lesson({
     {
       title: 'Design your maze', mins: 8,
       reveal: true,
-      say: 'Add at least one more wall to your array, one line each, until you have a real maze. Check that the key can be reached and that the treasure can only be reached through the door.',
+      say: 'Add at least one more wall to your array, one line each, until you have a real maze. Keep the two walls beside the door, because they seal off the treasure. Check that the key can still be reached.',
       code: '  { x: 40, y: 280, w: 200, h: 30 },',
-      at: { after: '{ x: 260, y: 200, w: 140, h: 30 },' },
+      at: { after: '{ x: 300, y: 140, w: 40, h: 260 },' },
       check: /(?:\{\s*x\s*:[\s\S]*){4,}/,
       hint: 'You need at least 4 walls in the array.',
     },
@@ -458,9 +458,9 @@ lesson({
     {
       title: 'Require all gems to win', mins: 5,
       reveal: true,
-      say: 'Make the treasure chest count only once the list is **empty**. Add a second condition to your treasure `if` using `&&`. `===` asks "exactly equal?".',
-      code: 'if (gems.length === 0 && dist(playerX + 15, playerY + 15, treasureX, treasureY) < 30) {',
-      at: { replace: 'if (dist(playerX + 15, playerY + 15, treasureX, treasureY) < 30) {' },
+      say: 'Make the treasure chest count only once the list is **empty**. Add one more condition to your treasure `if` using `&&`. `===` asks "exactly equal?".',
+      code: 'if (hasKey && gems.length === 0 && dist(playerX + 15, playerY + 15, treasureX, treasureY) < 30) {',
+      at: { replace: 'if (hasKey && dist(playerX + 15, playerY + 15, treasureX, treasureY) < 30) {' },
       check: /\.length\s*===?\s*0/,
     },
     {

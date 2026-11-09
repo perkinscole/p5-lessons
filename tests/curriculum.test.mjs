@@ -8,12 +8,14 @@ import { checksFor } from '../js/curriculum/checks.js';
 import { recentAchievements } from '../js/game/rules.js';
 import { paceAlerts_, isCoreLesson_, weekdaysBetween_ } from '../js/game/pace.js';
 import { STANDARDS } from '../js/curriculum/standards.js';
+import { installSynth, cleanSong, songCode } from '../js/game/synth.js';
+import { buildWorld, place, isSolid, BOX } from '../js/game/world.js';
 import { allLessons, buildSolution, buildThrough, applySkeleton, stepPasses, checkSummary, getLesson, stripComments, fallbackStarter, briefOf, filesThrough } from '../js/curriculum/engine.js';
 
 const allCode = (id, path, count = Infinity) => [buildThrough(id, path, count), ...Object.values(filesThrough(id, path, count))].join('\n');
 
-test('there are 44 lessons and all are on the map', () => {
-  assert.equal(allLessons().length, 44);
+test('there are 52 lessons and all are on the map', () => {
+  assert.equal(allLessons().length, 52);
   const onMap = new Set(mapLayout().nodes.map((n) => n.id));
   for (const l of allLessons()) assert.ok(onMap.has(l.id), `${l.id} missing from map`);
 });
@@ -269,6 +271,134 @@ test('keeping up: with no term dates, only real inactivity is flagged', () => {
 test('school days skip weekends', () => {
   assert.equal(weekdaysBetween_(new Date('2026-03-13T12:00:00'), new Date('2026-03-16T12:00:00')), 1);
   assert.equal(weekdaysBetween_(new Date('2026-03-09T12:00:00'), new Date('2026-03-16T12:00:00')), 5);
+});
+
+test('every step tells the student what to do', () => {
+  for (const l of allLessons()) {
+    for (const s of l.steps) {
+      const { brief } = briefOf(s);
+      assert.ok(brief.trim().split(/\s+/).length >= 3 || /^(Press|Run)\b/.test(brief), `${l.id} / ${s.title}: "${brief}"`);
+    }
+  }
+});
+
+/** Plays Catch and Dodge with the lesson's real numbers. A careful player looks half a second ahead. */
+function playChase(seed, careful) {
+  const src = allCode('m2', 'mind');
+  const speed = Number(src.match(/let speed = ([\d.]+)/)[1]);
+  const walk = Number(src.match(/let botSpeed = ([\d.]+)/)[1]);
+  const sprint = Number(src.match(/botSpeed = ([\d.]+);\s*\} else/)[1]);
+  const close = Number(src.match(/dist\(botX, botY, playerX, playerY\) < (\d+)/)[1]);
+  const clamp = (v) => Math.min(370, Math.max(0, v));
+  const gap = (g) => Math.hypot(g.px - g.bx, g.py - g.by);
+  const moveAll = (g, dx, dy) => {
+    g.px = clamp(g.px + dx * speed); g.py = clamp(g.py + dy * speed);
+    const b = gap(g) < close ? sprint : walk;
+    if (g.bx < g.px) g.bx += b;
+    if (g.bx > g.px) g.bx -= b;
+    if (g.by < g.py) g.by += b;
+    if (g.by > g.py) g.by -= b;
+  };
+  let r = seed;
+  const rand = (lo, hi) => { r = (r * 16807) % 2147483647; return lo + (r / 2147483647) * (hi - lo); };
+  const game = { px: 60, py: 60, bx: 340, by: 340 };
+  let score = 0; let cx = 200; let cy = 120;
+  const toCoin = (g) => Math.hypot(g.px + 15 - cx, g.py + 15 - cy);
+  const planMove = () => {
+    if (!careful) return [Math.sign(cx - 15 - game.px), Math.sign(cy - 15 - game.py)];
+    let best = -Infinity; let move = [0, 0];
+    for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) {
+      const g = { ...game }; let nearest = Infinity; let reached = false; let dead = false;
+      for (let i = 0; i < 30 && !dead; i++) {
+        moveAll(g, dx, dy);
+        nearest = Math.min(nearest, gap(g));
+        dead = nearest < 34;
+        reached = reached || toCoin(g) < 25;
+      }
+      const value = (reached ? 300 : 0) - toCoin(g) + Math.min(nearest, 70) * 2;
+      if (!dead && value > best) { best = value; move = [dx, dy]; }
+    }
+    return move;
+  };
+  for (let frame = 0; frame < 7200; frame++) {
+    moveAll(game, ...planMove());
+    if (toCoin(game) < 25) { score += 10; cx = rand(30, 370); cy = rand(30, 370); }
+    if (gap(game) < 28) return 'caught';
+    if (score >= 100) return 'won';
+  }
+  return 'time';
+}
+
+test('the Mind Road bot catches careless players, and careful ones can still win', () => {
+  const games = Array.from({ length: 60 }, (_, i) => (i + 1) * 7919);
+  const caught = games.filter((s) => playChase(s, false) === 'caught').length;
+  const won = games.filter((s) => playChase(s, true) === 'won').length;
+  assert.ok(caught >= 48, `a player who ignores the bot was caught only ${caught} of 60 times`);
+  assert.ok(won >= 30, `a careful player won only ${won} of 60 games`);
+});
+
+test('the trained model can steer in every direction the game needs', () => {
+  const src = allCode('m3', 'mind');
+  for (const dir of ['left', 'right', 'up', 'down']) assert.ok(src.includes(`label === "${dir}"`), dir);
+});
+
+test('the locked door really locks: no way to the treasure without the key', () => {
+  for (const id of ['a3', 'a6']) assert.match(allCode(id, 'adventure'), /if \(hasKey &&[^\n]*treasureX/, id);
+  const src = allCode('a5', 'adventure');
+  const walls = [...src.matchAll(/\{ x: (\d+), y: (\d+), w: (\d+), h: (\d+) \}/g)].map((m) => ({ x: +m[1], y: +m[2], w: +m[3], h: +m[4] }));
+  assert.ok(walls.length >= 4);
+  const door = { x: 300, y: 60, w: 40, h: 80 };
+  const size = 30;
+  const startX = Number(src.match(/let playerX = (\d+)/)[1]);
+  const startY = Number(src.match(/let playerY = (\d+)/)[1]);
+  const canReach = (blocks, goalX, goalY, radius) => {
+    const hit = (x, y) => x < 0 || y < 0 || x + size > 400 || y + size > 400 || blocks.some((w) => x < w.x + w.w && x + size > w.x && y < w.y + w.h && y + size > w.y);
+    const queue = [[startX, startY]];
+    const seen = new Set([`${startX},${startY}`]);
+    while (queue.length) {
+      const [x, y] = queue.shift();
+      if (Math.hypot(x + 15 - goalX, y + 15 - goalY) < radius) return true;
+      for (const [dx, dy] of [[3, 0], [-3, 0], [0, 3], [0, -3]]) {
+        const k = `${x + dx},${y + dy}`;
+        if (!seen.has(k) && !hit(x + dx, y + dy)) { seen.add(k); queue.push([x + dx, y + dy]); }
+      }
+    }
+    return false;
+  };
+  assert.ok(canReach([...walls, door], 60, 340, 25), 'the key must be reachable');
+  assert.ok(!canReach([...walls, door], 350, 40, 30), 'the treasure is reachable with the door closed');
+  assert.ok(canReach(walls, 350, 40, 30), 'the treasure must be reachable once the door opens');
+});
+
+test('every stop on the journey map stands on solid ground with room around it', () => {
+  const { tiles, nodes } = buildWorld();
+  const TILE = 12;
+  for (const n of nodes) {
+    const { x, y } = place(n);
+    const left = Math.floor((x - BOX) / TILE);
+    const right = Math.ceil((x + BOX) / TILE) - 1;
+    const top = (y - BOX) / TILE;
+    const floor = (y + BOX) / TILE;
+    assert.ok(Number.isInteger(floor), `${n.id} is not on a row of blocks`);
+    for (let c = left; c <= right; c++) {
+      assert.ok(isSolid(tiles[c][floor]), `${n.id} has no ground at column ${c}`);
+      for (let r = top; r < floor; r++) assert.ok(!isSolid(tiles[c][r]), `${n.id} is buried at column ${c}, row ${r}`);
+    }
+  }
+});
+
+test('the synth reads notes and songs, and classmates\' songs cannot carry code', () => {
+  const { synthInfo } = installSynth({}, {});
+  assert.equal(Math.round(synthInfo.noteFreq('A4')), 440);
+  assert.equal(Math.round(synthInfo.noteFreq('A5')), 880);
+  assert.equal(synthInfo.noteFreq('nope'), null);
+  const parsed = synthInfo.parseSong({ tempo: 120, lead: 'C5 . E5', drums: 'k . s .' });
+  assert.equal(parsed.steps, 4);
+  assert.equal(parsed.lead[1], null);
+  assert.ok(synthInfo.sounds.length >= 15);
+  const evil = cleanSong({ tempo: '9;alert(1)', lead: 'C5 ";alert(1);// E5', bass: '', drums: '' });
+  assert.equal(evil.lead, 'C5 E5');
+  assert.equal(new Function(`${songCode(evil, 'theme')}return theme.lead;`)(), 'C5 E5');
 });
 
 test('stripComments ignores commented code but keeps strings', () => {

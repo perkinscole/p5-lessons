@@ -2,7 +2,7 @@
 import { h, clear, modal, toast } from './ui.js';
 
 const KEY = 'pixeltrail.settings';
-const DEFAULTS = { theme: 'auto', editor: 'night', codeSize: 14, textSize: 100, spacing: 'normal', plainHeadings: false, wrap: false, readRate: 1, autoRead: false };
+const DEFAULTS = { theme: 'auto', editor: 'night', codeSize: 14, textSize: 100, spacing: 'normal', plainHeadings: false, wrap: false, readRate: 1, autoRead: false, gameSound: true };
 
 let settings = { ...DEFAULTS };
 try { settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (_) { /* private mode: use defaults */ }
@@ -86,6 +86,7 @@ export function openSettings() {
     toggle('Wrap long lines of code', 'wrap'),
     choice('Reading speed', 'readRate', [[0.75, 'Slow'], [1, 'Normal'], [1.25, 'Fast']]),
     toggle('Read each step aloud automatically', 'autoRead'),
+    toggle('Play sound in games', 'gameSound'),
     h('div.row.end',
       h('button.btn', { type: 'button', onclick: () => speak('This is how read aloud sounds.') }, 'Test read aloud'),
       h('button.btn.primary', { type: 'button', onclick: close }, 'Done')),

@@ -8,6 +8,7 @@ import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
 import { statsFor, XP, isDone } from '../game/rules.js';
 import { openSpritePicker } from './sprites.js';
+import { openSoundPicker, openMusicMaker } from './sounds.js';
 import { onSettings, getSettings, readButton, speak, stopSpeaking } from '../settings.js';
 import { alignmentFor, standardByCode } from '../curriculum/alignment.js';
 
@@ -271,7 +272,7 @@ export async function viewLesson(main, id, previewPath) {
   }
   function drawFileBar() {
     const names = [MAIN, ...extraDocs.keys()];
-    clear(fileBar).append(
+    clear(fileBar).append(...[
       h('div.file-tabs', { 'aria-label': 'Project files' }, names.map((name) => h('div.file-tab', { class: name === activeFile ? 'on' : '' },
         h('button', { 'aria-current': name === activeFile ? 'true' : null, onclick: () => openFile(name) }, name),
         name !== MAIN && !readOnly && h('button.file-x', { 'aria-label': `Remove ${name}`, onclick: async () => {
@@ -286,7 +287,7 @@ export async function viewLesson(main, id, previewPath) {
         h('button.btn.small', { onclick: newFileDialog }, '+ Code file'),
         h('button.btn.small', { onclick: () => fileInput.click() }, '+ Images or files')),
       fileInput,
-    );
+    ].filter(Boolean));
   }
 
   const persist = async () => {
@@ -427,6 +428,8 @@ export async function viewLesson(main, id, previewPath) {
       s.provides && !readOnly && h('button.btn.primary', { disabled: extraDocs.has(s.provides.name), onclick: () => addProvided(s.provides) }, extraDocs.has(s.provides.name) ? `${s.provides.name} added ✓` : 'Add the finished file'),
       s.provides && h('details.hint', h('summary', 'Peek inside'), h('pre.snippet', h('code', s.provides.code))),
       s.action === 'sprites' && h('button.btn.primary', { onclick: openPicker }, 'Open Sprites'),
+      s.action === 'sounds' && h('button.btn.primary', { onclick: openSounds }, 'Open Sounds'),
+      s.action === 'music' && h('button.btn.primary', { onclick: openMusic }, 'Open Music Maker'),
       s.action === 'share' && h('button.btn.primary', { onclick: toggleShare }, 'Share to Arcade'),
       s.action === 'teachable' && h('a.btn.primary', { href: 'https://teachablemachine.withgoogle.com/train/image', target: '_blank', rel: 'noopener noreferrer' }, 'Open Teachable Machine ↗'),
       s.hint && !passing && h('details.hint', h('summary', 'Hint'), md(s.hint)),
@@ -444,6 +447,20 @@ export async function viewLesson(main, id, previewPath) {
     project: assets,
     suggestedName: lesson.steps.some((s) => s.action === 'sprites') ? 'hero' : '',
     onChange: (next) => { assets = next; drawFileBar(); markDirty(); run(); },
+  });
+
+  const openSounds = () => openSoundPicker({
+    onInsert: readOnly ? null : (line) => { cm.replaceSelection(`${line}\n`); cm.focus(); markDirty(); },
+  });
+  const openMusic = () => openMusicMaker({
+    onAdd: readOnly ? null : (fileName, code, variable) => {
+      if (extraDocs.has(fileName)) extraDocs.get(fileName).setValue(code);
+      else extraDocs.set(fileName, window.CodeMirror.Doc(code, 'javascript'));
+      drawFileBar();
+      markDirty();
+      run();
+      toast(`Added ${fileName}. Play it with playMusic(${variable});`);
+    },
   });
 
   const toggleShare = async () => {
@@ -505,6 +522,8 @@ export async function viewLesson(main, id, previewPath) {
         status,
         isStudent && !readOnly && h('button.btn', { onclick: cleanCopy }, 'Get a clean copy'),
         h('button.btn', { onclick: openPicker }, 'Sprites'),
+        h('button.btn', { onclick: openSounds }, 'Sounds'),
+        h('button.btn', { onclick: openMusic }, 'Music'),
         isStudent && !readOnly && h('button.btn', { onclick: toggleShare }, work?.shared ? 'In the Arcade ✓' : 'Share to Arcade'),
         preview && h('select.path-pick', { 'aria-label': 'Road to preview', onchange: (e) => go(`/lesson/${id}/${e.target.value}`) }, Object.values(PATHS).map((p) => h('option', { value: p.id, selected: p.id === path }, p.road))),
         preview && h('button.btn', { onclick: () => { openFile(MAIN); cm.setValue(buildSolution(id, path)); for (const [n, t] of Object.entries(filesThrough(id, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript')); drawFileBar(); run(); toast('Showing the answer key.'); } }, 'Show answer key'),

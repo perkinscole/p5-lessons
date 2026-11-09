@@ -36,7 +36,10 @@ setTimeout(function () {
 setTimeout(function () {
   var seen = {}; var n = 0;
   var cv = document.querySelector('canvas');
-  var d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+  var g = p5.instance.drawingContext;
+  var d;
+  if (g.getImageData) d = g.getImageData(0, 0, cv.width, cv.height).data;
+  else { d = new Uint8Array(cv.width * cv.height * 4); g.readPixels(0, 0, cv.width, cv.height, g.RGBA, g.UNSIGNED_BYTE, d); }
   for (var i = 0; i < d.length; i += 4 * 37) { var k = d[i] + ',' + d[i + 1] + ',' + d[i + 2]; if (!seen[k]) { seen[k] = 1; n++; } }
   console.log('PROBE ' + n);
 }, 1500);

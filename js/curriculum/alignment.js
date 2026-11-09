@@ -60,6 +60,16 @@ export const ALIGNMENT = {
   c4: { anchor: [CT('d.2')], support: [CT('b.3'), CT('b.1')], evidence: 'draw() becomes a controller that hides each game state behind a function.' },
   c5: { anchor: [CT('d.3'), CT('b.2')], support: [CT('b.4'), CT('d.1'), CT('c.4')], evidence: 'Writes selection sort, predicts comparisons for 32 bars, tests the prediction, and explains the growth.' },
   c6: { anchor: [CT('d.4'), CT('d.6'), DTC('b.1')], support: [CT('b.3'), DTC('a.4')], evidence: 'Complete game using all required constructs, revised after a cross-road playtest, and published to the class.' },
+
+  e1: { anchor: [CT('b.1')], support: [CT('b.2'), CT('d.6')], evidence: 'Uses conditionals to detect the moment a value changes; predicts and tests what happens without the if; revises the game so it still works with sound off.' },
+  e2: { anchor: [DTC('a.4'), CAS('b.9')], support: [CAS('b.1'), DTC('a.2'), CT('a.1')], evidence: 'Composes an original theme and brings it into a game; licenses it; explains why a pop song can\'t be published in a game, and what an MP3 stores that the song text does not.' },
+  e3: { anchor: [CT('d.3'), CT('b.4')], support: [CT('d.1'), CT('c.2'), CT('b.1')], evidence: 'Implements and compares two melody algorithms with a listener; explains how the number of bits changes stored sound.' },
+
+  d1: { anchor: [CT('b.2')], support: [CT('d.5'), CT('d.6')], evidence: 'Predicts where shapes land from x, y, z and transformation order; explains what happens without pop().' },
+  d2: { anchor: [CT('e.1'), CT('d.2')], support: [CT('a.2'), CT('b.1')], evidence: 'Models a tree in a few flat faces, reuses it with a loop, and explains which details were kept or left out.' },
+  d3: { anchor: [CT('b.5')], support: [CT('b.1'), CT('b.2')], evidence: 'Keeps the player inside the world and out of the house; predicts sin and cos for a heading and tests the prediction.' },
+  d4: { anchor: [CT('d.3'), CT('e.1')], support: [CT('b.1'), CT('a.2')], evidence: 'Implements terrain generation with a 2D array and nested loops; explains what the terrain model leaves out and when that matters.' },
+  d5: { anchor: [CT('d.4'), CT('d.6')], support: [CT('a.1'), CT('b.3')], evidence: 'Complete 3D game with a class, loops, conditionals, variables, and functions, revised after a neighbor plays it.' },
 };
 
 export const alignmentFor = (lessonId) => ALIGNMENT[lessonId] || { anchor: [], support: [], evidence: '' };

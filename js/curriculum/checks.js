@@ -167,6 +167,38 @@ export const CHECKS = {
     Q(0, 'What is a class?', ['A blueprint for making objects', 'A list of numbers', 'A kind of loop'], 0, 'Objects are built from it.'),
     Q(3, 'You click 3 times. How many critters are added?', ['1', '3', '10'], 1, 'Each click pushes one new critter.'),
   ],
+  e1: [
+    Q(1, 'Why compare `score` to `scoreBefore`?', ['To make the sound louder', 'To save memory', 'To play the sound only once'], 2, 'The score only rises for one frame at a time.'),
+    Q(3, 'When is `(won || lost) && !overBefore` true?', ['On the first frame the game ends', 'On every frame', 'Before the game starts'], 0, 'It is over now, and it was not last frame.'),
+  ],
+  e2: [
+    Q(5, 'In a song, what does `.` mean?', ['The song ends', 'A silent step', 'Play louder'], 1, 'Each word is a step, and a dot is a rest.'),
+    Q(6, 'Who owns the copyright on music you write?', ['You do', 'The school', 'Nobody'], 0, 'Creators own what they make, and a license says how others may use it.'),
+  ],
+  e3: [
+    Q(1, 'A note is 440. What is one octave higher?', ['441', '220', '880'], 2, 'Each octave doubles the frequency.'),
+    Q(6, 'How many values can 3 bits store?', ['3', '8', '9'], 1, 'Two choices per bit: 2 times 2 times 2.'),
+  ],
+  d1: [
+    Q(2, 'In WEBGL, where is `y = -50`?', ['Below the center', 'Above the center', 'Toward you'], 1, 'In p5, y grows downward, so negative is up.'),
+    Q(4, 'What do `push` and `pop` protect?', ['Everything drawn after them', 'The score', 'The canvas size'], 0, 'A move between them ends at pop.'),
+  ],
+  d2: [
+    Q(1, 'What does `FLAT` do to a shape?', ['Squashes it', 'Removes its color', 'Gives each face one shade'], 2, 'One shade per face is the low poly look.'),
+    Q(2, 'Why call `randomSeed` in the loop?', ['So trees stay in place', 'To add more trees', 'To color trees'], 0, 'The same seed gives the same numbers every frame.'),
+  ],
+  d3: [
+    Q(2, 'Why use `sin` and `cos` for walking?', ['To change color', 'To split a step into x and z', 'To draw circles'], 1, 'Together they turn a heading into a direction.'),
+    Q(4, 'What does `constrain` do here?', ['Slows the hero', 'Turns the camera', 'Keeps the hero inside the world'], 2, 'It holds a value between a low and a high.'),
+  ],
+  d4: [
+    Q(0, 'How do you read row 2, column 5?', ['hills[2][5]', 'hills[5, 2]', 'hills.2.5'], 0, 'First the row, then the column inside it.'),
+    Q(1, 'Why are squares split into triangles?', ['Triangles draw faster than lines', 'Squares are not allowed', 'Three points are always flat'], 2, 'Four corners at different heights may not be flat.'),
+  ],
+  d5: [
+    Q(1, 'How many numbers does 3D `dist` need?', ['Six', 'Four', 'Three'], 0, 'Three for each of the two spots.'),
+    Q(3, 'Why loop backward when removing gems?', ['It is faster', 'So removing does not skip a gem', 'To reverse the score'], 1, 'splice shifts later items down a spot.'),
+  ],
   c4: [
     Q(2, 'When does `else if` get checked?', ['Always', 'Before the if', 'Only when the if was false'], 2, 'Once one branch runs, the rest are skipped.'),
     Q(5, 'Why call `resetGame()` when starting a round?', ['So old scores and positions are cleared', 'To draw the title', 'To load images'], 0, 'One call restores every starting value.'),

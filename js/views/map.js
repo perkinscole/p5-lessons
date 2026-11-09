@@ -5,13 +5,19 @@ import { getLesson } from '../curriculum/engine.js';
 import { PATHS, STAGES, mapLayout, currentLesson, sequence, isSideTrail, sideTrailOpen } from '../curriculum/graph.js';
 import { statsFor } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
+import { BOX, COL_W, MARGIN, place, worldArt } from '../game/world.js';
 
-const COL_W = 104;
-const LANE_H = 104;
-const TOP = 74;
-const MARGIN = 70;
+// Parallel ropes where roads climb between levels, so each road can still be followed.
+const ROPE_OFFSET = { platformer: -12, adventure: -4, arcade: 4, mind: 12 };
 
-const place = (n) => ({ x: MARGIN + n.col * COL_W, y: TOP + 195 + n.lane * LANE_H });
+/** A hard-cornered route between two stops, to suit the blocky world. */
+function routePath(a, b, road) {
+  if (a.x === b.x || a.y === b.y) return `M${a.x},${a.y} L${b.x},${b.y}`;
+  const midX = (a.x + b.x) / 2 + (ROPE_OFFSET[road] || 0);
+  return `M${a.x},${a.y} H${midX} V${b.y} H${b.x}`;
+}
+
+const plate = (cx, cy, w, h, cls) => svg('rect', { x: Math.round(cx - w / 2), y: Math.round(cy - h / 2), width: Math.round(w), height: h, class: cls });
 
 /** Where a student is standing: their next lesson, or the fork, or the summit. */
 export function standingOn(s) {
@@ -20,34 +26,41 @@ export function standingOn(s) {
 }
 
 export function buildMap({ board, meId = null, myPath = null, myDone = new Set(), onNode }) {
-  const { nodes, edges, cols } = mapLayout();
+  const { nodes, edges } = mapLayout();
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const width = MARGIN * 2 + (cols - 1) * COL_W;
-  const height = TOP + 195 + LANE_H * 1.5 + 80;
+  const art = worldArt();
+  const { width, height } = art;
   const root = svg('svg', { viewBox: `0 0 ${width} ${height}`, width, height, class: 'map-svg', role: 'group', 'aria-label': 'Class journey map. Details are in the table below.' });
 
-  // Stage bands and labels, so the shape of branch and rejoin can be read at a glance.
+  for (const look of ['day', 'night']) {
+    root.append(svg('image', { href: art[look], x: 0, y: 0, width, height, class: `world world-${look}`, preserveAspectRatio: 'none', 'aria-hidden': 'true' }));
+  }
+  art.clouds.forEach((href, i) => {
+    for (let x = 180 + i * 90; x < width; x += 620) {
+      root.append(svg('image', { href, x: x + i * 170, y: 44 + i * 30, width: 132, height: 48, class: `world-cloud drift-${i}`, 'aria-hidden': 'true' }));
+    }
+  });
+
+  // A sign for each stage along the top of the sky.
   for (const st of STAGES) {
     const ids = st.kind === 'shared' ? st.lessons : Object.values(st.branches).flat();
     const colsHere = ids.map((id) => byId.get(id).col);
-    const x1 = MARGIN + Math.min(...colsHere) * COL_W - COL_W / 2 + 2;
-    const x2 = MARGIN + Math.max(...colsHere) * COL_W + COL_W / 2 - 2;
-    root.append(svg('rect', { x: x1, y: 8, width: x2 - x1, height: height - 16, rx: 6, class: `band ${st.beyond ? 'beyond' : st.kind}` }));
-    const label = svg('text', { x: (x1 + x2) / 2, y: 34, class: 'stage-name', 'text-anchor': 'middle' });
-    label.textContent = st.mapName || st.name;
+    const cx = MARGIN + ((Math.min(...colsHere) + Math.max(...colsHere)) / 2) * COL_W;
+    const text = st.mapName || st.name;
+    root.append(plate(cx, 25, text.length * 8.6 + 18, 30, 'stage-plate'));
+    const label = svg('text', { x: cx, y: 32, class: 'stage-name', 'text-anchor': 'middle' });
+    label.textContent = text;
     root.append(label);
   }
 
   for (const e of edges) {
     const a = place(byId.get(e.from));
     const b = place(byId.get(e.to));
-    const midX = (a.x + b.x) / 2;
+    const d = routePath(a, b, e.path);
     const mine = !e.path || !myPath || e.path === myPath;
-    root.append(svg('path', {
-      d: `M${a.x},${a.y} C${midX},${a.y} ${midX},${b.y} ${b.x},${b.y}`,
-      class: `trail${mine ? '' : ' faint'}${e.beyond || e.side ? ' extra' : ''}`,
-      style: e.path ? `stroke:${PATHS[e.path].color}` : null,
-    }));
+    const faint = `${mine ? '' : ' faint'}${e.beyond || e.side ? ' extra' : ''}`;
+    root.append(svg('path', { d, class: `trail-edge${faint}` }));
+    root.append(svg('path', { d, class: `trail${faint}`, style: e.path ? `stroke:${PATHS[e.path].color}` : null }));
   }
 
   const myOrder = [...(myPath ? sequence(myPath) : sequence(null)), ...nodes.filter((n) => n.side).map((n) => n.id)];
@@ -71,12 +84,16 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
     const title = svg('title');
     title.textContent = `${l.title}: ${l.concepts.join(', ')}`;
     g.append(title);
-    g.append(svg('rect', { x: -19, y: -19, width: 38, height: 38, rx: 4, class: 'node-box', style: n.path ? `--road:${PATHS[n.path].color}` : null }));
-    const mark = svg('text', { class: 'node-mark', 'text-anchor': 'middle', y: 6 });
+    g.append(svg('rect', { x: -BOX, y: -BOX, width: BOX * 2, height: BOX * 2, class: 'node-box' }));
+    g.append(svg('rect', { x: -BOX + 2, y: BOX - 5, width: BOX * 2 - 4, height: 3, class: 'node-shade' }));
+    if (n.path) g.append(svg('rect', { x: -BOX + 2, y: -BOX + 2, width: BOX * 2 - 4, height: 6, style: `fill:${PATHS[n.path].color}` }));
+    const mark = svg('text', { class: 'node-mark', 'text-anchor': 'middle', y: n.path ? 11 : 7 });
     mark.textContent = state === 'done' ? '✓' : n.id === myCurrent ? '▶' : l.mins;
     g.append(mark);
-    const name = svg('text', { class: 'node-name', 'text-anchor': 'middle', y: 34 });
-    name.textContent = l.title.length > 15 ? `${l.title.slice(0, 14)}…` : l.title;
+    const shortName = l.title.length > 15 ? `${l.title.slice(0, 14)}…` : l.title;
+    g.append(plate(0, BOX + 15, shortName.length * 6.3 + 12, 19, 'node-plate'));
+    const name = svg('text', { class: 'node-name', 'text-anchor': 'middle', y: BOX + 19 });
+    name.textContent = shortName;
     g.append(name);
     root.append(g);
   }
@@ -98,7 +115,7 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
     const shown = sorted.slice(-4);
     shown.forEach((s, i) => {
       const dx = (i - (shown.length - 1) / 2) * 16;
-      const dy = -19 - SPRITE_H - (i % 2) * 5;
+      const dy = -BOX - SPRITE_H - (i % 2) * 5;
       const img = svg('image', {
         href: avatarURL(s.avatar || defaultAvatar(s.id), 3), x: x + dx - SPRITE_W / 2 + 7, y: y + dy, width: SPRITE_W, height: SPRITE_H,
         class: s.id === meId ? 'me-sprite' : '', style: 'image-rendering:pixelated',

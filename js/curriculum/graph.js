@@ -6,6 +6,8 @@ import './adventure.js';
 import './arcade.js';
 import './crossings.js';
 import './mind.js';
+import './lowpoly.js';
+import './sound.js';
 import './briefs.js';
 import { getLesson, setPreviousResolver } from './engine.js';
 
@@ -27,9 +29,11 @@ export const STAGES = [
   { id: 'cross2', mapName: 'Game States', name: 'Second Crossing', kind: 'shared', theme: 'Game states', lessons: ['c4'] },
   { id: 'cross3', mapName: 'Sorting', name: 'Last Crossing', kind: 'shared', theme: 'Searching and sorting', lessons: ['c5'] },
   { id: 'summit', mapName: 'Summit', name: 'The Summit', kind: 'shared', theme: 'Polish and publish', lessons: ['c6'] },
+  { id: 'sound', mapName: 'Sound', name: 'Beyond: Sound Studio', beyond: true, kind: 'shared', theme: 'Sound effects, music, and code that composes', lessons: ['e1', 'e2', 'e3'] },
   { id: 'beyond1', mapName: 'Lists', name: 'Beyond: Lists in Motion', beyond: true, kind: 'branch', theme: 'Changing lists while the game runs', branches: { platformer: ['p6'], adventure: ['a6'], arcade: ['s6'], mind: ['m6'] } },
   { id: 'beyond2', mapName: 'Classes', name: 'Beyond: Blueprints', beyond: true, kind: 'shared', theme: 'Classes', lessons: ['c3'] },
   { id: 'beyond3', mapName: 'Beyond: Algorithms', name: 'Beyond: Deep Algorithms', beyond: true, kind: 'branch', theme: 'Data structures and algorithms', branches: { platformer: ['p7', 'p8'], adventure: ['a7', 'a8'], arcade: ['s7', 's8'], mind: ['m7', 'm8'] } },
+  { id: 'lowpoly', mapName: 'Low Poly 3D', name: 'Beyond: Low Poly Worlds', beyond: true, kind: 'shared', theme: 'A 3D world you can walk through', lessons: ['d1', 'd2', 'd3', 'd4', 'd5'] },
 ];
 
 /** Optional detours: open once `after` is done, and never hold anyone back. */
@@ -59,7 +63,7 @@ export function sequence(path) {
 }
 
 /** Lessons in these stages or with a `path` extend the student's own game. */
-const GAME_SHARED = new Set(['c2', 'c4', 'c6']);
+const GAME_SHARED = new Set(['c2', 'c4', 'c6', 'e1', 'e2', 'd1', 'd2', 'd3', 'd4', 'd5']);
 const isGameLesson = (id) => GAME_SHARED.has(id) || !!getLesson(id).path;
 
 /** The lesson whose code this one carries forward, or null if it starts fresh. */

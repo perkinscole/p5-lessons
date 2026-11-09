@@ -18,7 +18,7 @@ const makePasscode = () => `${pick(WORDS_A)}-${pick(WORDS_B)}-${10 + Math.floor(
 const makeClassCode = () => Array.from({ length: 6 }, () => pick([...'ABCDEFGHJKMNPQRSTUVWXYZ23456789'])).join('');
 
 function seed() {
-  const db = { teachers: [], classes: [], students: [], works: [], grades: [], awards: [], sprites: [] };
+  const db = { teachers: [], classes: [], students: [], works: [], grades: [], awards: [], sprites: [], songs: [] };
   const teacher = { id: 'demo-teacher', display_name: 'Demo Teacher', email: 'teacher@demo' };
   db.teachers.push(teacher);
   const cls = { id: 'demo-class', teacher_id: teacher.id, name: 'Period 3: Game Design', code: 'DEMO42', created_at: now() };
@@ -127,6 +127,7 @@ export function createLocalStore() {
       db.students = db.students.filter((s) => s.class_id !== id);
       db.works = db.works.filter((w) => !gone.has(w.student_id));
       db.sprites = db.sprites.filter((s) => s.class_id !== id);
+      db.songs = (db.songs || []).filter((s) => s.class_id !== id);
       save();
     },
     getClass: async (id) => clone(db.classes.find((c) => c.id === id)),
@@ -230,6 +231,7 @@ export function createLocalStore() {
       db.works = db.works.filter((w) => w.student_id !== id);
       db.awards = db.awards.filter((a) => a.student_id !== id);
       db.sprites = db.sprites.filter((s) => s.student_id !== id);
+      db.songs = (db.songs || []).filter((s) => s.student_id !== id);
       save();
     },
     async setStudentPath(id, path) {
@@ -320,6 +322,29 @@ export function createLocalStore() {
     },
     async deleteSprite(id) {
       db.sprites = db.sprites.filter((s) => s.id !== id);
+      save();
+    },
+
+    listSongs: async (classId) => clone((db.songs || []).filter((s) => s.class_id === classId && s.published)),
+    async mySongs() {
+      const sid = readSession().id;
+      return clone((db.songs || []).filter((s) => s.student_id === sid || s.teacher_id === sid));
+    },
+    async saveSong(s) {
+      db.songs = db.songs || [];
+      const sess = me();
+      const owner = sess.role === 'student'
+        ? { student_id: sess.student.id, class_id: sess.student.class_id, author_name: sess.student.display_name }
+        : { teacher_id: sess.teacher.id, author_name: sess.teacher.display_name };
+      const existing = s.id && db.songs.find((x) => x.id === s.id);
+      if (existing) { Object.assign(existing, s, owner); save(); return clone(existing); }
+      const row = { ...s, ...owner, id: uid(), created_at: now() };
+      db.songs.push(row);
+      save();
+      return clone(row);
+    },
+    async deleteSong(id) {
+      db.songs = (db.songs || []).filter((s) => s.id !== id);
       save();
     },
   };

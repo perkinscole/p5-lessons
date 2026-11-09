@@ -677,7 +677,7 @@ updateSparks();`,
     },
     {
       title: 'Your polish list', mins: 10,
-      say: 'Choose **two** from this list, or invent your own:\n\n- A screen shake when something big happens (try `translate(random(-3, 3), random(-3, 3))`)\n- A best score that lasts between rounds\n- A second sprite for enemies or items\n- A "how to play" screen\n- Your own hard level, wave, or map',
+      say: 'Choose **two** from this list, or invent your own:\n\n- A screen shake when something big happens (try `translate(random(-3, 3), random(-3, 3))`)\n- A best score that lasts between rounds\n- A second sprite for enemies or items\n- Sound: press **Sounds** at the top to add `playSound("coin");` where something happens\n- A "how to play" screen\n- Your own hard level, wave, or map',
     },
     {
       title: 'Playtest and fix', mins: 8,

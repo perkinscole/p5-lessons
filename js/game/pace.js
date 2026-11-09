@@ -7,7 +7,7 @@ const CORE_LESSONS_ = 15;
 
 /** Beyond the Summit and side trail lessons don't count toward keeping up. */
 export function isCoreLesson_(id) {
-  return !/^[pasm][678]$/.test(id) && id !== 'c3' && id !== 't2';
+  return !/^([pasm][678]|[de]\d)$/.test(id) && id !== 'c3' && id !== 't2';
 }
 
 /** School days between two dates, not counting weekends. */

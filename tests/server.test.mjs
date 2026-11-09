@@ -353,6 +353,22 @@ test('sharing is visible inside the class only, and a teacher can take it down',
   assert.equal(bea('arcade', cls.id).length, 0);
 });
 
+test('song rules: only real notes, owner edits, class sees published, teacher can remove', () => {
+  const { ari: lyra, bea: milo, zed, teacher, cls } = setup();
+  const data = JSON.stringify({ tempo: 120, scale: 'bright', lead: 'C5 . E5', bass: '', drums: 'k . s' });
+  denied(() => lyra('saveSong', { name: 'bad', data: JSON.stringify({ lead: '";alert(1);//' }) }));
+  denied(() => lyra('saveSong', { name: 'bad', data: 'not json' }));
+  const s = lyra('saveSong', { name: 'theme', data, published: false });
+  assert.equal(milo('listSongs', cls.id).length, 0);
+  lyra('saveSong', { ...s, published: true });
+  assert.equal(JSON.parse(milo('listSongs', cls.id)[0].data).lead, 'C5 . E5');
+  denied(() => milo('saveSong', { ...s, name: 'stolen' }));
+  denied(() => milo('deleteSong', s.id));
+  denied(() => zed('listSongs', cls.id));
+  teacher('deleteSong', s.id);
+  assert.equal(lyra('mySongs').length, 0);
+});
+
 test('sprite rules: must be an image, owner edits, class sees published, teacher can remove', () => {
   const { ari, bea, zed, teacher, cls } = setup();
   const png = 'data:image/png;base64,AAAA';

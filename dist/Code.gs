@@ -12,6 +12,7 @@ const MAX_SPRITE_CHARS = CELL_CHUNK * SPRITE_CELLS;
 
 const chunkCols_ = (n) => Array.from({ length: n }, (_, i) => `data${i + 1}`);
 const WORK_META = ['id', 'student_id', 'lesson_id', 'status', 'stretch_done', 'reflection', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'auto_ok', 'shared', 'submitted_at', 'updated_at'];
+const SONG_COLS = ['id', 'class_id', 'student_id', 'teacher_email', 'author_name', 'name', 'data', 'published', 'created_at'];
 const SPRITE_META = ['id', 'class_id', 'student_id', 'teacher_email', 'author_name', 'name', 'frames', 'w', 'h', 'published', 'created_at'];
 
 const SCHEMA = {
@@ -22,6 +23,7 @@ const SCHEMA = {
   Grades: ['work_id', 'scores', 'total', 'max_total', 'feedback', 'graded_at'],
   Awards: ['id', 'student_id', 'badge_id', 'note', 'created_at'],
   Sprites: [...SPRITE_META, ...chunkCols_(SPRITE_CELLS)],
+  Songs: SONG_COLS,
   Daily: ['class_id', 'plan', 'updated_at'],
   Links: ['class_id', 'course_id', 'course_name', 'synced_at'],
   Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
@@ -334,6 +336,78 @@ function saveSprite_(me, s) {
 
 const spriteFields_ = (r) => { const o = {}; SPRITE_META.forEach((f) => { if (r[f] !== undefined) o[f] = r[f]; }); return o; };
 
+// A shared song can become code in a classmate's project, so only real note names are stored.
+function songData_(raw) {
+  const text = String(raw || '');
+  if (text.length > 3000) throw new Error('That song is too long to save.');
+  let song;
+  try { song = JSON.parse(text); } catch (e) { throw new Error('That is not a song.'); }
+  if (!song || typeof song !== 'object') throw new Error('That is not a song.');
+  const track = (t) => {
+    const parts = String(t || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length > 64 || !parts.every((p) => /^(\.|[A-Ga-g][#b]?-?\d|[ksh])$/.test(p))) throw new Error('That is not a song.');
+    return parts.join(' ');
+  };
+  return JSON.stringify({
+    tempo: Math.min(240, Math.max(40, Math.round(Number(song.tempo)) || 120)),
+    scale: /^\w{1,12}$/.test(String(song.scale)) ? song.scale : 'bright',
+    lead: track(song.lead), bass: track(song.bass), drums: track(song.drums),
+  });
+}
+
+function listSongs_(me, classId) {
+  canViewClass_(me, classId);
+  return rows_('Songs').filter((s) => s.class_id === classId && s.published);
+}
+
+function mySongs_(me) {
+  const mine = (s) => (me.role === 'student' ? s.student_id === me.student.id : s.teacher_email === me.email);
+  return rows_('Songs').filter(mine);
+}
+
+function saveSong_(me, s) {
+  const data = songData_(s.data);
+  const name = text_(s.name, 40);
+  if (!name) throw new Error('Give your song a name.');
+  return withLock_(() => {
+    let classId;
+    if (me.role === 'student') classId = me.student.class_id;
+    else if (s.class_id) { ownedClass_(me, s.class_id); classId = s.class_id; } else classId = '';
+    const row = {
+      class_id: classId, name, data,
+      student_id: me.role === 'student' ? me.student.id : '',
+      teacher_email: me.role === 'teacher' ? me.email : '',
+      author_name: me.role === 'student' ? me.student.display_name : me.teacher.display_name,
+      published: !!s.published,
+    };
+    const existing = s.id && rows_('Songs').find((x) => x.id === s.id);
+    if (existing) {
+      const owns = me.role === 'student' ? existing.student_id === me.student.id : existing.teacher_email === me.email;
+      if (!owns) throw new Error('That is not your song.');
+      const saved = { ...row, id: existing.id, created_at: existing.created_at };
+      update_('Songs', { ...saved, _row: existing._row });
+      return saved;
+    }
+    const saved = { ...row, id: uuid_(), created_at: now_() };
+    insert_('Songs', saved);
+    return saved;
+  });
+}
+
+function deleteSong_(me, id) {
+  withLock_(() => {
+    const song = rows_('Songs').find((x) => x.id === id);
+    if (!song) return;
+    let allowed = me.role === 'student' ? song.student_id === me.student.id : song.teacher_email === me.email;
+    if (!allowed && me.role === 'teacher' && song.class_id) {
+      const c = rows_('Classes').find((x) => x.id === song.class_id);
+      allowed = !!c && c.teacher_email === me.email;
+    }
+    if (!allowed) throw new Error('That is not your song.');
+    sheet_('Songs').deleteRow(song._row);
+  });
+}
+
 function deleteSprite_(me, id) {
   withLock_(() => {
     const sp = rows_('Sprites', SPRITE_META).find((x) => x.id === id);
@@ -627,6 +701,7 @@ const TEACHER_ROUTES = {
     deleteRows_('Works', (w) => ids.has(w.student_id));
     deleteRows_('Awards', (a) => ids.has(a.student_id));
     deleteRows_('Sprites', (s) => s.class_id === id);
+    deleteRows_('Songs', (s) => s.class_id === id);
     deleteRows_('Daily', (d) => d.class_id === id);
     deleteRows_('Links', (l) => l.class_id === id);
     deleteRows_('Pace', (p) => p.class_id === id);
@@ -660,6 +735,7 @@ const TEACHER_ROUTES = {
     deleteRows_('Works', (w) => w.student_id === id);
     deleteRows_('Awards', (a) => a.student_id === id);
     deleteRows_('Sprites', (s) => s.student_id === id, SPRITE_META);
+    deleteRows_('Songs', (s) => s.student_id === id);
     deleteRows_('Students', (s) => s.id === id);
   }),
   setStudentPath: (me, id, path) => withLock_(() => {
@@ -707,6 +783,10 @@ const TEACHER_ROUTES = {
   mySprites: mySprites_,
   saveSprite: saveSprite_,
   deleteSprite: deleteSprite_,
+  listSongs: listSongs_,
+  mySongs: mySongs_,
+  saveSong: saveSong_,
+  deleteSong: deleteSong_,
 };
 
 // Student actions: these only ever touch the student making the request ----------------------------
@@ -757,6 +837,10 @@ const STUDENT_ROUTES = {
   mySprites: mySprites_,
   saveSprite: saveSprite_,
   deleteSprite: deleteSprite_,
+  listSongs: listSongs_,
+  mySongs: mySongs_,
+  saveSong: saveSong_,
+  deleteSong: deleteSong_,
   updateProfile: (me, patch) => withLock_(() => {
     const s = { ...me.student };
     if (patch.avatar !== undefined) {
@@ -794,7 +878,7 @@ const CORE_LESSONS_ = 15;
 
 /** Beyond the Summit and side trail lessons don't count toward keeping up. */
 function isCoreLesson_(id) {
-  return !/^[pasm][678]$/.test(id) && id !== 'c3' && id !== 't2';
+  return !/^([pasm][678]|[de]\d)$/.test(id) && id !== 'c3' && id !== 't2';
 }
 
 /** School days between two dates, not counting weekends. */

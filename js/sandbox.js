@@ -1,6 +1,9 @@
 // Runs student code safely. Each game runs in an iframe with no access to this site:
 // no same-origin (so no login tokens or database), no navigation, no network.
 
+import { installSynth } from './game/synth.js';
+import { getSettings, onSettings } from './settings.js';
+
 const PLACEHOLDER = (() => {
   const c = document.createElement('canvas');
   c.width = c.height = 16;
@@ -105,6 +108,9 @@ p5.prototype.createCapture = function () {
 };
 `;
 
+/** Only games that use sound get the synth. */
+const usesAudio = (code) => /\b(playSound|playNote|playMusic|stopMusic|setVolume)\s*\(/.test(code);
+
 function buildDoc(code, assets, p5Source, ml5Source, files = {}) {
   const models = 'https://teachablemachine.withgoogle.com https://storage.googleapis.com';
   const csp = `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:${ml5Source ? ` ${models}` : ''}; connect-src data: blob:${ml5Source ? ` ${models}` : ''}; media-src data: blob: mediastream:; font-src data:; worker-src blob:`;
@@ -120,8 +126,12 @@ function buildDoc(code, assets, p5Source, ml5Source, files = {}) {
   Object.defineProperty(window, 'sessionStorage', { value: memory() });
 })();
 ` : '';
+  const audio = usesAudio([code, ...Object.values(files)].join('\n'))
+    ? `(${installSynth.toString()})(window, { muted: ${!getSettings().gameSound}, warn: function (m) { parent.postMessage({ pt: 'warn', message: m }, '*'); } });`
+    : '';
   const boot = `
 ${storageShim}
+${audio}
 window.SPRITES = new Proxy(${JSON.stringify(assets || {})}, { get(t, k) {
   if (typeof k === 'symbol') return t[k];
   if (k in t) return t[k];
@@ -268,6 +278,8 @@ export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
     el.appendChild(prompt);
   };
   window.addEventListener('message', listener);
+  // A teacher can silence a whole set of games from Display, even while one is playing.
+  const stopWatching = onSettings((s) => { if (frame && frame.contentWindow) frame.contentWindow.postMessage({ ptMute: !s.gameSound }, '*'); });
   let runToken = 0;
   const stop = () => {
     runToken++;
@@ -295,6 +307,7 @@ export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
       ranges = doc.ranges;
       frame = document.createElement('iframe');
       frame.setAttribute('sandbox', 'allow-scripts');
+      frame.setAttribute('allow', 'autoplay');
       frame.setAttribute('title', 'Game canvas');
       frame.srcdoc = doc.html;
       el.appendChild(frame);
@@ -302,6 +315,6 @@ export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
     },
     stop,
     focus() { if (frame) frame.focus(); },
-    destroy() { stop(); window.removeEventListener('message', listener); },
+    destroy() { stop(); stopWatching(); window.removeEventListener('message', listener); },
   };
 }

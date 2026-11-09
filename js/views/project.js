@@ -9,6 +9,7 @@ import { alignmentFor, coverage, standardByCode } from '../curriculum/alignment.
 import { checksFor } from '../curriculum/checks.js';
 import { recentAchievements } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
+import { stageSceneStyle } from '../game/world.js';
 import { standingOn } from './map.js';
 
 const todayKey = () => new Date().toLocaleDateString('en-CA');
@@ -61,8 +62,8 @@ function progression(board) {
   const groups = new Map(COLUMNS.map((c) => [c.key, []]));
   for (const s of board) groups.get(columnOf(standingOn(s)))?.push(s);
   // Busier stages get more room, so nobody ends up off the bottom.
-  const widths = COLUMNS.map((c) => `minmax(0, ${(1 + groups.get(c.key).length / 2.5).toFixed(2)}fr)`).join(' ');
-  return h('div.pj-trail', { style: `grid-template-columns:${widths}` }, COLUMNS.map((c) => h('section.pj-stage',
+  const widths = COLUMNS.map((c) => `minmax(11vh, ${(1 + groups.get(c.key).length / 2.5).toFixed(2)}fr)`).join(' ');
+  return h('div.pj-trail', { style: `grid-template-columns:${widths}` }, COLUMNS.map((c) => h('section.pj-stage', { style: stageSceneStyle(c.key) },
     h('h3', c.name),
     h('div.pj-people', groups.get(c.key).map((s) => h('div.pj-person', { title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
       h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '' }),

@@ -8,6 +8,7 @@ import { viewHome, viewChooseRoad, viewCharacter, SessionEnded } from './views/s
 import { viewMap } from './views/map.js';
 import { viewLesson } from './views/lesson.js';
 import { viewSprites } from './views/sprites.js';
+import { viewSounds } from './views/sounds.js';
 import { viewArcade } from './views/arcade.js';
 import { viewTeacherHome, viewClass, viewReview, viewCurriculum } from './views/teacher.js';
 import { viewStandards } from './views/standards.js';
@@ -22,12 +23,12 @@ export const go = (hash) => { location.hash = hash; };
 
 const STUDENT_ROUTES = [
   [/^\/$/, viewHome], [/^\/road$/, viewChooseRoad], [/^\/map$/, viewMap], [/^\/character$/, viewCharacter], [/^\/standards$/, viewStandards],
-  [/^\/lesson\/(\w+)$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/arcade$/, viewArcade],
+  [/^\/lesson\/(\w+)$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/sounds$/, viewSounds], [/^\/arcade$/, viewArcade],
 ];
 const TEACHER_ROUTES = [
   [/^\/project\/([\w-]+)$/, viewProject],
   [/^\/$/, viewTeacherHome], [/^\/class\/([\w-]+)(?:\/(\w+))?$/, viewClass], [/^\/review\/([\w-]+)$/, viewReview],
-  [/^\/curriculum$/, viewCurriculum], [/^\/standards$/, viewStandards], [/^\/lesson\/(\w+)(?:\/(\w+))?$/, viewLesson], [/^\/sprites$/, viewSprites],
+  [/^\/curriculum$/, viewCurriculum], [/^\/standards$/, viewStandards], [/^\/lesson\/(\w+)(?:\/(\w+))?$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/sounds$/, viewSounds],
   [/^\/arcade\/([\w-]+)$/, viewArcade], [/^\/map\/([\w-]+)$/, viewMap],
 ];
 
@@ -36,8 +37,8 @@ function topbar() {
   const hash = location.hash.slice(1) || '/';
   const link = (href, label) => h('a.nav', { href: `#${href}`, 'aria-current': (href === '/' ? hash === '/' : hash.startsWith(href)) ? 'page' : null }, label);
   const links = s.role === 'student'
-    ? [link('/', 'Home'), link('/map', 'Journey'), link('/character', 'Character'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/arcade', 'Arcade')]
-    : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/standards', 'Standards'), link('/sprites', 'Sprites')];
+    ? [link('/', 'Home'), link('/map', 'Journey'), link('/character', 'Character'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds'), link('/arcade', 'Arcade')]
+    : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds')];
   const who = s.role === 'student'
     ? [h('img.mini-av', { src: avatarURL(s.student.avatar || defaultAvatar(s.student.id), 2), alt: '' }), s.student.display_name]
     : [s.teacher.display_name];
