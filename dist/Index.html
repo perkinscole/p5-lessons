@@ -3,8 +3,36 @@
 <head>
   <meta charset="utf-8">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&family=Jersey+25&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&family=Jersey+25&display=swap" media="print" onload="this.media='all'">
   <?!= include_('Styles') ?>
+  <script>
+  // If the app can't start, say why on screen instead of leaving a blank page.
+  (function () {
+    var shown = false;
+    function show(title, detail) {
+      if (shown || window.__ptStarted) return;
+      shown = true;
+      var put = function () {
+        var box = document.createElement('div');
+        box.className = 'card stack boot';
+        box.style.cssText = 'max-width:640px;margin:40px auto';
+        var h = document.createElement('h2'); h.textContent = title;
+        var p = document.createElement('p'); p.textContent = detail;
+        var q = document.createElement('p'); q.className = 'muted small';
+        q.textContent = 'Reload to try again. If it keeps happening, copy this message for whoever set up Pixel Trail.';
+        box.append(h, p, q);
+        document.body.prepend(box);
+      };
+      if (document.body) put(); else document.addEventListener('DOMContentLoaded', put);
+    }
+    window.addEventListener('error', function (e) { show('Pixel Trail could not start.', String(e.message) + (e.lineno ? ' (line ' + e.lineno + ')' : '')); });
+    window.addEventListener('unhandledrejection', function (e) { show('Pixel Trail could not start.', String(e.reason && e.reason.message || e.reason)); });
+    setTimeout(function () {
+      if (!window.__ptBooted) show('Pixel Trail is taking too long to start.', 'The page loaded, but the app code did not run.');
+      else show('Pixel Trail is taking too long to start.', 'The app is waiting for an answer from the server.');
+    }, 20000);
+  })();
+  </script>
 </head>
 <body>
   <div id="app"></div>

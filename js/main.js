@@ -119,7 +119,9 @@ document.addEventListener('click', (e) => {
 applySettings();
 
 (async function start() {
+  window.__ptBooted = true; // Index.html's startup check reads these two.
   document.getElementById('app').append(h('p.muted.boot', 'Loading Pixel Trail...'));
   app.session = await attempt(() => store.session()) || null;
-  render();
+  await render();
+  window.__ptStarted = true;
 })();
