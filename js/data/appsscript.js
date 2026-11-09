@@ -72,7 +72,7 @@ function cachedCall(method, ...args) {
 const METHODS = [
   'listClasses', 'createClass', 'deleteClass', 'getClass', 'listStudents', 'addStudents', 'removeStudent', 'setStudentPath',
   'classBoard', 'updateProfile', 'myWorks', 'saveWork', 'submitWork', 'setShared', 'classWork', 'getWorkFull', 'saveGrade',
-  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'saveSprite', 'deleteSprite',
+  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'createAssignments', 'saveSprite', 'deleteSprite',
 ];
 
 /** ml5 is stored in pieces, because Apps Script files can't comfortably hold it whole. */

@@ -26,7 +26,8 @@ const SCHEMA = {
   Songs: SONG_COLS,
   Teams: ['id', 'class_id', 'lesson_id', 'members', 'driver_id', 'driver_until', 'blame', 'started', 'doc_at', 'created_at'],
   Contributions: ['team_id', 'lesson_id', 'student_id', 'saves', 'added', 'removed', 'last_at', 'note'],
-  GradeSync: ['class_id', 'lesson_id', 'coursework_id', 'link', 'due', 'pushed_at', 'sent'],
+  // lesson_id holds a lesson number like L6. Roads share numbers, so one assignment covers every road.
+  GradeSync: ['class_id', 'lesson_id', 'coursework_id', 'link', 'due', 'pushed_at', 'sent', 'title', 'points'],
   Daily: ['class_id', 'plan', 'updated_at'],
   Links: ['class_id', 'course_id', 'course_name', 'synced_at'],
   Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
@@ -557,69 +558,130 @@ function approvedFor_(classId) {
   }).filter(Boolean);
 }
 
-function gradeSyncStatus_(me, classId) {
+/** Lesson numbers from the browser: [{ key: 'L6', ids: ['p1', 'a1', 's1', 'm1'] }]. */
+function cleanSlots_(slots) {
+  if (!Array.isArray(slots) || slots.length > 40) throw new Error('Bad request.');
+  return slots.map((x) => {
+    const key = String(x && x.key);
+    const ids = Array.isArray(x && x.ids) ? x.ids.map(String) : [];
+    if (!/^L\d{1,2}$/.test(key) || !ids.length || ids.length > 4 || !ids.every((id) => /^[a-z]\d{1,2}$/.test(id))) throw new Error('Bad request.');
+    return { key, ids };
+  });
+}
+
+/** Each student's approved grade for one lesson number, scaled to the assignment's points. */
+function slotGrades_(approved, slot, points) {
+  const best = new Map();
+  approved.filter((a) => slot.ids.includes(a.lesson_id)).forEach((a) => {
+    const value = Math.round((a.grade.total / (a.grade.max_total || 1)) * points * 10) / 10;
+    const prev = best.get(a.student.id);
+    if (!prev || value > prev.value) best.set(a.student.id, { student: a.student, value });
+  });
+  return [...best.values()];
+}
+
+function gradeSyncStatus_(me, classId, slots) {
   ownerOnly_(me);
   ownedClass_(me, classId);
   if (!linkFor_(classId)) return { linked: false };
   const approved = approvedFor_(classId);
   const syncs = rows_('GradeSync').filter((g) => g.class_id === classId);
-  const lessons = [...new Set(approved.map((a) => a.lesson_id))];
   return {
     linked: true,
-    items: lessons.map((lessonId) => {
-      const here = approved.filter((a) => a.lesson_id === lessonId);
-      const sync = syncs.find((g) => g.lesson_id === lessonId);
+    items: cleanSlots_(slots).map((slot) => {
+      const sync = syncs.find((g) => g.lesson_id === slot.key);
+      const points = sync ? Number(sync.points) || 100 : 100;
+      const grades = slotGrades_(approved, slot, points);
       const sent = (sync && sync.sent) || {};
-      return { lesson_id: lessonId, approved: here.length, waiting: here.filter((a) => sent[a.student.id] !== a.grade.total).length, synced: !!sync, link: sync ? sync.link : '', due: sync ? sync.due : '' };
+      return {
+        key: slot.key, approved: grades.length, synced: !!sync,
+        waiting: sync ? grades.filter((g) => sent[g.student.id] !== g.value).length : grades.length,
+        title: sync ? sync.title : '', points: sync ? points : null, link: sync ? sync.link : '', due: sync ? sync.due : '',
+      };
     }),
   };
 }
 
-function pushGrades_(me, classId, lessonId, opts) {
+/** Make named assignments in the linked Classroom course, before or after any grading. */
+function createAssignments_(me, classId, items, opts) {
   ownerOnly_(me);
   ownedClass_(me, classId);
   const link = linkFor_(classId);
   if (!link) throw new Error('Import this course from Google Classroom first.');
-  const lesson = String(lessonId);
-  const due = String((opts && opts.due) || '');
-  if (!/^[a-z]\d{1,2}$/.test(lesson)) throw new Error('Unknown lesson.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new Error('Choose a due date first.');
-  const approved = approvedFor_(classId).filter((a) => a.lesson_id === lesson);
-  if (!approved.length) throw new Error('No approved work to send for this lesson.');
-
-  const known = rows_('GradeSync').find((g) => g.class_id === classId && g.lesson_id === lesson);
-  let courseworkId = known && known.coursework_id;
-  let courseLink = known ? known.link : '';
-  if (!courseworkId) {
-    const created = Classroom.Courses.CourseWork.create({
-      title: `Pixel Trail: ${text_(opts.title, 150)}`,
-      description: 'Completed in Pixel Trail. Grades are sent from there.',
-      workType: 'ASSIGNMENT', state: 'PUBLISHED', maxPoints: approved[0].grade.max_total, ...dueParts_(due),
-    }, link.course_id);
-    courseworkId = String(created.id);
-    courseLink = created.alternateLink || '';
-  }
-  const subs = allPages_((t) => Classroom.Courses.CourseWork.StudentSubmissions.list(link.course_id, courseworkId, pageOpts_(t)), 'studentSubmissions');
-  const sent = { ...((known && known.sent) || {}) };
-  const out = { link: courseLink, sent: 0, skipped: [], failed: [] };
-  approved.forEach(({ student, grade }) => {
-    const sub = student.google_id && subs.find((x) => String(x.userId) === String(student.google_id));
-    if (!student.google_id) { out.skipped.push(`${student.display_name}: not imported from Classroom`); return; }
-    if (!sub) { out.skipped.push(`${student.display_name}: not in this Classroom assignment`); return; }
+  if (!Array.isArray(items) || !items.length || items.length > 30) throw new Error('Choose up to 30 lessons.');
+  const publish = !!(opts && opts.publish);
+  const appUrl = String(ScriptApp.getService().getUrl() || '');
+  const out = { created: 0, skipped: [], failed: [] };
+  items.forEach((it) => {
+    const [slot] = cleanSlots_([it]);
+    const title = text_(it.title, 150).trim();
+    const points = Math.round(Number(it.points));
+    const due = String(it.due || '');
+    if (!title) { out.failed.push(`${slot.key}: needs a name`); return; }
+    if (!(points >= 1 && points <= 1000)) { out.failed.push(`${title}: points must be 1 to 1000`); return; }
+    if (due && !/^\d{4}-\d{2}-\d{2}$/.test(due)) { out.failed.push(`${title}: bad due date`); return; }
+    if (rows_('GradeSync').some((g) => g.class_id === classId && g.lesson_id === slot.key)) { out.skipped.push(`${title}: already in Classroom`); return; }
     try {
-      Classroom.Courses.CourseWork.StudentSubmissions.patch(
-        { draftGrade: grade.total, assignedGrade: grade.total }, link.course_id, courseworkId, sub.id, { updateMask: 'draftGrade,assignedGrade' });
-      sent[student.id] = grade.total;
-      out.sent++;
+      const body = {
+        title, description: text_(it.description, 1000), workType: 'ASSIGNMENT', state: publish ? 'PUBLISHED' : 'DRAFT', maxPoints: points,
+        ...(due ? dueParts_(due) : {}),
+      };
+      if (/^https:\/\//.test(appUrl)) body.materials = [{ link: { url: appUrl, title: 'Open Pixel Trail' } }];
+      const created = Classroom.Courses.CourseWork.create(body, link.course_id);
+      withLock_(() => insert_('GradeSync', {
+        class_id: classId, lesson_id: slot.key, coursework_id: String(created.id), link: created.alternateLink || '', due, pushed_at: '', sent: {}, title, points,
+      }));
+      out.created++;
     } catch (e) {
-      out.failed.push(`${student.display_name}: ${text_(e && e.message, 160)}`);
+      out.failed.push(`${title}: ${text_(e && e.message, 160)}`);
     }
   });
-  withLock_(() => {
-    const row = { class_id: classId, lesson_id: lesson, coursework_id: courseworkId, link: courseLink, due, pushed_at: now_(), sent };
-    const current = rows_('GradeSync').find((g) => g.class_id === classId && g.lesson_id === lesson);
-    if (current) update_('GradeSync', { ...row, _row: current._row });
-    else insert_('GradeSync', row);
+  return out;
+}
+
+/** Send every approved grade that changed since the last send, to the assignments already made. */
+function pushGrades_(me, classId, slots) {
+  ownerOnly_(me);
+  ownedClass_(me, classId);
+  const link = linkFor_(classId);
+  if (!link) throw new Error('Import this course from Google Classroom first.');
+  const approved = approvedFor_(classId);
+  const syncs = rows_('GradeSync').filter((g) => g.class_id === classId);
+  const out = { sent: 0, assignments: 0, skipped: [], failed: [] };
+  cleanSlots_(slots).forEach((slot) => {
+    const sync = syncs.find((g) => g.lesson_id === slot.key);
+    if (!sync) return;
+    const points = Number(sync.points) || 100;
+    const sent = {};
+    const before = sync.sent || {};
+    const todo = slotGrades_(approved, slot, points).filter((g) => before[g.student.id] !== g.value);
+    if (!todo.length) return;
+    out.assignments++;
+    let subs;
+    try {
+      subs = allPages_((t) => Classroom.Courses.CourseWork.StudentSubmissions.list(link.course_id, sync.coursework_id, pageOpts_(t)), 'studentSubmissions');
+    } catch (e) {
+      out.failed.push(`${sync.title}: ${text_(e && e.message, 160)}`);
+      return;
+    }
+    if (!subs.length) { out.skipped.push(`${sync.title}: no students in it yet. If it is a draft, post it in Classroom first.`); return; }
+    todo.forEach(({ student, value }) => {
+      if (!student.google_id) { out.skipped.push(`${student.display_name}: not imported from Classroom`); return; }
+      const sub = subs.find((x) => String(x.userId) === String(student.google_id));
+      if (!sub) { out.skipped.push(`${student.display_name}: not in "${sync.title}"`); return; }
+      try {
+        Classroom.Courses.CourseWork.StudentSubmissions.patch(
+          { draftGrade: value, assignedGrade: value }, link.course_id, sync.coursework_id, sub.id, { updateMask: 'draftGrade,assignedGrade' });
+        sent[student.id] = value;
+        out.sent++;
+      } catch (e) {
+        out.failed.push(`${student.display_name}: ${text_(e && e.message, 160)}`);
+      }
+    });
+    withLock_(() => {
+      const current = rows_('GradeSync').find((g) => g.class_id === classId && g.lesson_id === slot.key);
+      if (current) update_('GradeSync', { ...current, sent: { ...(current.sent || {}), ...sent }, pushed_at: now_() });
+    });
   });
   return out;
 }
@@ -769,6 +831,7 @@ const TEACHER_ROUTES = {
   classroomWork: classroomWork_,
   gradeSyncStatus: gradeSyncStatus_,
   pushGrades: pushGrades_,
+  createAssignments: createAssignments_,
   listTeams: listTeams_,
   saveTeams: saveTeams_,
   classAlerts: classAlerts_,

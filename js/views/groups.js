@@ -2,6 +2,7 @@
 import { h, clear, toast, attempt, confirmBox } from '../ui.js';
 import { app } from '../main.js';
 import { allLessons, getLesson } from '../curriculum/engine.js';
+import { STAGES, PATHS, PATH_IDS } from '../curriculum/graph.js';
 
 const lessonOptions = (selected) => allLessons().map((l) => h('option', { value: l.id, selected: l.id === selected }, `${l.id}: ${l.title}`));
 
@@ -98,47 +99,136 @@ export async function groupsTab(cls, students, reload) {
 
 const todayText = () => new Date().toLocaleDateString('en-CA');
 
-export async function sendGradesTab(cls, reload) {
-  const data = await app.store.gradeSyncStatus(cls.id);
-  if (!data.linked) return h('section.card.stack', h('h2', 'Not linked to Google Classroom'), h('p', 'Import this course from your Classes page first.'));
-  const results = new Map();
+/** Lesson numbers, as in the gradebook. Roads share numbers, so a road number lists each road's lesson. */
+export function lessonSlots() {
+  const slots = [];
+  let n = 0;
+  for (const st of STAGES) {
+    const shared = st.kind === 'shared';
+    const count = shared ? st.lessons.length : st.branches[PATH_IDS[0]].length;
+    for (let i = 0; i < count; i++) {
+      n++;
+      const ids = shared ? [st.lessons[i]] : PATH_IDS.map((p) => st.branches[p][i]);
+      slots.push({
+        key: `L${n}`, n, ids, beyond: !!st.beyond,
+        title: shared ? getLesson(ids[0]).title : `${st.name} ${i + 1}`,
+        detail: shared ? '' : [...new Set(ids.map((id) => getLesson(id).title))].join(' · '),
+        description: shared ? getLesson(ids[0]).hook
+          : `Each road has its own lesson here. ${PATH_IDS.map((p, k) => `${PATHS[p].road}: ${getLesson(ids[k]).title}`).join('. ')}.`,
+      });
+    }
+  }
+  return slots;
+}
 
-  const rowFor = (item) => {
-    const lesson = getLesson(item.lesson_id);
-    const due = h('input', { type: 'date', value: item.due || todayText(), min: item.synced ? null : todayText(), disabled: !!item.synced, 'aria-label': `Due date for ${lesson.title}` });
-    const out = h('div');
-    const send = h('button.btn.small.primary', { type: 'button', disabled: !item.waiting, onclick: async (e) => {
-      const verb = item.synced ? `Update ${item.waiting} grade${item.waiting === 1 ? '' : 's'}` : `Create "${lesson.title}" in Classroom`;
-      const sure = await confirmBox(verb, item.synced ? 'Grades in that Classroom assignment will be replaced.' : 'Students in the course will see this new assignment, and Classroom may notify them.', 'Send');
-      if (!sure) return;
-      e.target.disabled = true;
-      e.target.textContent = 'Sending...';
-      const r = await attempt(() => app.store.pushGrades(cls.id, item.lesson_id, { title: lesson.title, due: due.value }));
-      e.target.textContent = 'Send';
-      if (!r) { e.target.disabled = false; return; }
-      clear(out).append(h('p.small', `${r.sent} sent.`, r.link && ' ', r.link && h('a', { href: r.link, target: '_blank', rel: 'noopener noreferrer' }, 'Open in Classroom ↗')),
-        ...[...r.skipped, ...r.failed].map((x) => h('p.warn.small', x)));
-    } }, 'Send');
-    return h('tr',
-      h('th', { scope: 'row' }, lesson.title, item.link && h('div', h('a.small', { href: item.link, target: '_blank', rel: 'noopener noreferrer' }, 'Open in Classroom ↗'))),
-      h('td.num', item.approved),
-      h('td.num', item.waiting),
-      h('td', due),
-      h('td', send, out));
+export async function sendGradesTab(cls, reload) {
+  const slots = lessonSlots();
+  const data = await app.store.gradeSyncStatus(cls.id, slots.map(({ key, ids }) => ({ key, ids })));
+  if (!data.linked) return h('section.card.stack', h('h2', 'Not linked to Google Classroom'), h('p', 'Import this course from your Classes page first.'));
+  const status = new Map(data.items.map((i) => [i.key, i]));
+  const picks = [];
+
+  const points = h('input', { type: 'number', min: 1, max: 1000, value: 100, 'aria-label': 'Points for each assignment', style: 'width:6em' });
+  const due = h('input', { type: 'date', min: todayText(), 'aria-label': 'Due date' });
+  const publish = h('input', { type: 'checkbox' });
+  const create = h('button.btn.primary', { type: 'button' }, 'Create assignments');
+  const createOut = h('div.stack.tight');
+  const chosen = () => picks.filter((p) => p.box.checked);
+  const drawCreate = () => {
+    const n = chosen().length;
+    create.disabled = n === 0;
+    create.textContent = n ? `Create ${n} assignment${n === 1 ? '' : 's'}` : 'Create assignments';
   };
 
+  const row = (slot) => {
+    const st = status.get(slot.key);
+    const lessonLine = h('div.small.muted', `Lesson ${slot.n}${slot.detail ? `: ${slot.detail}` : ''}`);
+    if (st.synced) {
+      return h('tr',
+        h('td', { 'aria-label': 'In Classroom' }, '✓'),
+        h('th', { scope: 'row' }, h('div', st.title), lessonLine),
+        h('td.num', st.points),
+        h('td', st.due || '—'),
+        h('td.num', st.waiting ? h('strong', `${st.waiting} to send`) : st.approved ? 'All sent' : ''),
+        h('td', st.link && h('a.small', { href: st.link, target: '_blank', rel: 'noopener noreferrer' }, 'Open ↗')));
+    }
+    const box = h('input', { type: 'checkbox', onchange: drawCreate, 'aria-label': `Choose lesson ${slot.n}` });
+    const name = h('input', { value: `Pixel Trail: ${slot.title}`, maxlength: 150, 'aria-label': `Assignment name for lesson ${slot.n}`, style: 'width:100%', oninput: () => { box.checked = true; drawCreate(); } });
+    picks.push({ slot, box, name });
+    return h('tr',
+      h('td', box),
+      h('th', { scope: 'row' }, name, lessonLine),
+      h('td.num', ''), h('td', ''),
+      h('td.num', st.approved ? `${st.approved} approved` : ''),
+      h('td', ''));
+  };
+  const table = (list) => h('div.table-wrap', h('table.board',
+    h('thead', h('tr', h('th', { scope: 'col' }, ''), h('th', { scope: 'col' }, 'Assignment name'), h('th.num', { scope: 'col' }, 'Points'), h('th', { scope: 'col' }, 'Due'), h('th.num', { scope: 'col' }, 'Grades'), h('th', { scope: 'col' }, ''))),
+    h('tbody', list.map(row))));
+  const coreTable = table(slots.filter((x) => !x.beyond));
+  const beyondTable = table(slots.filter((x) => x.beyond));
+  const pick = (test) => { picks.forEach((p) => { p.box.checked = test(p.slot); }); drawCreate(); };
+
+  create.onclick = async () => {
+    const list = chosen();
+    if (!list.length) return;
+    if (list.some((p) => !p.name.value.trim())) { toast('Every chosen assignment needs a name.', 'error'); return; }
+    const sure = await confirmBox(`Create ${list.length} assignment${list.length === 1 ? '' : 's'} in Classroom?`,
+      publish.checked ? 'Students will see them right away, and Classroom may notify them.' : 'They are saved as drafts. Students see nothing until you post them in Classroom.', 'Create');
+    if (!sure) return;
+    create.disabled = true;
+    create.textContent = 'Creating...';
+    const r = await attempt(() => app.store.createAssignments(cls.id, list.map((p) => ({
+      key: p.slot.key, ids: p.slot.ids, title: p.name.value.trim(), points: Number(points.value), due: due.value, description: p.slot.description,
+    })), { publish: publish.checked }));
+    if (!r) { drawCreate(); return; }
+    toast(`Created ${r.created} assignment${r.created === 1 ? '' : 's'} in Classroom.`);
+    if (r.skipped.length || r.failed.length) clear(createOut).append(...[...r.skipped, ...r.failed].map((x) => h('p.warn.small', x)));
+    else reload();
+  };
+  drawCreate();
+
+  const waiting = data.items.filter((i) => i.synced).reduce((a, i) => a + i.waiting, 0);
+  const unmade = data.items.filter((i) => !i.synced && i.approved).length;
+  const sendOut = h('div.stack.tight');
+  const send = h('button.btn.primary', { type: 'button', disabled: !waiting, onclick: async () => {
+    send.disabled = true;
+    send.textContent = 'Sending...';
+    const r = await attempt(() => app.store.pushGrades(cls.id, slots.filter((x) => status.get(x.key).synced).map(({ key, ids }) => ({ key, ids }))));
+    send.textContent = 'Send grades';
+    if (!r) { send.disabled = false; return; }
+    toast(`Sent ${r.sent} grade${r.sent === 1 ? '' : 's'} to ${r.assignments} assignment${r.assignments === 1 ? '' : 's'}.`);
+    clear(sendOut).append(...[...r.skipped, ...r.failed].map((x) => h('p.warn.small', x)));
+    if (!r.skipped.length && !r.failed.length) reload();
+  } }, waiting ? `Send ${waiting} grade${waiting === 1 ? '' : 's'}` : 'Send grades');
+
   return h('div.stack',
-    data.items.length ? h('div.table-wrap', h('table.board',
-      h('thead', h('tr', h('th', { scope: 'col' }, 'Lesson'), h('th.num', { scope: 'col' }, 'Approved'), h('th.num', { scope: 'col' }, 'To send'), h('th', { scope: 'col' }, 'Due date'), h('th', { scope: 'col' }, ''))),
-      h('tbody', data.items.map(rowFor)),
-    )) : h('p.muted', 'Approve some work in Grades, and it will show up here.'),
+    h('section.card.stack',
+      h('h2', 'Send grades to Classroom'),
+      h('p', waiting ? `${waiting} approved grade${waiting === 1 ? '' : 's'} not in Classroom yet.` : 'Everything approved is already in Classroom.'),
+      unmade > 0 && h('p.muted.small', `${unmade} lesson${unmade === 1 ? ' has' : 's have'} approved work but no assignment yet. Create ${unmade === 1 ? 'it' : 'them'} below first.`),
+      h('div.row', send), sendOut,
+      h('p.muted.small', 'Only approved work is sent. Rubric scores are scaled to each assignment\'s points, so 9 of 12 on a 100-point assignment sends 75.')),
+    h('section.card.stack',
+      h('h2', 'Classroom assignments'),
+      h('p.muted.small', 'Each assignment matches a lesson number in the gradebook. Road lessons share a number, so one assignment covers all four roads.'),
+      h('div.row',
+        h('button.btn.small', { type: 'button', onclick: () => pick((x) => !x.beyond) }, 'Select core lessons'),
+        h('button.btn.small', { type: 'button', onclick: () => pick(() => false) }, 'Clear')),
+      coreTable,
+      h('details', h('summary', 'Beyond the Summit lessons'), beyondTable),
+      h('div.row',
+        h('label.field.small', h('span', 'Points each'), points),
+        h('label.field.small', h('span', 'Due date (optional)'), due),
+        h('label.check', publish, h('span', 'Post now (otherwise saved as drafts in Classroom)'))),
+      h('div.row', create), createOut),
     h('section.card.stack',
       h('h2', 'Getting grades into PowerSchool'),
       h('ol.steps',
-        h('li', 'Send grades from this page. Pick a due date inside your PowerSchool grading period.'),
-        h('li', 'In Classroom, open the assignment and choose a grade category that matches PowerSchool. (Only needed once per assignment.)'),
-        h('li', 'Select your students and press Return. PowerSchool only takes returned grades.'),
-        h('li', 'Use Classroom\'s export to send them to PowerSchool.')),
-      h('p.muted.small', 'Google doesn\'t let apps set the category or return unsubmitted work, so those two steps stay in Classroom.')),
+        h('li', 'Create assignments here, with due dates inside your PowerSchool grading period.'),
+        h('li', 'If you saved them as drafts, post them in Classroom. Grades can only go to posted assignments.'),
+        h('li', 'In Classroom, give each assignment a grade category that matches PowerSchool.'),
+        h('li', 'After sending grades, select your students in Classroom and press Return. PowerSchool only takes returned grades.')),
+      h('p.muted.small', 'Google doesn\'t let apps set the category or return work, so those steps stay in Classroom.')),
   );
 }

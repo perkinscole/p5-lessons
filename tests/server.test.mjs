@@ -426,40 +426,67 @@ test('a group grade can go to teammates who submitted, and only them', () => {
   assert.equal(teacher('classWork', cls.id).find((w) => w.id === b.id).grade.total, 9, 'students can get different grades');
 });
 
-test('grades go only to an assignment this app created, with both grade fields', () => {
+test('named assignments are made ahead, and grades go to them scaled to their points', () => {
   const data = classroomData();
   const server = createServer({ owner: OWNER, classroom: data });
   const t = server.as(OWNER);
   t('listClasses');
   server.sheets.get('Teachers').appendRow([OTHER, 'Other', '2026-01-01']);
   const [r] = t('importCourses', ['c1']);
-  data.madeSubs = { c1: [{ id: 'sub1', userId: 'g1', courseWorkId: 'made-1' }] };
   const s = server.as('ava@school.test');
-  denied(() => t('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' }));
-  const w = s('submitWork', 't1', { code: 'a', assets: {} });
-  t('saveGrade', w.id, { scores: {}, total: 11, max_total: 12, feedback: 'SECRET', status: 'approved' });
+  const L1 = { key: 'L1', ids: ['t1'] };
+  const L6 = { key: 'L6', ids: ['p1', 'a1', 's1', 'm1'] };
+  const item = { ...L1, title: 'Hello, Canvas', points: 100, due: '2030-01-15', description: 'Draw a scene.' };
 
-  denied(() => s('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' }));
-  denied(() => server.as(OTHER)('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' }));
-  denied(() => t('pushGrades', r.class_id, 't1', { title: 'Hello', due: 'soon' }));
+  // Only the deploying teacher, on their own class, with sensible input.
+  denied(() => s('createAssignments', r.class_id, [item], { publish: true }));
+  denied(() => server.as(OTHER)('createAssignments', r.class_id, [item], { publish: true }));
+  denied(() => t('createAssignments', r.class_id, [{ ...item, key: 'x1' }], {}));
+  denied(() => s('pushGrades', r.class_id, [L1]));
+  assert.equal(t('createAssignments', r.class_id, [{ ...item, title: ' ' }], {}).failed.length, 1);
+  assert.equal(t('createAssignments', r.class_id, [{ ...item, due: 'soon' }], {}).failed.length, 1);
 
-  assert.equal(t('gradeSyncStatus', r.class_id).items[0].waiting, 1);
-  const out = t('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' });
-  assert.equal(out.sent, 1);
-  assert.equal(data.created.length, 1);
+  // Made before anyone has been graded, with the teacher's name, points, and due date.
+  const made = t('createAssignments', r.class_id, [item, { ...L6, title: 'Unit 2: First Fork', points: 12, due: '' }], { publish: true });
+  assert.equal(made.created, 2);
+  assert.equal(data.created[0].title, 'Hello, Canvas');
   assert.equal(data.created[0].state, 'PUBLISHED');
-  assert.equal(data.created[0].maxPoints, 12);
-  assert.ok(data.created[0].dueDate && data.created[0].dueTime, 'PowerSchool needs a due date');
-  assert.deepEqual(data.patched[0], { courseId: 'c1', workId: 'made-1', subId: 'sub1', draftGrade: 11, assignedGrade: 11 });
-  assert.equal(JSON.stringify(data.created).includes('SECRET'), false, 'feedback stays private');
-  assert.equal(t('gradeSyncStatus', r.class_id).items[0].waiting, 0);
+  assert.equal(data.created[0].maxPoints, 100);
+  assert.ok(data.created[0].dueDate && data.created[0].dueTime);
+  assert.equal(data.created[1].dueDate, undefined, 'due date is optional');
+  assert.equal(data.created[0].materials[0].link.url, 'https://script.test/exec');
+  assert.equal(t('createAssignments', r.class_id, [item], {}).skipped.length, 1, 'no second copy');
+  const drafts = t('createAssignments', r.class_id, [{ key: 'L2', ids: ['t3'], title: 'It Moves!', points: 10 }], {});
+  assert.equal(drafts.created, 1);
+  assert.equal(data.created[2].state, 'DRAFT');
 
-  // Sending again updates the same assignment rather than making a second one.
+  let status = t('gradeSyncStatus', r.class_id, [L1, L6]);
+  assert.equal(status.items[0].synced, true);
+  assert.equal(status.items[0].title, 'Hello, Canvas');
+  assert.equal(status.items[0].waiting, 0);
+
+  // Grade in the app, then one button sends everything that changed.
+  data.madeSubs = { c1: [{ id: 'sub1', userId: 'g1', courseWorkId: 'made-1' }, { id: 'sub2', userId: 'g1', courseWorkId: 'made-2' }] };
+  const w = s('submitWork', 't1', { code: 'a', assets: {} });
+  t('saveGrade', w.id, { scores: {}, total: 9, max_total: 12, feedback: 'SECRET', status: 'approved' });
+  t('setStudentPath', t('listStudents', r.class_id)[0].id, 'adventure');
+  const w2 = s('submitWork', 'a1', { code: 'b', assets: {} });
+  t('saveGrade', w2.id, { scores: {}, total: 12, max_total: 12, feedback: '', status: 'approved' });
+  assert.equal(t('gradeSyncStatus', r.class_id, [L1, L6]).items[0].waiting, 1);
+  const out = t('pushGrades', r.class_id, [L1, L6]);
+  assert.equal(out.sent, 2);
+  assert.deepEqual(data.patched[0], { courseId: 'c1', workId: 'made-1', subId: 'sub1', draftGrade: 75, assignedGrade: 75 });
+  assert.equal(data.patched[1].draftGrade, 12, 'a road lesson counts toward its lesson number');
+  assert.equal(JSON.stringify(data.created).includes('SECRET'), false, 'feedback stays private');
+  status = t('gradeSyncStatus', r.class_id, [L1, L6]);
+  assert.equal(status.items[0].waiting + status.items[1].waiting, 0);
+  assert.equal(t('pushGrades', r.class_id, [L1, L6]).sent, 0, 'nothing changed, nothing sent');
+
+  // A changed grade goes again, to the same assignment.
   t('saveGrade', w.id, { scores: {}, total: 12, max_total: 12, feedback: '', status: 'approved' });
-  assert.equal(t('gradeSyncStatus', r.class_id).items[0].waiting, 1);
-  t('pushGrades', r.class_id, 't1', { title: 'Hello', due: '2030-01-15' });
-  assert.equal(data.created.length, 1);
-  assert.equal(data.patched[1].assignedGrade, 12);
+  t('pushGrades', r.class_id, [L1, L6]);
+  assert.equal(data.created.length, 3);
+  assert.equal(data.patched[2].assignedGrade, 100);
 });
 
 test('song rules: only real notes, owner edits, class sees published, teacher can remove', () => {

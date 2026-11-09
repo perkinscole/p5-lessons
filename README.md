@@ -95,7 +95,7 @@ Work through [PILOT.md](PILOT.md), a step-by-step checklist for the first deploy
 
 On your Classes page, press **Import from Google Classroom** to bring in courses and students. Import again any time to add new students. It only reads from Classroom and never changes anything there. Only the teacher who deployed the app can use the connection.
 
-A class's **Assignments** tab shows every Classroom assignment and each student's status. **Keeping up** flags students who are behind the pace for your term dates, have gone quiet, have work to fix, or have missing Classroom work. You can turn on an email on school mornings, sent only when someone needs a check-in.
+A class's **Classroom grades** tab makes named assignments in that section's Classroom: tick lessons, edit their names, set points and an optional due date, and post them now or save them as drafts. Each assignment matches a lesson number in the gradebook, so one covers all four roads. After grading in the app, **Send grades** sends every approved score that changed, scaled to the assignment's points. Then press Return in Classroom. The **Assignments** tab shows every Classroom assignment and each student's status. **Keeping up** flags students who are behind the pace for your term dates, have gone quiet, have work to fix, or have missing Classroom work. You can turn on an email on school mornings, sent only when someone needs a check-in.
 
 After updating to this version, open the Apps Script editor, run any function once, and approve the new Classroom and email permissions. Then publish a new version. Your Workspace admin may need to allow the Classroom API.
 

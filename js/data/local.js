@@ -74,6 +74,19 @@ export function createLocalStore() {
   save();
   const readSession = () => { try { return JSON.parse(localStorage.getItem(SESSION)); } catch (_) { return null; } };
   const writeSession = (s) => { try { if (s) localStorage.setItem(SESSION, JSON.stringify(s)); else localStorage.removeItem(SESSION); } catch (_) { /* private mode */ } };
+  /** Best approved grade per student for one lesson number, scaled to the assignment's points. */
+  const demoSlotGrades = (classId, slot, points) => {
+    const best = new Map();
+    for (const st of db.students.filter((x) => x.class_id === classId)) {
+      for (const w of db.works.filter((x) => x.student_id === st.id && x.status === 'approved' && slot.ids.includes(x.lesson_id))) {
+        const g = db.grades.find((x) => x.work_id === w.id);
+        if (!g) continue;
+        const value = Math.round((g.total / (g.max_total || 1)) * points * 10) / 10;
+        if (!best.has(st.id) || value > best.get(st.id).value) best.set(st.id, { id: st.id, value });
+      }
+    }
+    return [...best.values()];
+  };
   const publicStudent = ({ passcode, ...s }) => clone(s);
   const me = () => {
     const s = readSession();
@@ -321,23 +334,42 @@ export function createLocalStore() {
       db.contributions = (db.contributions || []).filter((c) => !dropped.has(c.team_id));
       save();
     },
-    async gradeSyncStatus(classId) {
+    // Demo stand-in for Google Classroom: assignments are remembered here and grades "sent" instantly.
+    async gradeSyncStatus(classId, slots) {
       if (!(db.links || {})[classId]) return { linked: false };
-      const ids = new Set(db.students.filter((s) => s.class_id === classId).map((s) => s.id));
-      const approved = db.works.filter((w) => ids.has(w.student_id) && w.status === 'approved' && db.grades.some((g) => g.work_id === w.id));
       const synced = db.gradeSync || {};
-      return { linked: true, items: [...new Set(approved.map((w) => w.lesson_id))].map((lessonId) => {
-        const here = approved.filter((w) => w.lesson_id === lessonId);
-        const sync = synced[`${classId}/${lessonId}`];
-        return { lesson_id: lessonId, approved: here.length, waiting: sync ? 0 : here.length, synced: !!sync, link: sync?.link || '', due: sync?.due || '' };
+      return { linked: true, items: slots.map((slot) => {
+        const sync = synced[`${classId}/${slot.key}`];
+        const grades = demoSlotGrades(classId, slot, sync ? sync.points : 100);
+        const sent = sync?.sent || {};
+        return { key: slot.key, approved: grades.length, synced: !!sync, waiting: grades.filter((g) => !sync || sent[g.id] !== g.value).length,
+          title: sync?.title || '', points: sync?.points ?? null, link: sync?.link || '', due: sync?.due || '' };
       }) };
     },
-    async pushGrades(classId, lessonId, { due }) {
-      const ids = new Set(db.students.filter((s) => s.class_id === classId).map((s) => s.id));
-      const sent = db.works.filter((w) => ids.has(w.student_id) && w.lesson_id === lessonId && w.status === 'approved').length;
-      db.gradeSync = { ...(db.gradeSync || {}), [`${classId}/${lessonId}`]: { link: 'https://classroom.google.com', due } };
+    async createAssignments(classId, items, { publish } = {}) {
+      const out = { created: 0, skipped: [], failed: [] };
+      db.gradeSync = db.gradeSync || {};
+      for (const it of items) {
+        const k = `${classId}/${it.key}`;
+        if (db.gradeSync[k]) { out.skipped.push(`${it.title}: already in Classroom`); continue; }
+        if (!String(it.title || '').trim()) { out.failed.push(`${it.key}: needs a name`); continue; }
+        db.gradeSync[k] = { title: it.title.trim(), points: Number(it.points) || 100, due: it.due || '', link: 'https://classroom.google.com', state: publish ? 'PUBLISHED' : 'DRAFT', sent: {} };
+        out.created++;
+      }
       save();
-      return { link: 'https://classroom.google.com', sent, skipped: [], failed: [] };
+      return out;
+    },
+    async pushGrades(classId, slots) {
+      const out = { sent: 0, assignments: 0, skipped: [], failed: [] };
+      for (const slot of slots) {
+        const sync = (db.gradeSync || {})[`${classId}/${slot.key}`];
+        if (!sync) continue;
+        const todo = demoSlotGrades(classId, slot, sync.points).filter((g) => sync.sent[g.id] !== g.value);
+        if (todo.length) out.assignments++;
+        for (const g of todo) { sync.sent[g.id] = g.value; out.sent++; }
+      }
+      save();
+      return out;
     },
     async saveWork(lessonId, incoming) {
       const sid = readSession().id;

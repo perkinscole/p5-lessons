@@ -51,12 +51,13 @@ function fakeClassroom(data) {
         // Like the real API: grades can only be written on coursework this app created.
         create: (body, courseId) => {
           data.created = data.created || [];
+          if (!body.title || !body.maxPoints) throw new Error('title and maxPoints are required');
           const work = { ...body, id: `made-${data.created.length + 1}`, courseId, alternateLink: 'https://classroom.test/a' };
           data.created.push(work);
           return work;
         },
         StudentSubmissions: {
-          list: (id, workId, o) => page(workId === '-' ? (data.subs || {})[id] || [] : (data.madeSubs || {})[id] || [], 'studentSubmissions', o.pageToken),
+          list: (id, workId, o) => page(workId === '-' ? (data.subs || {})[id] || [] : ((data.madeSubs || {})[id] || []).filter((x) => !x.courseWorkId || x.courseWorkId === workId), 'studentSubmissions', o.pageToken),
           patch: (body, courseId, workId, subId, opts) => {
             if (!(data.created || []).some((w) => w.id === workId)) throw new Error('ProjectPermissionDenied');
             if (!opts.updateMask.includes('draftGrade') || !opts.updateMask.includes('assignedGrade')) throw new Error('bad mask');

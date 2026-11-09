@@ -236,7 +236,7 @@ export async function viewClass(main, classId, tabParam) {
           : journeyTab(board, cls);
   return h('div.stack',
     h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
-    h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('groups', 'Groups'), link('send', 'Send grades'), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
+    h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('groups', 'Groups'), link('send', 'Classroom grades'), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
     content,
   );
 }
