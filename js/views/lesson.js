@@ -160,6 +160,14 @@ export async function viewLesson(main, id, previewPath) {
   const answered = new Set(work && work.quiz_total === quizzes.length && quizzes.length ? quizzes : []);
   let quizRight = work?.quiz_right || 0;
   let stepIndex = 0;
+  // The furthest step reached is saved, so the class display can show it and the lesson reopens there.
+  const stepNumberAt = (i) => {
+    if (i >= flow.length) return lesson.steps.length;
+    for (let k = i; k >= 0; k--) if (flow[k].step) return flow[k].n;
+    return 0;
+  };
+  let furthest = Math.min(Number(work?.step_at) || 0, lesson.steps.length);
+  if (furthest > 0) stepIndex = furthest >= lesson.steps.length ? flow.length : Math.max(0, flow.findIndex((x) => x.step && x.n === furthest));
   let stretchDone = work?.stretch_done || 0;
   let dirty = false;
   const stdPanel = standardsPanel(id, preview);
@@ -327,7 +335,7 @@ export async function viewLesson(main, id, previewPath) {
     const src = mainCode();
     const c = checkSummary(lesson, allCode());
     try {
-      work = await app.store.saveWork(id, { ...codePatch(src), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() });
+      work = await app.store.saveWork(id, { ...codePatch(src), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, step_at: furthest, ...quizPatch() });
       dirty = false;
       if (work.team_lost) { driving = false; applyRole(); pollTeam(); }
       status.textContent = 'All saved';
@@ -459,6 +467,7 @@ export async function viewLesson(main, id, previewPath) {
 
   const drawStep = () => {
     clearPlace();
+    if (stepNumberAt(stepIndex) > furthest) { furthest = stepNumberAt(stepIndex); markDirty(); }
     drawDots();
     clear(stepBox);
     stopSpeaking();
@@ -632,7 +641,7 @@ export async function viewLesson(main, id, previewPath) {
     if (team && !contribution.value.trim()) { toast('Write what each person in your group did first.', 'error'); return; }
     saveSoon.cancel();
     const before = statsFor({ ...me.row, path, works: me.row.works });
-    const saved = await attempt(() => app.store.submitWork(id, { ...codePatch(mainCode()), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() }));
+    const saved = await attempt(() => app.store.submitWork(id, { ...codePatch(mainCode()), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, step_at: lesson.steps.length, ...quizPatch() }));
     if (!saved) return;
     work = saved;
     dirty = false;

@@ -435,10 +435,35 @@ body.projecting .page { max-width: none; padding: 0; }
 .pj-time-note { font-size: 2vh; font-weight: 700; }
 .pj-set { font: 700 1.3rem var(--font-body); padding: 18px 8px; background: none; border: 0; color: inherit; cursor: pointer; width: 100%; }
 .pj-plus { position: absolute; top: 6px; right: 6px; font: 700 .85rem var(--font-body); background: none; color: inherit; border: 1px solid currentColor; border-radius: 3px; padding: 2px 6px; cursor: pointer; opacity: .7; }
-.pj-panels { flex: 1; min-height: 0; display: grid; gap: var(--pj-gap); grid-template-columns: 1fr 1.25fr 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1.15fr) auto; grid-template-areas: 'work question feed' 'progress progress progress' 'standards standards standards'; }
+.pj-panels { flex: 1; min-height: 0; display: grid; gap: var(--pj-gap); grid-template-columns: 1fr 1fr 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; grid-template-areas: 'race race question' 'race race feed' 'progress progress progress' 'standards standards standards'; }
 .pj-panel { background: var(--card); border: 2px solid var(--line); box-shadow: var(--shadow); padding: 10px 16px; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 6px; }
 .pj-panel h2 { font-size: 3.2vh; }
-.pj-work { grid-area: work; }
+.pj-race-panel { grid-area: race; }
+.pj-race-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pj-race-focus { margin: 0; padding-left: 2.4vh; font-size: 2.2vh; font-weight: 700; }
+.pj-race { flex: 1; min-height: 0; display: grid; gap: 4px; position: relative; }
+/* The track: a dashed road behind the numbered stops. */
+.pj-race::before { content: ''; position: absolute; left: 4%; right: 4%; top: 2.6vh; border-top: .6vh dashed var(--line); opacity: .35; }
+.pj-stop { position: relative; display: flex; flex-direction: column; align-items: center; min-height: 0; padding: 0 2px 4px; border-radius: 4px; }
+.pj-stop.busy { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.pj-stop.finish { background: color-mix(in srgb, var(--ok, #2e8b57) 14%, transparent); }
+.pj-stop-mark { position: relative; z-index: 1; width: 5.2vh; height: 5.2vh; display: grid; place-items: center; font: 400 2.8vh/1 var(--font-display); background: var(--card); color: var(--ink); border: 2px solid var(--line); box-shadow: var(--shadow); }
+.pj-stop.busy .pj-stop-mark { background: var(--accent); color: var(--accent-ink); }
+.pj-stop.start .pj-stop-mark { opacity: .7; }
+.pj-stop-label { margin-top: .6vh; font-size: 1.55vh; font-weight: 700; line-height: 1.1; text-align: center; color: var(--ink-2); min-height: 3.4vh; overflow-wrap: anywhere; }
+.pj-stop.busy .pj-stop-label { color: var(--ink); }
+.pj-racers { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: center; gap: 3px 4px; padding-top: .6vh; }
+.pj-race.large .pj-person img { height: 5.5vh; }
+.pj-race.large .pj-person span { font-size: 1.6vh; }
+.pj-race.medium .pj-person img { height: 4vh; }
+.pj-race.medium .pj-person span { font-size: 1.3vh; }
+.pj-race.small .pj-person img { height: 2.8vh; }
+.pj-race.small .pj-person span { font-size: 1.05vh; }
+.pj-race.tiny .pj-person img { height: 2.2vh; }
+.pj-race.tiny .pj-person span { display: none; }
+.pj-others { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 1.7vh; }
+.pj-other { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 2px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 12px; }
+.pj-other img { height: 2.4vh; image-rendering: pixelated; }
 .pj-question { grid-area: question; }
 .pj-feed-panel { grid-area: feed; }
 .pj-progress { grid-area: progress; }

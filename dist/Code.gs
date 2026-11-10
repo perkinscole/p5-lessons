@@ -11,6 +11,9 @@ const MAX_WORK_CHARS = CELL_CHUNK * WORK_CELLS;
 const MAX_SPRITE_CHARS = CELL_CHUNK * SPRITE_CELLS;
 
 const chunkCols_ = (n) => Array.from({ length: n }, (_, i) => `data${i + 1}`);
+// Fields added after classes started using the app go at the end of the row, after the code
+// columns, so rows already in a teacher's Sheet keep their columns. metaWorks_ reads them too.
+const WORK_TAIL = ['step_at'];
 const WORK_META = ['id', 'student_id', 'lesson_id', 'status', 'stretch_done', 'reflection', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'auto_ok', 'shared', 'submitted_at', 'updated_at'];
 const SONG_COLS = ['id', 'class_id', 'student_id', 'teacher_email', 'author_name', 'name', 'data', 'published', 'created_at'];
 const SPRITE_META = ['id', 'class_id', 'student_id', 'teacher_email', 'author_name', 'name', 'frames', 'w', 'h', 'published', 'created_at'];
@@ -20,7 +23,7 @@ const SCHEMA = {
   // music_open: the teacher lets students use the Music Maker. Blank means closed.
   Classes: ['id', 'teacher_email', 'name', 'created_at', 'music_open'],
   Students: ['id', 'class_id', 'email', 'display_name', 'avatar', 'path', 'game_name', 'created_at', 'google_id'],
-  Works: [...WORK_META, ...chunkCols_(WORK_CELLS)],
+  Works: [...WORK_META, ...chunkCols_(WORK_CELLS), ...WORK_TAIL],
   Grades: ['work_id', 'scores', 'total', 'max_total', 'feedback', 'graded_at'],
   Awards: ['id', 'student_id', 'badge_id', 'note', 'created_at'],
   Sprites: [...SPRITE_META, ...chunkCols_(SPRITE_CELLS)],
@@ -33,7 +36,7 @@ const SCHEMA = {
   Links: ['class_id', 'course_id', 'course_name', 'synced_at'],
   Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
 };
-const NUMBERS = new Set(['stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
+const NUMBERS = new Set(['step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
 const BOOLEANS = new Set(['auto_ok', 'shared', 'published', 'started', 'music_open']);
 const OBJECTS = new Set(['avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
@@ -275,13 +278,20 @@ function canViewClass_(me, classId) {
 }
 
 const stripWorkMeta_ = ({ _row, ...w }) => w;
-const metaWorks_ = () => rows_('Works', WORK_META);
+function metaWorks_() {
+  const rows = rows_('Works', WORK_META);
+  if (!rows.length) return rows;
+  const col = SCHEMA.Works.length - WORK_TAIL.length + 1;
+  const tail = sheet_('Works').getRange(2, col, rows.length, WORK_TAIL.length).getValues();
+  rows.forEach((r, i) => WORK_TAIL.forEach((f, c) => { r[f] = decode_(f, tail[i][c]); }));
+  return rows;
+}
 
 function fullWork_(row) {
   const full = readRow_('Works', row._row);
   const doc = JSON.parse(unpackChunks_(full, WORK_CELLS) || '{"code":"","assets":{},"files":{}}');
   const out = {};
-  WORK_META.forEach((f) => { out[f] = full[f]; });
+  [...WORK_META, ...WORK_TAIL].forEach((f) => { out[f] = full[f]; });
   return { ...out, code: doc.code, assets: doc.assets, files: doc.files || {} };
 }
 
@@ -301,7 +311,7 @@ function classBoard_(me, classId) {
   // Progress only: never code, grades, feedback, reflections, or emails.
   return students.map((s) => ({
     id: s.id, display_name: s.display_name, avatar: s.avatar, path: s.path, game_name: s.game_name,
-    works: works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
+    works: works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, step_at: w.step_at, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
     awards: awards.filter((a) => a.student_id === s.id).map((a) => ({ badge_id: a.badge_id, note: a.note, created_at: a.created_at })),
     sprites_shared: sprites.filter((sp) => sp.student_id === s.id && sp.published).length,
   }));
@@ -1216,6 +1226,8 @@ function saveMyWork_(me, lessonId, patch, extra) {
       quiz_right: Number(patch.quiz_right) || 0,
       quiz_total: Number(patch.quiz_total) || 0,
       auto_ok: !!patch.auto_ok,
+      // How far through the lesson's steps the student has got, for the class display.
+      step_at: patch.step_at === undefined ? (existing ? existing.step_at : 0) : Math.max(0, Math.min(40, Math.round(Number(patch.step_at) || 0))),
       updated_at: now_(),
       ...(extra || {}),
     };
@@ -1223,7 +1235,7 @@ function saveMyWork_(me, lessonId, patch, extra) {
     if (existing) update_('Works', row);
     else insert_('Works', row);
     const out = {};
-    WORK_META.forEach((f) => { out[f] = row[f]; });
+    [...WORK_META, ...WORK_TAIL].forEach((f) => { out[f] = row[f]; });
     const saved = JSON.parse(written);
     return { ...out, code: saved.code, assets: saved.assets, files: saved.files, team_lost: lostTurn };
   });

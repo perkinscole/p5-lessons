@@ -4,7 +4,7 @@ import { h, clear, modal, toast, attempt } from '../ui.js';
 import { app, go } from '../main.js';
 import { readButton } from '../settings.js';
 import { getLesson } from '../curriculum/engine.js';
-import { PATHS, STAGES, stageOf, isSideTrail } from '../curriculum/graph.js';
+import { PATHS, STAGES, stageOf, isSideTrail, sequence } from '../curriculum/graph.js';
 import { alignmentFor, coverage, standardByCode } from '../curriculum/alignment.js';
 import { bigQuestionFor } from '../curriculum/big.js';
 import { recentAchievements } from '../game/rules.js';
@@ -67,15 +67,74 @@ function progression(board) {
   )));
 }
 
-/** Use the largest character size at which every student is visible. */
+/** Use the largest character size at which every student is visible, on the trail and in the race. */
 function fitTrail(root) {
-  const trail = root.querySelector('.pj-trail');
-  if (!trail) return;
-  for (const size of ['large', 'medium', 'small', 'tiny']) {
-    trail.classList.remove('large', 'medium', 'small', 'tiny');
-    trail.classList.add(size);
-    if (![...trail.querySelectorAll('.pj-stage')].some((st) => st.scrollHeight > st.clientHeight + 1)) return;
+  for (const [box, part] of [['.pj-trail', '.pj-stage'], ['.pj-race', '.pj-racers']]) {
+    const el = root.querySelector(box);
+    if (!el) continue;
+    for (const size of ['large', 'medium', 'small', 'tiny']) {
+      el.classList.remove('large', 'medium', 'small', 'tiny');
+      el.classList.add(size);
+      if (![...el.querySelectorAll(part)].some((st) => st.scrollHeight > st.clientHeight + 1)) break;
+    }
   }
+}
+
+const sameDay = (iso) => !!iso && new Date(iso).toLocaleDateString('en-CA') === todayKey();
+const personChip = (s) => h('div.pj-person', { title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
+  h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '' }),
+  h('span', s.display_name));
+
+/**
+ * The lesson most of the class is on, as a race: each step is a stop, and each student stands at
+ * the furthest step they have reached. Students who submit it today cross the finish.
+ */
+function racePanel(board, lessons, focus) {
+  const main = lessons[0];
+  if (!main) return h('section.pj-panel.pj-race-panel', h('h2', 'Today'), h('p.pj-sub', 'Nobody has started yet. Open Home to begin.'));
+  const lesson = getLesson(main.id);
+  const last = lesson.steps.length - 1;
+  const stops = [
+    { key: 'start', mark: '▶', label: 'Not started' },
+    ...lesson.steps.map((st, i) => ({ key: i, mark: String(i + 1), label: st.title })),
+    { key: 'finish', mark: '🏁', label: 'Submitted' },
+  ];
+  const at = new Map(stops.map((st) => [st.key, []]));
+  const others = [];
+  for (const s of board) {
+    const w = s.works.find((x) => x.lesson_id === main.id);
+    const handedIn = w && (w.status === 'submitted' || w.status === 'approved');
+    if (standingOn(s) === main.id) {
+      if (!w) at.get('start').push(s);
+      else if (handedIn) at.get('finish').push(s);
+      else at.get(Math.min(Number(w.step_at) || 0, last)).push(s);
+    } else if (handedIn && sameDay(w.submitted_at)) at.get('finish').push(s);
+    else others.push(s);
+  }
+  const working = lesson.steps.reduce((a, _, i) => a + at.get(i).length, 0);
+  const busiest = Math.max(...lesson.steps.map((_, i) => at.get(i).length));
+  const where = (s) => {
+    const id = standingOn(s);
+    const n = sequence(s.path).indexOf(id) + 1;
+    return n ? `Lesson ${n}` : getLesson(id).title;
+  };
+  return h('section.pj-panel.pj-race-panel',
+    h('div.pj-race-head',
+      h('h2', `Today: ${lesson.title}`),
+      h('span.pj-sub', `${working} working · ${at.get('finish').length} submitted · ${at.get('start').length} not started`)),
+    focus.length > 0 && h('ul.pj-race-focus', focus.map((x) => h('li', x))),
+    h('div.pj-race', { style: `grid-template-columns:repeat(${stops.length}, minmax(0, 1fr))` },
+      stops.map((st) => {
+        const here = at.get(st.key);
+        const busy = typeof st.key === 'number' && here.length > 0 && here.length === busiest;
+        return h('div.pj-stop', { class: `${typeof st.key === 'number' ? '' : st.key} ${busy ? 'busy' : ''}` },
+          h('div.pj-stop-mark', st.mark),
+          h('div.pj-stop-label', st.label),
+          h('div.pj-racers', here.map(personChip)));
+      })),
+    others.length > 0 && h('div.pj-others', h('strong', 'On other lessons:'),
+      others.map((s) => h('span.pj-other', h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 2), alt: '' }), `${s.display_name} · ${where(s)}`))),
+  );
 }
 
 function achievements(board) {
@@ -95,7 +154,7 @@ function achievements(board) {
 function openSetup(plan, lessons, onSave) {
   const suggested = suggestedQuestion(lessons);
   const q = h('textarea', { rows: 2, maxlength: 200, value: plan.question, placeholder: suggested ? `Blank uses: ${suggested.q}` : 'Type a question' });
-  const focus = h('textarea', { rows: 3, maxlength: 300, value: plan.focus, placeholder: 'One item per line. Blank shows the lessons students are on.' });
+  const focus = h('textarea', { rows: 3, maxlength: 300, value: plan.focus, placeholder: 'Optional. One item per line, shown above the race.' });
   const endValue = plan.timer_end ? new Date(plan.timer_end) : null;
   const pad = (n) => String(n).padStart(2, '0');
   const end = h('input', { type: 'time', value: endValue ? `${pad(endValue.getHours())}:${pad(endValue.getMinutes())}` : '' });
@@ -169,17 +228,6 @@ export async function viewProject(main, classId) {
     openSetup(plan, lessonsInUse(board), savePlan);
   }
 
-  function workPanel(lessons) {
-    const custom = plan.focus.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 3);
-    return h('section.pj-panel.pj-work',
-      h('h2', 'Today'),
-      custom.length
-        ? h('ul.pj-focus', custom.map((x) => h('li', x)))
-        : h('ul.pj-focus', lessons.slice(0, 3).map(({ id, n }) => h('li', getLesson(id).title, h('span.pj-count', n)))),
-      !custom.length && h('p.pj-sub', 'Open Home and keep going on your next lesson.'),
-    );
-  }
-
   function questionPanel(lessons) {
     const bank = plan.question ? null : suggestedQuestion(lessons);
     return h('section.pj-panel.pj-question',
@@ -202,8 +250,9 @@ export async function viewProject(main, classId) {
 
   function draw() {
     const lessons = lessonsInUse(board);
+    const custom = plan.focus.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 3);
     clear(panels).append(
-      workPanel(lessons),
+      racePanel(board, lessons, custom),
       questionPanel(lessons),
       h('section.pj-panel.pj-progress', h('h2', 'The trail'), progression(board)),
       h('section.pj-panel.pj-feed-panel', h('h2', 'Recent achievements'), achievements(board)),

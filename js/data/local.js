@@ -281,7 +281,7 @@ export function createLocalStore() {
 
     classBoard: async (classId) => db.students.filter((s) => s.class_id === classId).sort((a, b) => a.display_name.localeCompare(b.display_name)).map((s) => ({
       id: s.id, display_name: s.display_name, avatar: clone(s.avatar), path: s.path, game_name: s.game_name,
-      works: db.works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
+      works: db.works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, step_at: w.step_at || 0, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
       awards: db.awards.filter((a) => a.student_id === s.id).map((a) => ({ badge_id: a.badge_id, note: a.note, created_at: a.created_at })),
       sprites_shared: db.sprites.filter((sp) => sp.student_id === s.id && sp.published).length,
     })),

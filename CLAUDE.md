@@ -47,7 +47,7 @@ Plain ES modules with no framework. `index.html` runs them directly in demo mode
 - `api()` is the only entry point. It determines the user from `Session.getActiveUser()`, never from the browser, then dispatches through `TEACHER_ROUTES` or `STUDENT_ROUTES`.
 - Top-level functions without a trailing `_` can be called from the browser, so helpers must end in `_`. Arrow-function constants aren't exposed.
 - Each table is a Sheet tab defined in `SCHEMA`. Cells hold plain text. `encText_` prefixes anything that could act as a formula.
-- Long values are split across `dataN` columns because Sheets cells cap at 50,000 characters. Listing queries read only the metadata columns (`WORK_META`, `SPRITE_META`), so new metadata fields go there, before the `dataN` columns.
+- Long values are split across `dataN` columns because Sheets cells cap at 50,000 characters. Listing queries read only the metadata columns (`WORK_META`, `SPRITE_META`). Teachers' Sheets now hold real data, so a new `Works` field goes in `WORK_TAIL`, after the `dataN` columns, where existing rows keep their columns. `metaWorks_` reads it with one extra range. Never insert a column before existing ones.
 - A whole class shares the deploying teacher's quota, so students autosave every 30 seconds (`saveDelay`).
 
 `tests/fake-gas.mjs` imitates Google's services and `tests/server.test.mjs` attacks the access rules. It is a model. The app has not yet run on real Apps Script.

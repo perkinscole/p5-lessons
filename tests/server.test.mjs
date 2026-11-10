@@ -626,3 +626,19 @@ test('the teacher opens and closes the Music Maker for each class', () => {
   assert.equal(teacher('createClass', 'New').music_open ?? false, false, 'a new class starts closed');
   void clsB;
 });
+
+test('step progress is saved at the end of the row, so existing rows keep their columns', () => {
+  const { server, ari, teacher, cls, ids } = setup();
+  const before = server.sheets.get('Works').grid.map((r) => r.slice(0, 26));
+  ari('saveWork', 't3', { code: 'let x = 1;', assets: {}, step_at: 3 });
+  assert.equal(ari('myWorks').find((w) => w.lesson_id === 't3').step_at, 3);
+  ari('saveWork', 't3', { code: 'let x = 2;', assets: {} });
+  assert.equal(ari('myWorks').find((w) => w.lesson_id === 't3').step_at, 3, 'a save without a step keeps the old one');
+  assert.equal(ari('saveWork', 't3', { code: 'x', assets: {}, step_at: 999 }).step_at, 40);
+  const board = teacher('classBoard', cls.id).find((s) => s.id === ids[ARI]);
+  assert.equal(board.works.find((w) => w.lesson_id === 't3').step_at, 40);
+  // Rows saved before this field existed read back with their code intact and step 0.
+  assert.deepEqual(server.sheets.get('Works').grid.slice(0, before.length).map((r) => r.slice(0, 26)), before);
+  assert.equal(ari('myWorks').find((w) => w.lesson_id === 't1').step_at, 0);
+  assert.equal(teacher('getWorkFull', ari('myWorks').find((w) => w.lesson_id === 't1').id).code, 'ARI SECRET CODE');
+});
