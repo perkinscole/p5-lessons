@@ -7,7 +7,7 @@
     "start": "node tools/dev-server.mjs 8080",
     "build": "node tools/build-gas.mjs",
     "preview": "npm run build && node tools/gas-preview.mjs",
-    "test": "node --test tests/curriculum.test.mjs tests/server.test.mjs tests/debug.test.mjs"
+    "test": "node --test tests/curriculum.test.mjs tests/server.test.mjs tests/debug.test.mjs tests/avatar.test.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"

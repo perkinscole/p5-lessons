@@ -120,6 +120,8 @@ Students keep moving after submitting: they don't wait for approval to unlock th
 | Each stretch goal (self-reported, up to 3) | 10 |
 | Each badge a teacher gives | 25 |
 
+Students spend XP and badges on their character: hats, capes, glows, pets, held items, outfits, and earned titles, each marked Common, Rare, Epic, or Legendary. Many unlock through badges for experiences, like sharing a game, writing a theme song, or a badge you give for helping a classmate, not only through XP. New gear gets a celebration the first time a student sees it, and the character page shows what to aim for next. Glows are part of the character picture, so classmates see them on the map. Sound effects there follow the Display setting for sound.
+
 Automatic checks look for code patterns. They guide students, and they can't tell if a game is good, or spot every valid approach. A student can always submit anyway, and you'll see how many checks passed. Rules live in [`js/game/rules.js`](js/game/rules.js).
 
 ## Standards
