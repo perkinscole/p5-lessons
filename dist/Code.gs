@@ -49,6 +49,8 @@ const ML5_PARTS = 5; // Set by the build: how many ML5_n files it made.
 function doGet() {
   return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle('Pixel Trail')
+    // The tab icon: Google's mountain emoji, from the same servers as the app's fonts.
+    .setFaviconUrl('https://fonts.gstatic.com/s/e/notoemoji/latest/26f0_fe0f/512.png')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
