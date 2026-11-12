@@ -28,7 +28,9 @@ const SCHEMA = {
   Awards: ['id', 'student_id', 'badge_id', 'note', 'created_at'],
   Sprites: [...SPRITE_META, ...chunkCols_(SPRITE_CELLS)],
   Songs: SONG_COLS,
-  Teams: ['id', 'class_id', 'lesson_id', 'members', 'driver_id', 'driver_until', 'blame', 'started', 'doc_at', 'created_at'],
+  // holders: who is editing each file ({ file: { id, until } }). driver_id and driver_until are from
+  // when a group had one keyboard; they stay so existing rows keep their columns.
+  Teams: ['id', 'class_id', 'lesson_id', 'members', 'driver_id', 'driver_until', 'blame', 'started', 'doc_at', 'created_at', 'holders'],
   Contributions: ['team_id', 'lesson_id', 'student_id', 'saves', 'added', 'removed', 'last_at', 'note'],
   // lesson_id holds a lesson number like L6. Roads share numbers, so one assignment covers every road.
   GradeSync: ['class_id', 'lesson_id', 'coursework_id', 'link', 'due', 'pushed_at', 'sent', 'title', 'points'],
@@ -38,7 +40,7 @@ const SCHEMA = {
 };
 const NUMBERS = new Set(['step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
 const BOOLEANS = new Set(['auto_ok', 'shared', 'published', 'started', 'music_open']);
-const OBJECTS = new Set(['avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
+const OBJECTS = new Set(['holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
 const ML5_PARTS = 5; // Set by the build: how many ML5_n files it made.
 
@@ -1023,14 +1025,28 @@ function cleanFiles_(files) {
 }
 
 // Group projects -----------------------------------------------------------------------------------
-// Members share one project and take turns at the keyboard, so two people can't overwrite each other.
-// The server decides who is typing and credits each line, so a browser can't claim someone else's work.
+// Members share one project. Each file has its own keyboard, so group members work at the same time
+// in different files, and nobody can overwrite a file someone else is editing. The server decides
+// who holds each file and credits each line, so a browser can't claim someone else's work.
 const TEAM_HOLD_MS = 180000;
 const ROAD_OF_ = { p: 'platformer', a: 'adventure', s: 'arcade', m: 'mind' };
 const EMPTY_DOC_ = '{"code":"","assets":{},"files":{}}';
 const teamOf_ = (studentId, lessonId) => rows_('Teams').find((t) => t.lesson_id === lessonId && (t.members || []).includes(studentId));
-const driverNow_ = (team) => (Number(team.driver_until) > Date.now() ? team.driver_id : '');
-const driving_ = (team, studentId) => driverNow_(team) === studentId;
+const MAIN_FILE_ = 'sketch.js';
+/** Who is editing each file right now: { 'sketch.js': studentId }. Holds lapse after TEAM_HOLD_MS. */
+function holdersNow_(team) {
+  const out = {};
+  for (const [file, hold] of Object.entries(team.holders || {})) if (hold && Number(hold.until) > Date.now()) out[file] = hold.id;
+  return out;
+}
+const holdsAny_ = (team, studentId) => Object.values(holdersNow_(team)).includes(studentId);
+/** Renew every file this student holds. */
+function renewHolds_(team, studentId) {
+  const holders = {};
+  const until = Date.now() + TEAM_HOLD_MS;
+  for (const [file, id] of Object.entries(holdersNow_(team))) holders[file] = { id, until: id === studentId ? until : team.holders[file].until };
+  return holders;
+}
 const readDoc_ = (meta) => JSON.parse(unpackChunks_(readRow_('Works', meta._row), WORK_CELLS) || EMPTY_DOC_);
 const docFiles_ = (doc) => ({ 'sketch.js': String(doc.code || ''), ...(doc.files || {}) });
 /** Line credit has to fit in one cell. A project too long for that simply stops tracking lines. */
@@ -1074,17 +1090,18 @@ function teamFor_(me, lessonId, prevByPath, opts) {
   const id = me.student.id;
   let team = teamOf_(id, lessonId);
   if (!team) return null;
-  if (options.beat && driving_(team, id)) {
+  if (options.beat && holdsAny_(team, id)) {
     withLock_(() => {
       const fresh = teamOf_(id, lessonId);
-      if (fresh && driving_(fresh, id)) update_('Teams', { ...fresh, driver_until: Date.now() + TEAM_HOLD_MS });
+      if (fresh && holdsAny_(fresh, id)) update_('Teams', { ...fresh, holders: renewHolds_(fresh, id) });
     });
+    team = teamOf_(id, lessonId);
   }
   const students = rows_('Students');
   const lead = students.find((s) => s.id === team.members[0]);
   const mine = rows_('Contributions').find((c) => c.team_id === team.id && c.student_id === id);
   const view = {
-    id: team.id, lesson_id: team.lesson_id, started: team.started, doc_at: team.doc_at, driver_id: driverNow_(team),
+    id: team.id, lesson_id: team.lesson_id, started: team.started, doc_at: team.doc_at, holders: holdersNow_(team),
     lead_path: lead ? lead.path : null, my_note: mine ? mine.note : '',
     members: team.members.map((m) => ({ id: m, display_name: (students.find((s) => s.id === m) || {}).display_name || '' })),
   };
@@ -1097,14 +1114,18 @@ function teamFor_(me, lessonId, prevByPath, opts) {
   return { ...view, doc };
 }
 
-function takeKeyboard_(me, lessonId, base) {
+/** Start editing one file of the group project. Anyone can take a file nobody else is editing. */
+function takeKeyboard_(me, lessonId, base, file) {
   const id = me.student.id;
+  const name = String(file || MAIN_FILE_);
+  if (name !== MAIN_FILE_ && !/^[A-Za-z_][\w-]*\.js$/.test(name)) throw new Error('That is not a file in this project.');
   withLock_(() => {
     const team = teamOf_(id, lessonId);
     if (!team) throw new Error('You are not in a group for this lesson.');
-    const other = driverNow_(team);
-    if (other && other !== id) throw new Error('Someone else has the keyboard. Ask them to pass it.');
-    const next = { ...team, driver_id: id, driver_until: Date.now() + TEAM_HOLD_MS };
+    const holders = holdersNow_(team);
+    const other = holders[name];
+    if (other && other !== id) throw new Error('Someone else is editing that file. Pick another file, or ask them to let go.');
+    const next = { ...team, holders: { ...renewHolds_(team, id), [name]: { id, until: Date.now() + TEAM_HOLD_MS } } };
     if (!team.started) {
       next.started = true;
       let doc = teamDoc_(team);
@@ -1122,11 +1143,46 @@ function takeKeyboard_(me, lessonId, base) {
   return teamFor_(me, lessonId, null, {});
 }
 
-function passKeyboard_(me, lessonId) {
+/** Stop editing one file, or every file when none is named. */
+function passKeyboard_(me, lessonId, file) {
   withLock_(() => {
     const team = teamOf_(me.student.id, lessonId);
-    if (team && driving_(team, me.student.id)) update_('Teams', { ...team, driver_id: '', driver_until: 0 });
+    if (!team) return;
+    const holders = {};
+    for (const [name, hold] of Object.entries(team.holders || {})) {
+      if (hold.id === me.student.id && (!file || name === file)) continue;
+      holders[name] = hold;
+    }
+    update_('Teams', { ...team, holders });
   });
+}
+
+/**
+ * A group member's save, merged into the shared project: files they hold take their version, a
+ * file they just made becomes theirs, and every other file keeps the group's version.
+ * Returns { doc, holders, rejected } where rejected says they changed a file they don't hold.
+ */
+function mergeTeamDoc_(team, current, incoming, studentId) {
+  const holders = holdersNow_(team);
+  const until = Date.now() + TEAM_HOLD_MS;
+  const nextHolds = renewHolds_(team, studentId);
+  const before = docFiles_(current);
+  const mine = docFiles_(incoming);
+  const out = {};
+  let rejected = false;
+  for (const name of new Set([...Object.keys(before), ...Object.keys(mine)])) {
+    const held = holders[name];
+    if (held === studentId) { if (mine[name] !== undefined) out[name] = mine[name]; continue; }
+    if (before[name] === undefined && !held && mine[name] !== undefined) {
+      out[name] = mine[name];
+      nextHolds[name] = { id: studentId, until };
+      continue;
+    }
+    if (before[name] !== undefined) out[name] = before[name];
+    if (mine[name] !== before[name]) rejected = true;
+  }
+  const { [MAIN_FILE_]: code, ...files } = out;
+  return { doc: { code: code || '', assets: { ...(current.assets || {}), ...(incoming.assets || {}) }, files: cleanFiles_(files) }, holders: nextHolds, rejected };
 }
 
 function teamSummary_(team, students, contribs) {
@@ -1199,21 +1255,25 @@ function saveMyWork_(me, lessonId, patch, extra) {
       if (extra && extra.status === 'submitted' && !String(contribution || '').trim()) throw new Error('Write what each person in your group did before you submit.');
       const current = existing ? readDoc_(existing) : JSON.parse(EMPTY_DOC_);
       const currentText = JSON.stringify(current);
-      if (driving_(team, me.student.id) && patch.code !== undefined) {
-        const held = { ...team, driver_until: Date.now() + TEAM_HOLD_MS };
-        if (docText !== currentText) {
+      if (patch.code !== undefined) {
+        const merged = mergeTeamDoc_(team, current, JSON.parse(docText), me.student.id);
+        const mergedText = JSON.stringify(merged.doc);
+        if (mergedText.length > MAX_WORK_CHARS) throw new Error('This project is too big to save. Try removing an image.');
+        const next = { ...team, holders: merged.holders };
+        if (mergedText !== currentText) {
           const who = team.members.indexOf(me.student.id) + 1;
-          const credit = attribute_(docFiles_(current), team.blame || {}, docFiles_(JSON.parse(docText)), who);
-          mirrorDoc_(team, docText, me.student.id);
-          held.blame = safeBlame_(credit.blame);
-          held.doc_at = now_();
+          const credit = attribute_(docFiles_(current), team.blame || {}, docFiles_(merged.doc), who);
+          mirrorDoc_(team, mergedText, me.student.id);
+          next.blame = safeBlame_(credit.blame);
+          next.doc_at = now_();
           creditMember_(team, me.student.id, (c) => ({ saves: c.saves + 1, added: c.added + credit.added, removed: c.removed + credit.removed, last_at: now_() }));
         }
-        update_('Teams', held);
+        update_('Teams', next);
+        written = mergedText;
+        // Their browser tried to change a file someone else holds: it should catch up with the group.
+        lostTurn = merged.rejected;
       } else {
-        // Only the person at the keyboard can change the code. Everyone else saves just their own answers.
         written = currentText;
-        lostTurn = patch.code !== undefined;
       }
       if (contribution !== undefined) creditMember_(team, me.student.id, () => ({ note: contribution }));
     }

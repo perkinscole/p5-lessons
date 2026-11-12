@@ -105,6 +105,10 @@ The **Display** button lets each person choose light, dark, or high contrast, an
 
 In a lesson, students can add up to 8 extra code files and upload images, using the buttons above the editor or by dragging them in. Images are shrunk to fit the class Sheet and load with `loadImage(SPRITES.name)`. Sound files aren't supported yet.
 
+## Group projects
+
+On a class's **Groups** tab, put 2 or 3 students together for a lesson. They share one project and can work on it at the same time, one person per file: a student presses **Edit** on a file, or makes a new one, and teammates see their changes within about 15 seconds. Splitting a game into files like `enemies.js` or `levels.js` lets the whole group build at once. Nobody can overwrite a file a teammate is editing. The **Groups** tab shows who wrote each line, and each student still writes their own reflection and gets their own grade.
+
 ## Projecting a class
 
 On a class page, press **Project this class** for a display to leave up during student-led work. It shows the lesson most of the class is on as a race, with each student at the step they've reached and anyone who submits today at the finish, then where everyone is on the trail, the question of the day, time left, recent achievements, and the day's standards for visitors and administrators. **Set up today** lets you type your own items. Anything left blank fills in from where students are, and a blank question is the big question for the lesson most students are on, about why the day's idea matters. It never shows scores or feedback.

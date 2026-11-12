@@ -99,6 +99,7 @@ export function createLocalStore() {
   const mine = () => db.students.find((x) => x.id === readSession()?.id);
   const withGrade = (w) => ({ ...clone(w), grade: clone(db.grades.find((g) => g.work_id === w.id) || null) });
   const meta = ({ code, assets, ...w }) => w;
+  const demoHolders = (team) => Object.fromEntries(Object.entries(team.holders || {}).filter(([, h]) => h.until > Date.now()).map(([f, h]) => [f, h.id]));
   const teamOf = (sid, lessonId) => (db.teams || []).find((t) => t.lesson_id === lessonId && t.members.includes(sid));
   const mirror = (studentId, lessonId, doc) => {
     let w = db.works.find((x) => x.student_id === studentId && x.lesson_id === lessonId);
@@ -296,23 +297,23 @@ export function createLocalStore() {
       const sid = readSession().id;
       const team = teamOf(sid, lessonId);
       if (!team) return null;
-      if (opts.beat && team.driver_id === sid) { team.driver_until = Date.now() + 180000; save(); }
+      if (opts.beat) { for (const hold of Object.values(team.holders || {})) if (hold.id === sid && hold.until > Date.now()) hold.until = Date.now() + 180000; save(); }
       const lead = db.students.find((s) => s.id === team.members[0]);
       const mine = (db.contributions || []).find((c) => c.team_id === team.id && c.student_id === sid);
-      const view = { id: team.id, lesson_id: lessonId, started: team.started, doc_at: team.doc_at, driver_id: team.driver_until > Date.now() ? team.driver_id : '', lead_path: lead?.path || null, my_note: mine?.note || '', members: team.members.map((id) => ({ id, display_name: db.students.find((s) => s.id === id)?.display_name || '' })) };
+      const view = { id: team.id, lesson_id: lessonId, started: team.started, doc_at: team.doc_at, holders: demoHolders(team), lead_path: lead?.path || null, my_note: mine?.note || '', members: team.members.map((id) => ({ id, display_name: db.students.find((s) => s.id === id)?.display_name || '' })) };
       if (opts.stamp && opts.stamp === team.doc_at) return { ...view, same: true };
       const byMember = team.members.map((id) => db.works.find((w) => w.student_id === id && w.lesson_id === lessonId)).find((w) => w?.code);
       const prev = !byMember && lead && prevByPath?.[lead.path] && db.works.find((w) => w.student_id === lead.id && w.lesson_id === prevByPath[lead.path]);
       const source = byMember || prev;
       return { ...view, doc: source ? clone({ code: source.code, assets: source.assets || {}, files: source.files || {} }) : null };
     },
-    async takeKeyboard(lessonId, base) {
+    async takeKeyboard(lessonId, base, file = 'sketch.js') {
       const sid = readSession().id;
       const team = teamOf(sid, lessonId);
       if (!team) throw new Error('You are not in a group for this lesson.');
-      if (team.driver_until > Date.now() && team.driver_id !== sid) throw new Error('Someone else has the keyboard. Ask them to pass it.');
-      team.driver_id = sid;
-      team.driver_until = Date.now() + 180000;
+      const other = demoHolders(team)[file];
+      if (other && other !== sid) throw new Error('Someone else is editing that file. Pick another file, or ask them to let go.');
+      team.holders = { ...(team.holders || {}), [file]: { id: sid, until: Date.now() + 180000 } };
       if (!team.started) {
         team.started = true;
         if (base) {
@@ -324,9 +325,11 @@ export function createLocalStore() {
       save();
       return this.teamFor(lessonId, null, {});
     },
-    async passKeyboard(lessonId) {
+    async passKeyboard(lessonId, file) {
       const team = teamOf(readSession().id, lessonId);
-      if (team && team.driver_id === readSession().id) { team.driver_id = ''; team.driver_until = 0; save(); }
+      if (!team) return;
+      for (const [name, hold] of Object.entries(team.holders || {})) if (hold.id === readSession().id && (!file || name === file)) delete team.holders[name];
+      save();
     },
     async listTeams(classId) {
       return (db.teams || []).filter((t) => t.class_id === classId).map(teamSummary);
@@ -387,21 +390,34 @@ export function createLocalStore() {
         const { contribution, ...rest } = incoming;
         patch = rest;
         if (incoming.status === 'submitted' && !String(contribution || '').trim()) throw new Error('Write what each person in your group did before you submit.');
-        if (patch.code !== undefined && !(team.driver_id === sid && team.driver_until > Date.now())) {
-          const { code, assets, files, ...own } = patch;
-          patch = own;
-          lost = true;
-        } else if (patch.code !== undefined) {
+        if (patch.code !== undefined) {
+          // Same rules as the server: your files take your version, new files become yours, the rest stay.
           const was = db.works.find((x) => x.student_id === sid && x.lesson_id === lessonId) || {};
           const files = (d) => ({ 'sketch.js': d.code || '', ...(d.files || {}) });
-          const credit = attribute_(files(was), team.blame || {}, files(patch), team.members.indexOf(sid) + 1);
+          const before = files(was);
+          const mine = files(patch);
+          const holders = demoHolders(team);
+          const out = {};
+          for (const name of new Set([...Object.keys(before), ...Object.keys(mine)])) {
+            if (holders[name] === sid) { if (mine[name] !== undefined) out[name] = mine[name]; continue; }
+            if (before[name] === undefined && !holders[name] && mine[name] !== undefined) {
+              out[name] = mine[name];
+              team.holders = { ...(team.holders || {}), [name]: { id: sid, until: Date.now() + 180000 } };
+              continue;
+            }
+            if (before[name] !== undefined) out[name] = before[name];
+            if (mine[name] !== before[name]) lost = true;
+          }
+          const { 'sketch.js': code, ...rest2 } = out;
+          patch = { ...patch, code: code || '', files: rest2, assets: { ...(was.assets || {}), ...(patch.assets || {}) } };
+          const credit = attribute_(before, team.blame || {}, out, team.members.indexOf(sid) + 1);
           if (credit.added || credit.removed) {
             team.blame = credit.blame;
             team.doc_at = now();
             contributionOf(team, sid, (c) => { c.saves += 1; c.added += credit.added; c.removed += credit.removed; });
             team.members.filter((id) => id !== sid).forEach((id) => mirror(id, lessonId, patch));
           }
-          team.driver_until = Date.now() + 180000;
+          for (const hold of Object.values(team.holders || {})) if (hold.id === sid) hold.until = Date.now() + 180000;
         }
         if (contribution !== undefined) contributionOf(team, sid, (c) => { c.note = contribution; });
       }

@@ -376,7 +376,7 @@ test('groups: 2 or 3 from one class, set only by the teacher', () => {
   assert.equal(teacher('listTeams', cls.id).length, 1);
 });
 
-test('groups: one keyboard at a time, shared code, and each line credited to who typed it', () => {
+test('groups: one person per file, shared code, and each line credited to who typed it', () => {
   const { teacher, ari, bea, zed, cls, ariId, beaId } = teamSetup();
   teacher('saveTeams', cls.id, 'c6', [[ariId, beaId]]);
   assert.equal(zed('teamFor', 'c6', null, {}), null);
@@ -411,6 +411,41 @@ test('groups: one keyboard at a time, shared code, and each line credited to who
   bea('submitWork', 'c6', { reflection: 'done', contribution: 'I fixed the ending.' });
   assert.equal(JSON.stringify(ari('teamFor', 'c6', null, {})).includes('fixed the ending'), false);
   assert.equal(teacher('listTeams', cls.id)[0].members.find((m) => m.id === beaId).note, 'I fixed the ending.');
+});
+
+test('groups: members edit different files at the same time without overwriting each other', () => {
+  const { teacher, ari, bea, cls, ariId, beaId } = teamSetup();
+  teacher('saveTeams', cls.id, 'c6', [[ariId, beaId]]);
+  ari('takeKeyboard', 'c6', { code: 'setup();', assets: {}, files: {} }, 'sketch.js');
+  denied(() => bea('takeKeyboard', 'c6', null, 'sketch.js'));
+  denied(() => bea('takeKeyboard', 'c6', null, '../evil'));
+
+  // Bea makes her own file while Ari types in sketch.js. Making it gives her its keyboard.
+  const b1 = bea('saveWork', 'c6', { code: 'setup();', assets: {}, files: { 'enemies.js': 'function enemy() {}' } });
+  assert.equal(b1.team_lost, false);
+  assert.equal(bea('teamFor', 'c6', null, {}).holders['enemies.js'], beaId);
+
+  // Both save at once, each with a stale copy of the other's file. Neither overwrites the other.
+  const a2 = ari('saveWork', 'c6', { code: 'setup();\nari();', assets: {}, files: {} });
+  assert.equal(a2.team_lost, true, 'Ari\'s browser had no enemies.js yet, so it is told to catch up');
+  bea('saveWork', 'c6', { code: 'setup();', assets: {}, files: { 'enemies.js': 'function enemy() {}\nfunction boss() {}' } });
+  const doc = ari('teamFor', 'c6', null, {}).doc;
+  assert.equal(doc.code, 'setup();\nari();', 'Bea\'s stale sketch.js did not undo Ari\'s line');
+  assert.match(doc.files['enemies.js'], /boss/, 'Ari\'s missing enemies.js did not delete Bea\'s file');
+
+  // Ari can't edit Bea's file, even by sending it.
+  ari('saveWork', 'c6', { code: 'setup();\nari();', assets: {}, files: { 'enemies.js': 'hacked' } });
+  assert.match(ari('teamFor', 'c6', null, {}).doc.files['enemies.js'], /boss/);
+
+  // Letting go of a file frees it for a teammate.
+  bea('passKeyboard', 'c6', 'enemies.js');
+  ari('takeKeyboard', 'c6', null, 'enemies.js');
+  ari('saveWork', 'c6', { code: 'setup();\nari();', assets: {}, files: { 'enemies.js': 'function enemy() {}\nfunction boss() {}\nfunction ariBoss() {}' } });
+  const team = teacher('listTeams', cls.id)[0];
+  assert.ok(team.members.find((m) => m.id === beaId).lines >= 2, 'Bea is credited for her lines');
+  assert.ok(team.members.find((m) => m.id === ariId).lines >= 2, 'Ari is credited for hers');
+  // Each member's own record holds the merged project, for grading.
+  assert.match(teacher('getWorkFull', teacher('classWork', cls.id).find((w) => w.lesson_id === 'c6' && w.student_id === beaId).id).files['enemies.js'], /ariBoss/);
 });
 
 test('a group grade can go to teammates who submitted, and only them', () => {

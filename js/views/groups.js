@@ -87,7 +87,7 @@ export async function groupsTab(cls, students, reload) {
         if (groups.some((g) => g.length < 2)) { toast('Every group needs 2 or 3 students.', 'error'); return; }
         if (await attempt(async () => { await app.store.saveTeams(cls.id, lessonId, groups); return true; })) { toast('Groups saved.'); reload(); }
       } }, 'Save groups')),
-      h('p.muted.small', 'Group members share one project and take turns at the keyboard. Each student still writes their own reflection and gets their own grade.'),
+      h('p.muted.small', 'Group members share one project and can work at the same time, each in a different file: one person per file. Splitting the game into files, like enemies.js or levels.js, lets everyone build at once. Each student still writes their own reflection and gets their own grade.'),
     ),
     h('section.stack', h('h2', 'Who did what'),
       teams.length ? teams.map((t) => h('section.card.stack.tight',

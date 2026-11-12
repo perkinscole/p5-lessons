@@ -90,7 +90,7 @@ Constraints that follow from this:
 
 `js/game/pace.js` and `js/game/blame.js` run on both sides: the build strips `export` and appends them to `dist/Code.gs`, so they can't import anything and their names end in `_`. Every Google Classroom route must check `ownerOnly_`, because the app runs with the deploying teacher's access.
 
-Group projects share one document: only the student holding the keyboard (the `Teams` row's `driver_id`) can change code, the server credits lines in `blame.js`, and the code is mirrored to each member's `Works` row so grading and later lessons don't need to know about groups.
+Group projects share one document. Each file has its own keyboard (the `Teams` row's `holders`, which lapse after `TEAM_HOLD_MS`), so members edit different files at the same time. `mergeTeamDoc_` keeps a saver's version only of files they hold or just created, and keeps the group's version of everything else, so a stale browser can't undo a teammate's work. `local.js` follows the same rules. `driver_id` and `driver_until` are unused leftovers kept so existing rows keep their columns. The server credits lines in `blame.js`, and the code is mirrored to each member's `Works` row so grading and later lessons don't need to know about groups.
 
 Grades can only be written to Classroom assignments this app's Google Cloud project created, so `pushGrades_` makes its own and records them in `GradeSync`. Changing the script's Cloud project would make those assignments unwritable.
 
