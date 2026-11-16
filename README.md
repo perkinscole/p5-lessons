@@ -111,6 +111,8 @@ Trail Quest is a small adventure game students play as their own character: a me
 
 It starts closed. On a class page, press **Trail Quest** and choose **Earned** (each lesson a student submits earns play time, 5 minutes unless you change it) or **Open** (everyone can play with no time used up, for a reward day). Students see a class board of best runs and a class treasure that everyone's coins fill. Coins and play time never come from grades.
 
+Two ways to play together: **two players on one Chromebook** (choose Player 2 from the class list; one uses W A S D and Space, the other the arrow keys and Enter), and **ghost races** (press **Race** beside a classmate on the board to play the same world with their best run replayed beside you). A two-player run uses the signed-in student's play time and counts on their record.
+
 The game runs in the student's browser and only contacts the server when a run starts and ends, so it barely touches the class's quota. Classmates don't see each other moving; the shared parts are the board and the treasure.
 
 ## Group projects

@@ -724,3 +724,33 @@ test('Trail Quest: time is earned by lessons, runs are held to what was possible
   teacher('removeStudent', ids[BEA]);
   assert.equal(ari('worldState').board.length, 1);
 });
+
+test('Trail Quest ghosts: a best run can be raced by classmates, and only by them', () => {
+  const { teacher, other, ari, bea, zed, cls, clsB } = setup();
+  teacher('setWorld', cls.id, { mode: 'free' });
+  other('setWorld', clsB.id, { mode: 'free' });
+  const path = 'p' + '0a0b'.repeat(10);
+  bea('worldEnter');
+  const first = bea('worldRun', { seconds: 5, coins: 30, seed: 4242, path });
+  assert.equal(first.board[0].seed, 4242);
+  assert.ok(!JSON.stringify(first).includes(path), 'the board does not carry paths');
+  const ghosts = ari('worldGhosts', 4242);
+  assert.equal(ghosts.length, 1);
+  assert.equal(ghosts[0].display_name, 'Bea T');
+  assert.equal(ghosts[0].path, path);
+  assert.deepEqual(ari('worldGhosts', 9999), []);
+  assert.deepEqual(zed('worldGhosts', 4242), [], 'another class sees nothing');
+
+  // A worse run keeps the old ghost. A better one replaces it. A path in the wrong form is left out.
+  bea('worldEnter');
+  bea('worldRun', { seconds: 5, coins: 10, seed: 7, path: 'p' + '1111'.repeat(3) });
+  assert.equal(ari('worldGhosts', 4242).length, 1);
+  bea('worldEnter');
+  assert.equal(bea('worldRun', { seconds: 6, coins: 60, seed: 8, path: 'p<script>alert(1)</script>' }).best, 60);
+  assert.equal(ari('worldGhosts', 8).length, 0);
+  assert.equal(ari('worldGhosts', 4242)[0].best, 60, 'the score updates but the old ghost stays');
+  bea('worldEnter');
+  bea('worldRun', { seconds: 7, coins: 70, seed: 8, path: 'p' + 'zz00'.repeat(4) });
+  assert.equal(ari('worldGhosts', 8).length, 1);
+  assert.equal(ari('worldGhosts', 4242).length, 0);
+});

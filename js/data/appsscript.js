@@ -46,7 +46,7 @@ function call(method, ...args) {
 // Reads that are safe to reuse for a few seconds. Anything else might change data, so it clears them.
 const READS = new Set(['session', 'listClasses', 'getClass', 'listStudents', 'classBoard', 'myWorks', 'classWork', 'getClassPlan',
   'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'getDigest', 'arcade', 'listSprites', 'mySprites', 'listSongs', 'mySongs',
-  'listTeams', 'gradeSyncStatus', 'worldState']);
+  'listTeams', 'gradeSyncStatus', 'worldState', 'worldGhosts']);
 const FRESH_MS = 15000;
 const cache = new Map();
 let generation = 0;
@@ -72,7 +72,7 @@ function cachedCall(method, ...args) {
 const METHODS = [
   'listClasses', 'createClass', 'deleteClass', 'getClass', 'listStudents', 'addStudents', 'removeStudent', 'setStudentPath',
   'classBoard', 'updateProfile', 'myWorks', 'saveWork', 'submitWork', 'setShared', 'classWork', 'getWorkFull', 'saveGrade',
-  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'createAssignments', 'setMusicOpen', 'setWorld', 'worldState', 'worldEnter', 'worldRun', 'saveSprite', 'deleteSprite',
+  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'createAssignments', 'setMusicOpen', 'setWorld', 'worldState', 'worldEnter', 'worldRun', 'worldGhosts', 'saveSprite', 'deleteSprite',
 ];
 
 /** ml5 is stored in pieces, because Apps Script files can't comfortably hold it whole. */

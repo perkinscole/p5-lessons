@@ -24,7 +24,9 @@ const SCHEMA = {
   // world_mode: Trail Quest is '' (closed), 'earned' (minutes from lessons), or 'free' (open to all).
   Classes: ['id', 'teacher_email', 'name', 'created_at', 'music_open', 'world_mode', 'world_mins'],
   // One row per student who has played Trail Quest. Coins come from play, never from grades.
-  World: ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at'],
+  World: ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at',
+    // A student's best run, replayed for classmates as a ghost: the world it was in, and the path walked.
+    'ghost_seed', 'ghost'],
   Students: ['id', 'class_id', 'email', 'display_name', 'avatar', 'path', 'game_name', 'created_at', 'google_id'],
   Works: [...WORK_META, ...chunkCols_(WORK_CELLS), ...WORK_TAIL],
   Grades: ['work_id', 'scores', 'total', 'max_total', 'feedback', 'graded_at'],
@@ -41,7 +43,7 @@ const SCHEMA = {
   Links: ['class_id', 'course_id', 'course_name', 'synced_at'],
   Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
 };
-const NUMBERS = new Set(['world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
+const NUMBERS = new Set(['ghost_seed', 'world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
 const BOOLEANS = new Set(['run_free', 'auto_ok', 'shared', 'published', 'started', 'music_open']);
 const OBJECTS = new Set(['holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
@@ -422,6 +424,10 @@ function mySongs_(me) {
 const WORLD_RUN_MAX = 300;
 const WORLD_COIN_MAX = 600;
 const WORLD_CHEST = 2000;
+// Everything about a run except the ghost's path, which is long and only needed for a race.
+const WORLD_META = ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at', 'ghost_seed'];
+// A path is the letter p, then 4 characters per half second: never something a Sheet reads as a number.
+const WORLD_PATH = /^p([0-9a-z]{4}){1,600}$/;
 const worldMode_ = (cls) => (cls && (cls.world_mode === 'earned' || cls.world_mode === 'free') ? cls.world_mode : '');
 const worldMins_ = (cls) => Math.max(1, Math.min(15, Number(cls && cls.world_mins) || 5));
 
@@ -440,7 +446,7 @@ function worldState_(me) {
   const student = me.student;
   const cls = rows_('Classes').find((c) => c.id === student.class_id);
   const mode = worldMode_(cls);
-  const all = rows_('World').filter((r) => r.class_id === student.class_id);
+  const all = rows_('World', WORLD_META).filter((r) => r.class_id === student.class_id);
   const mine = all.find((r) => r.student_id === student.id);
   const names = new Map(rows_('Students').filter((x) => x.class_id === student.class_id).map((x) => [x.id, x]));
   const total = all.reduce((a, r) => a + r.total_coins, 0);
@@ -450,7 +456,7 @@ function worldState_(me) {
     best: mine ? mine.best_coins : 0, total: mine ? mine.total_coins : 0, runs: mine ? mine.runs : 0,
     // Classmates see names, characters, and coins from play. Nothing here comes from grades.
     board: all.filter((r) => r.runs > 0 && names.has(r.student_id)).sort((a, b) => b.best_coins - a.best_coins).slice(0, 8)
-      .map((r) => ({ id: r.student_id, display_name: names.get(r.student_id).display_name, avatar: names.get(r.student_id).avatar, best: r.best_coins })),
+      .map((r) => ({ id: r.student_id, display_name: names.get(r.student_id).display_name, avatar: names.get(r.student_id).avatar, best: r.best_coins, seed: r.ghost_seed || 0 })),
     chest: { level: Math.floor(total / WORLD_CHEST) + 1, have: total % WORLD_CHEST, goal: WORLD_CHEST },
   };
 }
@@ -486,12 +492,26 @@ function worldRun_(me, result) {
     const elapsed = (Date.now() - row.started_ms) / 1000;
     const seconds = Math.max(0, Math.min(Math.round(Number(result && result.seconds) || 0), row.run_allowed, Math.ceil(elapsed) + 5));
     const coins = Math.max(0, Math.min(Math.round(Number(result && result.coins) || 0), WORLD_COIN_MAX, 40 + seconds * 6));
-    update_('World', {
+    const next = {
       ...row, seconds_used: row.seconds_used + (row.run_free ? 0 : seconds), best_coins: Math.max(row.best_coins, coins), total_coins: row.total_coins + coins,
       runs: row.runs + 1, started_ms: 0, run_allowed: 0, run_free: false, updated_at: now_(),
-    });
+    };
+    // A new best run becomes this student's ghost. A path that isn't in the right form is left out.
+    const seed = Math.round(Number(result && result.seed));
+    const path = String((result && result.path) || '');
+    if ((coins >= row.best_coins || !row.ghost) && seed >= 1 && seed <= 999999999 && WORLD_PATH.test(path)) { next.ghost_seed = seed; next.ghost = path; }
+    update_('World', next);
   });
   return worldState_(me);
+}
+
+/** Classmates' best runs in one world, to race against. Paths are only letters and digits. */
+function worldGhosts_(me, seed) {
+  const wanted = Math.round(Number(seed));
+  const names = new Map(rows_('Students').filter((x) => x.class_id === me.student.class_id).map((x) => [x.id, x]));
+  return rows_('World').filter((r) => r.class_id === me.student.class_id && r.ghost_seed === wanted && WORLD_PATH.test(r.ghost) && names.has(r.student_id))
+    .sort((a, b) => b.best_coins - a.best_coins).slice(0, 5)
+    .map((r) => ({ id: r.student_id, display_name: names.get(r.student_id).display_name, avatar: names.get(r.student_id).avatar, best: r.best_coins, path: r.ghost }));
 }
 
 function musicOpen_(classId) {
@@ -1398,6 +1418,7 @@ const STUDENT_ROUTES = {
   worldState: worldState_,
   worldEnter: worldEnter_,
   worldRun: worldRun_,
+  worldGhosts: worldGhosts_,
   libraryPart: libraryPart_,
   classBoard: classBoard_,
   arcade: arcade_,

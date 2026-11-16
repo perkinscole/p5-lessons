@@ -180,3 +180,26 @@ export function reachable(world, smash) {
   }
   return seen;
 }
+
+// Ghosts ---------------------------------------------------------------------------------------------
+// A run is recorded as where the player stood every half second. Each spot is 4 characters (x then
+// y, in base 36), after a leading "p", so a five-minute run is about 2,400 characters.
+export const GHOST_STEP = 0.5;
+const GHOST_MAX = 600;
+const b36 = (n, max) => Math.max(0, Math.min(max, Math.round(n))).toString(36).padStart(2, '0');
+export const encodePath = (points) => `p${points.slice(0, GHOST_MAX).map(([x, y]) => b36(x, W * TILE - 1) + b36(y, H * TILE - 1)).join('')}`;
+export function decodePath(text) {
+  if (!/^p([0-9a-z]{4})+$/.test(String(text))) return [];
+  const out = [];
+  for (let i = 1; i < text.length; i += 4) out.push([parseInt(text.slice(i, i + 2), 36), parseInt(text.slice(i + 2, i + 4), 36)]);
+  return out;
+}
+/** Where a ghost is `t` seconds into its run, gliding between recorded spots. It waits at its last one. */
+export function ghostAt(points, t) {
+  if (!points.length) return null;
+  const f = Math.max(0, t) / GHOST_STEP;
+  const i = Math.min(points.length - 1, Math.floor(f));
+  const j = Math.min(points.length - 1, i + 1);
+  const k = Math.min(1, f - i);
+  return { x: points[i][0] + (points[j][0] - points[i][0]) * k, y: points[i][1] + (points[j][1] - points[i][1]) * k, done: f >= points.length - 1 };
+}

@@ -187,7 +187,7 @@ export function createLocalStore() {
       const total = mates.reduce((a, s) => a + (world[s.id]?.total || 0), 0);
       return clone({
         mode, mins, run_max: 300, seconds_left: mode === 'earned' ? Math.max(0, earned - mine.used) : 0, best: mine.best, total: mine.total, runs: mine.runs,
-        board: mates.filter((s) => world[s.id]?.runs > 0).sort((a, b) => world[b.id].best - world[a.id].best).slice(0, 8).map((s) => ({ id: s.id, display_name: s.display_name, avatar: s.avatar, best: world[s.id].best })),
+        board: mates.filter((s) => world[s.id]?.runs > 0).sort((a, b) => world[b.id].best - world[a.id].best).slice(0, 8).map((s) => ({ id: s.id, display_name: s.display_name, avatar: s.avatar, best: world[s.id].best, seed: world[s.id].ghost_seed || 0 })),
         chest: { level: Math.floor(total / 2000) + 1, have: total % 2000, goal: 2000 },
       });
     },
@@ -206,9 +206,19 @@ export function createLocalStore() {
       if (!row || !row.started) throw new Error('That run already ended.');
       const seconds = Math.max(0, Math.min(Math.round(Number(result.seconds) || 0), row.allowed));
       const coins = Math.max(0, Math.min(Math.round(Number(result.coins) || 0), 600, 40 + seconds * 6));
+      const seed = Math.round(Number(result.seed));
+      const path = String(result.path || '');
+      if ((coins >= row.best || !row.ghost) && seed >= 1 && /^p([0-9a-z]{4}){1,600}$/.test(path)) { row.ghost_seed = seed; row.ghost = path; }
       Object.assign(row, { used: row.used + (row.free ? 0 : seconds), best: Math.max(row.best, coins), total: row.total + coins, runs: row.runs + 1, started: 0 });
       save();
       return this.worldState();
+    },
+    async worldGhosts(seed) {
+      const st = db.students.find((s) => s.id === readSession().id);
+      const world = db.world || {};
+      return clone(db.students.filter((s) => s.class_id === st.class_id && world[s.id]?.ghost && world[s.id].ghost_seed === Number(seed))
+        .sort((a, b) => world[b.id].best - world[a.id].best).slice(0, 5)
+        .map((s) => ({ id: s.id, display_name: s.display_name, avatar: s.avatar, best: world[s.id].best, path: world[s.id].ghost })));
     },
     async setMusicOpen(id, open) {
       const c = db.classes.find((x) => x.id === id && x.teacher_id === readSession()?.id);
