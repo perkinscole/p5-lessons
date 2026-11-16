@@ -86,6 +86,12 @@ Constraints that follow from this:
 - The sandbox can't open a camera. `createCapture` is replaced with a canvas, and the parent page sends in image frames. Other people's games use `askCamera` to ask the viewer first.
 - `protectLoops` adds a stop check to loops so an infinite loop can't freeze the tab.
 
+### Trail Quest
+
+`js/game/quest.js` holds the rules and the world generator with no drawing, so `tests/quest.test.mjs` can check that every world is fair (everything reachable, only chests behind cracked rocks). `js/views/quest.js` draws and runs it on a plain canvas in the app's own page, not the sandbox, since it is our code. `powersFor` maps character slots to powers; a new slot power goes there and in `POWERS`.
+
+The server (`world*_` in `Code.gs`) only keeps time and coins. Play time is counted from submitted `Works` rows, never stored, so it can't be granted from the browser. `worldEnter_` stamps a run and `worldRun_` holds the reported seconds and coins to what that run allowed. A student who edits the browser code can still play for free, since the game is client-side; the limits protect the class board. Live multiplayer isn't possible on Apps Script, so don't add polling for other players' positions.
+
 ## Not yet verified
 
 `js/game/pace.js` and `js/game/blame.js` run on both sides: the build strips `export` and appends them to `dist/Code.gs`, so they can't import anything and their names end in `_`. Every Google Classroom route must check `ownerOnly_`, because the app runs with the deploying teacher's access.

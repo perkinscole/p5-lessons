@@ -218,6 +218,29 @@ function journeyTab(board, cls) {
   );
 }
 
+/** Trail Quest: closed, earned by lessons, or open to everyone. It starts closed. */
+function questButton(cls) {
+  const mode = cls.world_mode || '';
+  const label = mode === 'earned' ? '🗺️ Trail Quest: Earned' : mode === 'free' ? '🗺️ Trail Quest: Open' : '🔒 Trail Quest: Closed';
+  return h('button.btn', { onclick: () => modal((close) => {
+    const choice = (value, title, text) => h('label.check', h('input', { type: 'radio', name: 'quest-mode', value, checked: mode === value }), h('span', h('strong', title), ` ${text}`));
+    const mins = h('input', { type: 'number', min: 1, max: 15, value: cls.world_mins || 5, style: 'width:5em', 'aria-label': 'Minutes each lesson earns' });
+    const form = h('form.stack', { onsubmit: async (e) => {
+      e.preventDefault();
+      const picked = form.querySelector('input[name="quest-mode"]:checked').value;
+      if (await attempt(() => app.store.setWorld(cls.id, { mode: picked, mins: Number(mins.value) }))) { toast('Trail Quest updated.'); close(); render(); }
+    } },
+    h('h2', 'Trail Quest'),
+    h('p.muted.small', 'A small adventure game students play as their character. Their gear gives them powers. It never uses grades.'),
+    choice('', 'Closed.', 'Nobody can play.'),
+    choice('earned', 'Earned.', 'Each lesson a student submits earns play time.'),
+    choice('free', 'Open.', 'Everyone can play, with no time used up. Good for a reward day.'),
+    h('label.field.small', h('span', 'Minutes each lesson earns'), mins),
+    h('div.row.end', h('button.btn', { type: 'button', onclick: close }, 'Cancel'), h('button.btn.primary', { type: 'submit' }, 'Save')));
+    return form;
+  }) }, label);
+}
+
 /** Lets students use the Music Maker, or closes it. It starts closed. */
 function musicToggle(cls) {
   const open = !!cls.music_open;
@@ -250,7 +273,7 @@ export async function viewClass(main, classId, tabParam) {
         : tab === 'keeping' ? await keepingUpTab(cls, render)
           : journeyTab(board, cls);
   return h('div.stack',
-    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), musicToggle(cls), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
+    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), musicToggle(cls), questButton(cls), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
     h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('groups', 'Groups'), link('send', 'Classroom grades'), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
     content,
   );

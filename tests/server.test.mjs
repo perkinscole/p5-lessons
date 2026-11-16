@@ -677,3 +677,50 @@ test('step progress is saved at the end of the row, so existing rows keep their 
   assert.equal(ari('myWorks').find((w) => w.lesson_id === 't1').step_at, 0);
   assert.equal(teacher('getWorkFull', ari('myWorks').find((w) => w.lesson_id === 't1').id).code, 'ARI SECRET CODE');
 });
+
+test('Trail Quest: time is earned by lessons, runs are held to what was possible, classes stay apart', () => {
+  const { server, teacher, other, ari, bea, zed, cls, clsB, ids } = setup();
+  // Closed until the teacher opens it, and only the class's teacher can.
+  assert.equal(ari('worldState').mode, '');
+  denied(() => ari('worldEnter'));
+  denied(() => ari('setWorld', cls.id, { mode: 'free' }));
+  denied(() => other('setWorld', cls.id, { mode: 'free' }));
+  assert.deepEqual(teacher('setWorld', cls.id, { mode: 'earned', mins: 2 }), { world_mode: 'earned', world_mins: 2 });
+
+  // Ari has only saved, not submitted, so no time yet. Bea submitted one lesson: 2 minutes.
+  assert.equal(ari('worldState').seconds_left, 0);
+  denied(() => ari('worldEnter'));
+  assert.equal(bea('worldState').seconds_left, 120);
+  assert.equal(bea('worldEnter').run_seconds, 120);
+  denied(() => zed('worldEnter'), 'another class is still closed');
+
+  // The browser can't claim more time or coins than the run allowed.
+  const after = bea('worldRun', { seconds: 4, coins: 99999 });
+  assert.equal(after.best, 40 + 4 * 6);
+  assert.ok(after.seconds_left >= 115 && after.seconds_left <= 120);
+  denied(() => bea('worldRun', { seconds: 1, coins: 5 }), 'a run can only be reported once');
+  assert.equal(bea('worldState').runs, 1);
+
+  // A run that is never reported still costs time, but never more than it was allowed.
+  bea('worldEnter');
+  const row = server.sheets.get('World').grid[1];
+  const col = server.sheets.get('World').grid[0].indexOf('started_ms');
+  row[col] = String(Date.now() - 3600000);
+  assert.equal(bea('worldState').seconds_left, 0);
+  denied(() => bea('worldEnter'));
+
+  // Open to everyone: no time is charged, and the board shows only this class.
+  teacher('setWorld', cls.id, { mode: 'free', mins: 2 });
+  assert.equal(ari('worldEnter').run_seconds, 300);
+  const board = ari('worldRun', { seconds: 2, coins: 10 }).board;
+  assert.deepEqual(board.map((b) => b.display_name).sort(), ['Ari M', 'Bea T']);
+  other('setWorld', clsB.id, { mode: 'free' });
+  zed('worldEnter');
+  assert.equal(zed('worldRun', { seconds: 1, coins: 1 }).board.length, 1);
+  const text = JSON.stringify(ari('worldState'));
+  assert.ok(!text.includes('@') && !text.includes('PRIVATE FEEDBACK'), 'no emails or grades');
+
+  // Removing a student removes their Quest record.
+  teacher('removeStudent', ids[BEA]);
+  assert.equal(ari('worldState').board.length, 1);
+});

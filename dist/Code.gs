@@ -21,7 +21,10 @@ const SPRITE_META = ['id', 'class_id', 'student_id', 'teacher_email', 'author_na
 const SCHEMA = {
   Teachers: ['email', 'display_name', 'created_at'],
   // music_open: the teacher lets students use the Music Maker. Blank means closed.
-  Classes: ['id', 'teacher_email', 'name', 'created_at', 'music_open'],
+  // world_mode: Trail Quest is '' (closed), 'earned' (minutes from lessons), or 'free' (open to all).
+  Classes: ['id', 'teacher_email', 'name', 'created_at', 'music_open', 'world_mode', 'world_mins'],
+  // One row per student who has played Trail Quest. Coins come from play, never from grades.
+  World: ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at'],
   Students: ['id', 'class_id', 'email', 'display_name', 'avatar', 'path', 'game_name', 'created_at', 'google_id'],
   Works: [...WORK_META, ...chunkCols_(WORK_CELLS), ...WORK_TAIL],
   Grades: ['work_id', 'scores', 'total', 'max_total', 'feedback', 'graded_at'],
@@ -38,8 +41,8 @@ const SCHEMA = {
   Links: ['class_id', 'course_id', 'course_name', 'synced_at'],
   Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
 };
-const NUMBERS = new Set(['step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
-const BOOLEANS = new Set(['auto_ok', 'shared', 'published', 'started', 'music_open']);
+const NUMBERS = new Set(['world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
+const BOOLEANS = new Set(['run_free', 'auto_ok', 'shared', 'published', 'started', 'music_open']);
 const OBJECTS = new Set(['holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
 const ML5_PARTS = 5; // Set by the build: how many ML5_n files it made.
@@ -410,6 +413,85 @@ function listSongs_(me, classId) {
 function mySongs_(me) {
   const mine = (s) => (me.role === 'student' ? s.student_id === me.student.id : s.teacher_email === me.email);
   return rows_('Songs').filter(mine);
+}
+
+// Trail Quest ---------------------------------------------------------------------------------------
+// A small adventure game students play as their character. The game itself runs in the browser.
+// The server only keeps time and coins: minutes are earned by submitting lessons, a run is stamped
+// when it starts, and what the browser reports is held to what that run could really have been.
+const WORLD_RUN_MAX = 300;
+const WORLD_COIN_MAX = 600;
+const WORLD_CHEST = 2000;
+const worldMode_ = (cls) => (cls && (cls.world_mode === 'earned' || cls.world_mode === 'free') ? cls.world_mode : '');
+const worldMins_ = (cls) => Math.max(1, Math.min(15, Number(cls && cls.world_mins) || 5));
+
+function worldEarned_(student, cls) {
+  const done = metaWorks_().filter((w) => w.student_id === student.id && w.status !== 'in_progress').length;
+  return done * worldMins_(cls) * 60;
+}
+
+/** Seconds a run that was started but never reported should cost: no more than it was allowed. */
+function worldPending_(row) {
+  if (!row || !row.started_ms || row.run_free) return 0;
+  return Math.max(0, Math.min(Math.round((Date.now() - row.started_ms) / 1000), row.run_allowed));
+}
+
+function worldState_(me) {
+  const student = me.student;
+  const cls = rows_('Classes').find((c) => c.id === student.class_id);
+  const mode = worldMode_(cls);
+  const all = rows_('World').filter((r) => r.class_id === student.class_id);
+  const mine = all.find((r) => r.student_id === student.id);
+  const names = new Map(rows_('Students').filter((x) => x.class_id === student.class_id).map((x) => [x.id, x]));
+  const total = all.reduce((a, r) => a + r.total_coins, 0);
+  return {
+    mode, mins: worldMins_(cls), run_max: WORLD_RUN_MAX,
+    seconds_left: mode === 'earned' ? Math.max(0, worldEarned_(student, cls) - (mine ? mine.seconds_used : 0) - worldPending_(mine)) : 0,
+    best: mine ? mine.best_coins : 0, total: mine ? mine.total_coins : 0, runs: mine ? mine.runs : 0,
+    // Classmates see names, characters, and coins from play. Nothing here comes from grades.
+    board: all.filter((r) => r.runs > 0 && names.has(r.student_id)).sort((a, b) => b.best_coins - a.best_coins).slice(0, 8)
+      .map((r) => ({ id: r.student_id, display_name: names.get(r.student_id).display_name, avatar: names.get(r.student_id).avatar, best: r.best_coins })),
+    chest: { level: Math.floor(total / WORLD_CHEST) + 1, have: total % WORLD_CHEST, goal: WORLD_CHEST },
+  };
+}
+
+/** Start a run. Returns how long it may last. */
+function worldEnter_(me) {
+  return withLock_(() => {
+    const student = me.student;
+    const cls = rows_('Classes').find((c) => c.id === student.class_id);
+    const mode = worldMode_(cls);
+    if (!mode) throw new Error('Trail Quest is closed right now.');
+    const row = rows_('World').find((r) => r.student_id === student.id);
+    const base = row || { student_id: student.id, class_id: student.class_id, seconds_used: 0, best_coins: 0, total_coins: 0, runs: 0 };
+    const used = base.seconds_used + worldPending_(row);
+    let allowed = WORLD_RUN_MAX;
+    if (mode === 'earned') {
+      const left = worldEarned_(student, cls) - used;
+      if (left < 5) throw new Error('Finish a lesson to earn more time in Trail Quest.');
+      allowed = Math.min(left, WORLD_RUN_MAX);
+    }
+    const next = { ...base, class_id: student.class_id, seconds_used: used, started_ms: Date.now(), run_allowed: allowed, run_free: mode === 'free', updated_at: now_() };
+    if (row) update_('World', next);
+    else insert_('World', next);
+    return { run_seconds: allowed };
+  });
+}
+
+/** Finish a run: bank its coins and charge its time. */
+function worldRun_(me, result) {
+  withLock_(() => {
+    const row = rows_('World').find((r) => r.student_id === me.student.id);
+    if (!row || !row.started_ms) throw new Error('That run already ended.');
+    const elapsed = (Date.now() - row.started_ms) / 1000;
+    const seconds = Math.max(0, Math.min(Math.round(Number(result && result.seconds) || 0), row.run_allowed, Math.ceil(elapsed) + 5));
+    const coins = Math.max(0, Math.min(Math.round(Number(result && result.coins) || 0), WORLD_COIN_MAX, 40 + seconds * 6));
+    update_('World', {
+      ...row, seconds_used: row.seconds_used + (row.run_free ? 0 : seconds), best_coins: Math.max(row.best_coins, coins), total_coins: row.total_coins + coins,
+      runs: row.runs + 1, started_ms: 0, run_allowed: 0, run_free: false, updated_at: now_(),
+    });
+  });
+  return worldState_(me);
 }
 
 function musicOpen_(classId) {
@@ -891,6 +973,13 @@ const TEACHER_ROUTES = {
   libraryPart: libraryPart_,
   listClasses: (me) => rows_('Classes').filter((c) => c.teacher_email === me.email),
   getClass: (me, id) => ownedClass_(me, id),
+  setWorld: (me, id, opts) => withLock_(() => {
+    const cls = ownedClass_(me, id);
+    const mode = opts && (opts.mode === 'earned' || opts.mode === 'free') ? opts.mode : '';
+    const next = { ...cls, world_mode: mode, world_mins: Math.max(1, Math.min(15, Math.round(Number(opts && opts.mins) || 5))) };
+    update_('Classes', next);
+    return { world_mode: next.world_mode, world_mins: next.world_mins };
+  }),
   setMusicOpen: (me, id, open) => withLock_(() => {
     const cls = ownedClass_(me, id);
     update_('Classes', { ...cls, music_open: !!open });
@@ -916,6 +1005,7 @@ const TEACHER_ROUTES = {
     deleteRows_('Daily', (d) => d.class_id === id);
     deleteRows_('Links', (l) => l.class_id === id);
     deleteRows_('Pace', (p) => p.class_id === id);
+    deleteRows_('World', (r) => r.class_id === id);
     deleteRows_('Students', (s) => s.class_id === id);
     deleteRows_('Classes', (c) => c.id === id);
   }),
@@ -948,6 +1038,7 @@ const TEACHER_ROUTES = {
     deleteRows_('Sprites', (s) => s.student_id === id, SPRITE_META);
     deleteRows_('Songs', (s) => s.student_id === id);
     deleteRows_('Contributions', (c) => c.student_id === id);
+    deleteRows_('World', (r) => r.student_id === id);
     rows_('Teams').filter((t) => (t.members || []).includes(id)).forEach((t) => {
       const members = t.members.filter((m) => m !== id);
       if (members.length < 2) dropTeam_(t);
@@ -1304,6 +1395,9 @@ function saveMyWork_(me, lessonId, patch, extra) {
 }
 
 const STUDENT_ROUTES = {
+  worldState: worldState_,
+  worldEnter: worldEnter_,
+  worldRun: worldRun_,
   libraryPart: libraryPart_,
   classBoard: classBoard_,
   arcade: arcade_,

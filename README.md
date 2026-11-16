@@ -105,6 +105,14 @@ The **Display** button lets each person choose light, dark, or high contrast, an
 
 In a lesson, students can add up to 8 extra code files and upload images, using the buttons above the editor or by dragging them in. Images are shrunk to fit the class Sheet and load with `loadImage(SPRITES.name)`. Sound files aren't supported yet.
 
+## Trail Quest
+
+Trail Quest is a small adventure game students play as their own character: a meadow, a forest maze, dark caves, and ruins with treasure rooms, different every run. Their gear gives them powers there. A glow lights the caves, a cape dashes, a pet pulls in coins, a hat adds a heart, and a held item smashes the cracked rocks that seal the treasure rooms.
+
+It starts closed. On a class page, press **Trail Quest** and choose **Earned** (each lesson a student submits earns play time, 5 minutes unless you change it) or **Open** (everyone can play with no time used up, for a reward day). Students see a class board of best runs and a class treasure that everyone's coins fill. Coins and play time never come from grades.
+
+The game runs in the student's browser and only contacts the server when a run starts and ends, so it barely touches the class's quota. Classmates don't see each other moving; the shared parts are the board and the treasure.
+
 ## Group projects
 
 On a class's **Groups** tab, put 2 or 3 students together for a lesson. They share one project and can work on it at the same time, one person per file: a student presses **Edit** on a file, or makes a new one, and teammates see their changes within about 15 seconds. Splitting a game into files like `enemies.js` or `levels.js` lets the whole group build at once. Nobody can overwrite a file a teammate is editing. The **Groups** tab shows who wrote each line, and each student still writes their own reflection and gets their own grade.

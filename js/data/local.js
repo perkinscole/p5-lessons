@@ -165,6 +165,51 @@ export function createLocalStore() {
       save();
     },
     getClass: async (id) => clone(db.classes.find((c) => c.id === id)),
+    // Trail Quest, with the same rules as the server.
+    async setWorld(id, opts = {}) {
+      const c = db.classes.find((x) => x.id === id && x.teacher_id === readSession()?.id);
+      if (!c) throw new Error('That class was not found.');
+      c.world_mode = opts.mode === 'earned' || opts.mode === 'free' ? opts.mode : '';
+      c.world_mins = Math.max(1, Math.min(15, Math.round(Number(opts.mins) || 5)));
+      save();
+      return { world_mode: c.world_mode, world_mins: c.world_mins };
+    },
+    async worldState() {
+      const sid = readSession().id;
+      const st = db.students.find((s) => s.id === sid);
+      const cls = db.classes.find((c) => c.id === st.class_id);
+      const mode = cls.world_mode || '';
+      const mins = cls.world_mins || 5;
+      const world = db.world || {};
+      const mine = world[sid] || { used: 0, best: 0, total: 0, runs: 0 };
+      const mates = db.students.filter((s) => s.class_id === st.class_id);
+      const earned = db.works.filter((w) => w.student_id === sid && w.status !== 'in_progress').length * mins * 60;
+      const total = mates.reduce((a, s) => a + (world[s.id]?.total || 0), 0);
+      return clone({
+        mode, mins, run_max: 300, seconds_left: mode === 'earned' ? Math.max(0, earned - mine.used) : 0, best: mine.best, total: mine.total, runs: mine.runs,
+        board: mates.filter((s) => world[s.id]?.runs > 0).sort((a, b) => world[b.id].best - world[a.id].best).slice(0, 8).map((s) => ({ id: s.id, display_name: s.display_name, avatar: s.avatar, best: world[s.id].best })),
+        chest: { level: Math.floor(total / 2000) + 1, have: total % 2000, goal: 2000 },
+      });
+    },
+    async worldEnter() {
+      const s = await this.worldState();
+      if (!s.mode) throw new Error('Trail Quest is closed right now.');
+      if (s.mode === 'earned' && s.seconds_left < 5) throw new Error('Finish a lesson to earn more time in Trail Quest.');
+      const sid = readSession().id;
+      db.world = db.world || {};
+      db.world[sid] = { used: 0, best: 0, total: 0, runs: 0, ...db.world[sid], allowed: s.mode === 'earned' ? Math.min(s.seconds_left, 300) : 300, free: s.mode === 'free', started: Date.now() };
+      save();
+      return { run_seconds: db.world[sid].allowed };
+    },
+    async worldRun(result = {}) {
+      const row = (db.world || {})[readSession().id];
+      if (!row || !row.started) throw new Error('That run already ended.');
+      const seconds = Math.max(0, Math.min(Math.round(Number(result.seconds) || 0), row.allowed));
+      const coins = Math.max(0, Math.min(Math.round(Number(result.coins) || 0), 600, 40 + seconds * 6));
+      Object.assign(row, { used: row.used + (row.free ? 0 : seconds), best: Math.max(row.best, coins), total: row.total + coins, runs: row.runs + 1, started: 0 });
+      save();
+      return this.worldState();
+    },
     async setMusicOpen(id, open) {
       const c = db.classes.find((x) => x.id === id && x.teacher_id === readSession()?.id);
       if (!c) throw new Error('That class was not found.');

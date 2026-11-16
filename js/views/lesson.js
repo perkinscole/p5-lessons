@@ -663,13 +663,16 @@ export async function viewLesson(main, id, previewPath) {
   function celebrate(before, after) {
     const newBadges = after.badges.filter((b) => !before.badges.includes(b));
     const rankedUp = after.rankIndex > before.rankIndex;
+    const firstSubmit = after.done.size > before.done.size; // Resubmitting doesn't earn more play time.
     const nextId = currentLesson(path, me.done);
     modal((close) => h('div.stack.celebrate',
       h('p.eyebrow', 'Lesson submitted'),
       h('h2', `+${after.xp - before.xp} XP`),
       rankedUp && h('p.rankup', `You are now a ${after.rank.name}!`),
       newBadges.length > 0 && h('div.stack', h('h3', 'New badge!'), h('div.badges', newBadges.map((b) => badgeChip(b)))),
+      app.session?.class?.world_mode === 'earned' && firstSubmit && h('p.quest-earned', `🗺️ +${app.session.class.world_mins || 5} minutes in Trail Quest`),
       h('div.row.end',
+        app.session?.class?.world_mode && h('a.btn', { href: '#/quest', onclick: close }, 'Play Trail Quest'),
         h('a.btn', { href: '#/map', onclick: close }, 'See the map'),
         nextId
           ? h('a.btn.primary', { href: `#/${!path && me.done.has('t6') ? 'road' : `lesson/${nextId}`}`, onclick: close }, id === 'c6' ? 'Go Beyond the Summit' : 'Next lesson')

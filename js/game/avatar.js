@@ -209,3 +209,19 @@ export function avatarURL(av, scale = 6) {
   cache.set(key, url);
   return url;
 }
+
+/** A pet on its own, 8 by 6 cells, for Trail Quest where it follows the hero around. */
+export function petURL(id, scale = 1) {
+  const pet = PETS[id];
+  if (!pet || !pet.grid.length) return '';
+  const key = `pet:${id}:${scale}`;
+  if (cache.has(key)) return cache.get(key);
+  const c = document.createElement('canvas');
+  c.width = 8 * scale;
+  c.height = 6 * scale;
+  const g = c.getContext('2d');
+  pet.grid.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') { g.fillStyle = pet.colors[ch]; g.fillRect(x * scale, y * scale, scale, scale); } }));
+  const url = c.toDataURL();
+  cache.set(key, url);
+  return url;
+}

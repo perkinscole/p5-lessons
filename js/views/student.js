@@ -52,7 +52,7 @@ export function badgeChip(id, note) {
 
 export async function viewHome() {
   const me = await loadMe();
-  const { student, works, stats, done, row } = me;
+  const { student, works, stats, done, row, cls } = me;
   const nextId = currentLesson(student.path, done);
   const mustChoose = needsPathChoice(done, student.path);
   const next = nextId && getLesson(nextId);
@@ -93,6 +93,7 @@ export async function viewHome() {
       ),
     ),
     nextCard,
+    cls.world_mode && h('a.card.quest-card', { href: '#/quest' }, h('strong', '🗺️ Trail Quest'), h('span', cls.world_mode === 'free' ? 'Open now. Play as your character!' : 'Spend the play time your lessons earned.'), h('span.btn.small', 'Play')),
     sideTrails.length > 0 && h('section.card.stack', h('h2', 'Side trail'), sideTrails.map((t) => h('a.row.linkrow', { href: `#/lesson/${t.id}` }, h('strong', getLesson(t.id).title), h('span.muted', 'Optional. ', getLesson(t.id).hook)))),
     returned.length > 0 && h('section.card.stack.alert', h('h2', 'Your teacher asked for changes'), returned.map((w) => h('a.row.linkrow', { href: `#/lesson/${w.lesson_id}` }, h('strong', getLesson(w.lesson_id).title), h('span', w.grade?.feedback || 'Open it to see what to fix.')))),
     h('section.card.stack',
