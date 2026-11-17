@@ -499,3 +499,29 @@ test('placeFor finds where a step goes in the student\'s own code', async () => 
   }
   assert.deepEqual([...new Set(missing)], []);
 });
+
+test('no step hides its first action under "Why?"', () => {
+  // The short instruction is picked from the end of a step's text. If the step has an earlier
+  // action ("Delete the ), then read the message"), only the later part would show. Such steps
+  // need their instruction written by hand in briefs.js.
+  const ACTION = /^(Add|Replace|Write|Change|Make|Create|Press|Run|Use|Put|Click|Open|Try|Move|Draw|Show|Call|Give|Play|Pick|Set|Have|Cut|Delete|Comment|Keep|Read|Wrap|Build|Start|Swap|Choose|Look|Place)\b/;
+  const hidden = [];
+  for (const l of allLessons()) {
+    for (const s of l.steps) {
+      if (s.brief) continue;
+      const { brief } = briefOf(s);
+      const sentences = (s.say || '').split(/(?<=[.!?:])\s+(?=[A-Z`*])/).map((x) => x.trim()).filter(Boolean);
+      if (sentences.some((x) => ACTION.test(x.replace(/^\*+/, '')) && !brief.includes(x))) hidden.push(`${l.id}/${s.title}`);
+    }
+  }
+  assert.deepEqual(hidden, []);
+});
+
+test('instructions say what "it" is', () => {
+  const vague = [];
+  for (const l of allLessons()) for (const s of l.steps) {
+    const { brief } = briefOf(s);
+    if (/^(Add|Put|Use|Call|Wrap|Make|Have) (it|them)\b/.test(brief) || brief.split(/\s+/).length < 4) vague.push(`${l.id}/${s.title}: ${brief}`);
+  }
+  assert.deepEqual(vague, []);
+});

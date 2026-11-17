@@ -15,7 +15,7 @@ function draw() {
   steps: [
     {
       title: 'Meet the grid', mins: 5,
-      say: 'Press **Run**. The blue square is your **canvas**, 400 dots wide and 400 tall.\n\nPositions are written `(x, y)`. `x` counts dots from the left. `y` counts dots from the **top**, so bigger `y` means lower down. Most people expect the opposite, so keep this one in mind.',
+      say: 'Press **Run**. The blue square is your **canvas**, 400 dots wide and 400 tall. Press **Grid** above your code to see the numbers, and move your mouse over the canvas to read any spot.\n\nPositions are written `(x, y)`. `x` counts dots from the left. `y` counts dots from the **top**, so bigger `y` means lower down. Most people expect the opposite, so keep this one in mind.',
     },
     {
       title: 'How a line of code is built', mins: 5,
@@ -32,6 +32,12 @@ background  the name
       say: 'Each drawing command is a **function call**: a name, then numbers in parentheses. These numbers are called **arguments**.\n\n`ellipse(x, y, width, height)` draws a circle or oval. Add this line inside `draw()`, below `background`:',
       code: '  ellipse(340, 60, 70, 70);',
       at: { after: 'background(135, 206, 235);' },
+      show: `  ellipse(340, 60, 70, 70);
+
+340  x: how far from the left
+ 60  y: how far down from the top
+ 70  width
+ 70  height`,
       check: /ellipse\s*\(/,
       hint: 'It needs to go between the { and } of draw(), after the background line.',
     },
@@ -69,7 +75,7 @@ rect(0, 320, 400, 80);`,
     },
     {
       title: 'Read the error', mins: 5,
-      say: 'Delete the `)` from one of your lines and press Run. Read the message under the canvas: it tells you the line number. Put the `)` back.\n\nErrors do not mean you failed. They are the computer asking you a question, and you will see them every day from now on.',
+      say: 'Your code works, so there is no error yet. Make one on purpose: delete the `)` from one of your lines and press Run. Read the message under your game: it names the line and what is missing. Put the `)` back.\n\nErrors do not mean you failed. They are the computer asking you a question, and you will see them every day from now on.',
     },
   ],
   stretch: ['Add a cloud made of three overlapping ellipses.', 'Use `triangle(x1, y1, x2, y2, x3, y3)` to draw a mountain behind your character.', 'Add a house or a tree to the scene.'],

@@ -204,6 +204,10 @@ export async function viewLesson(main, id, previewPath) {
     else if (ev.type === 'warn') logLine(h('div.warn', ev.message));
     else if (ev.type === 'status') logLine(h('div.muted', ev.message));
   });
+  // The coordinate grid: lines and numbers over the game, so (x, y) is something students can see.
+  let gridOn = false;
+  const gridButton = h('button.btn', { type: 'button', 'aria-pressed': 'false', title: 'Show a grid with x and y numbers over your game',
+    onclick: () => { gridOn = !gridOn; gridButton.setAttribute('aria-pressed', String(gridOn)); gridButton.classList.toggle('on', gridOn); player.setGrid(gridOn); } }, '▦ Grid');
   const run = () => {
     clearErrorMark();
     clear(consoleBox);
@@ -701,6 +705,7 @@ export async function viewLesson(main, id, previewPath) {
         isStudent && !approved && h('button.btn', { onclick: toggleShare }, work?.shared ? 'In the Arcade ✓' : 'Share to Arcade'),
         preview && h('select.path-pick', { 'aria-label': 'Road to preview', onchange: (e) => go(`/lesson/${id}/${e.target.value}`) }, Object.values(PATHS).map((p) => h('option', { value: p.id, selected: p.id === path }, p.road))),
         preview && h('button.btn', { onclick: () => { openFile(MAIN); cm.setValue(buildSolution(id, path)); for (const [n, t] of Object.entries(filesThrough(id, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript')); drawFileBar(); run(); toast('Showing the answer key.'); } }, 'Show answer key'),
+        gridButton,
         h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run'),
       ),
     );

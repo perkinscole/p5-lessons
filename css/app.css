@@ -179,6 +179,7 @@ textarea { width: 100%; }
 .item small { font-weight: 400; font-size: .72rem; color: var(--ink-2); }
 .item[aria-pressed='true'] { background: var(--sun); color: #2b2350; }
 .item:disabled { cursor: not-allowed; color: var(--ink-2); background: var(--paper-2); }
+button.btn.on { background: var(--sun); color: #2b2350; }
 /* Lesson ratings */
 .rate { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 2px solid var(--line); border-radius: 4px; background: var(--paper-2); text-align: left; }
 .rate-q { margin: 0; font-weight: 700; }
