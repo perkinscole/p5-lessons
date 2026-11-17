@@ -1,0 +1,215 @@
+{
+  "title": "PIXEL TRAIL:\nBASE CAMP",
+  "subtitle": "Daily briefings for Lessons 1 to 5",
+  "tagline": "Make games in p5.js, one step at a time.",
+  "lessons": [
+    {
+      "n": 1,
+      "title": "Hello, Canvas",
+      "first_page": 2,
+      "board": {
+        "lesson": "Hello, Canvas. Tell the computer exactly where to put dots, and draw your first scene.",
+        "question": "Why does a computer need such exact instructions, when a person could guess what you mean?",
+        "agenda": "1. Meet the grid\n2. See how a line of code is built\n3. Draw a sun and the ground\n4. Add color\n5. Build your own character",
+        "riddle": "Every dot on your screen has an address on me. I count across from the left and down from the top. What am I?"
+      },
+      "vocab": [
+        [
+          "canvas",
+          "The area your program draws on."
+        ],
+        [
+          "coordinates",
+          "Two numbers, (x, y), that say where something is. x counts from the left. y counts down from the top."
+        ],
+        [
+          "function call",
+          "A command: a name, then values in parentheses, like ellipse(340, 60, 70, 70);"
+        ],
+        [
+          "argument",
+          "A value you give a command, placed inside the parentheses."
+        ]
+      ],
+      "standards": [
+        "6-8.CT.d.6: Use an iterative approach in development and debugging to understand the dimensions of a problem clearly."
+      ],
+      "main": "Build a character out of at least three shapes, standing on the ground.",
+      "stretch": [
+        "Add a cloud made of three overlapping ellipses.",
+        "Use triangle to draw a mountain behind your character.",
+        "Add a house or a tree to the scene."
+      ],
+      "answer": "RIDDLE ANSWER: The canvas (the grid)"
+    },
+    {
+      "n": 2,
+      "title": "It Moves!",
+      "first_page": 7,
+      "board": {
+        "lesson": "It Moves! Give the computer a memory, and your scene comes alive.",
+        "question": "How does a program remember something that keeps changing?",
+        "agenda": "1. See how draw() repeats\n2. Create a variable\n3. Use it to place the saucer\n4. Change it every frame\n5. Add a second moving thing",
+        "riddle": "I have a name, and I hold one thing at a time. Give me something new and I forget the old. What am I?"
+      },
+      "vocab": [
+        [
+          "variable",
+          "A named box that holds a value. The value can change."
+        ],
+        [
+          "let",
+          "The word that makes a new variable, like let saucerX = 50;"
+        ],
+        [
+          "draw loop",
+          "draw() runs again and again, about 60 times every second."
+        ],
+        [
+          "frame",
+          "One picture in an animation. A game is a very fast flipbook."
+        ]
+      ],
+      "standards": [
+        "6-8.CT.b.2: Use logical reasoning to predict outputs given varying inputs.",
+        "6-8.CT.d.4: Implement problem solutions using a programming language, including all of the following: looping behavior, conditional statements, expressions, variables, and functions."
+      ],
+      "main": "Add a second variable of your own that moves something else.",
+      "stretch": [
+        "Make something grow by putting a variable in the width of an ellipse.",
+        "Make the background slowly change color using a variable.",
+        "Add a third variable for the saucer's speed."
+      ],
+      "answer": "RIDDLE ANSWER: A variable"
+    },
+    {
+      "n": 3,
+      "title": "Puppet Master",
+      "first_page": 12,
+      "board": {
+        "lesson": "Puppet Master. Your program starts listening, and you build a creature that follows you around.",
+        "question": "How can a program respond to the person using it?",
+        "agenda": "1. Follow the mouse\n2. Do math inside your code\n3. Write your first if\n4. Show a number on screen\n5. Make your creature your own",
+        "riddle": "I am small, I have a tail, and I never eat cheese. Your program always knows where I am. What am I?"
+      },
+      "vocab": [
+        [
+          "input",
+          "Information going into a program, like where the mouse is."
+        ],
+        [
+          "mouseX, mouseY",
+          "Variables p5 keeps updated with the mouse's position."
+        ],
+        [
+          "expression",
+          "Math the computer works out for you, like mouseX + 20."
+        ],
+        [
+          "if statement",
+          "Code that runs only when its condition is true."
+        ]
+      ],
+      "standards": [
+        "6-8.CT.b.2: Use logical reasoning to predict outputs given varying inputs.",
+        "6-8.CT.d.4: Implement problem solutions using a programming language, including all of the following: looping behavior, conditional statements, expressions, variables, and functions."
+      ],
+      "main": "Make something new respond to the mouse.",
+      "stretch": [
+        "Make the pupils look toward the mouse.",
+        "Add a hat that only appears when the mouse is on the right half of the canvas.",
+        "Use pmouseX to draw a trail."
+      ],
+      "answer": "RIDDLE ANSWER: The computer mouse"
+    },
+    {
+      "n": 4,
+      "title": "Bounce House",
+      "first_page": 17,
+      "board": {
+        "lesson": "Bounce House. Your objects learn about walls, and your code starts making decisions.",
+        "question": "How do programs make decisions?",
+        "agenda": "1. Spot the problem\n2. Bounce off all four walls\n3. Fix the sinking edge\n4. Change color and count bounces\n5. Bug hunt",
+        "riddle": "I am a tiny word that asks a question. When the answer is no, I skip everything inside me. What am I?"
+      },
+      "vocab": [
+        [
+          "condition",
+          "A question with a true or false answer, like ballX > width."
+        ],
+        [
+          "conditional",
+          "Code that runs only when its condition is true."
+        ],
+        [
+          "comparison",
+          "Checking two values with > (greater than) or < (less than)."
+        ],
+        [
+          "boundary",
+          "An edge your code has to check, like a wall of the canvas."
+        ]
+      ],
+      "standards": [
+        "6-8.CT.b.5: Recognize that boundaries need to be taken into account for an algorithm to produce correct results.",
+        "6-8.CT.d.6: Use an iterative approach in development and debugging to understand the dimensions of a problem clearly.",
+        "6-8.CT.b.1: Design solutions that use repetition and conditionals.",
+        "6-8.CT.b.2: Use logical reasoning to predict outputs given varying inputs."
+      ],
+      "main": "Write the wall checks yourself, then find and fix the bug.",
+      "stretch": [
+        "Speed the ball up a little on every bounce.",
+        "Add a second ball with its own four variables.",
+        "Make the ball bounce off a paddle at your mouse."
+      ],
+      "answer": "RIDDLE ANSWER: if"
+    },
+    {
+      "n": 5,
+      "title": "Catch the Star",
+      "first_page": 22,
+      "board": {
+        "lesson": "Catch the Star. Your first real game, with a player, a goal, a score, and a way to lose.",
+        "question": "What turns a drawing into a game?",
+        "agenda": "1. Keep the stars falling\n2. Add a score\n3. Catch the star\n4. Add lives and a game over\n5. Make it get harder",
+        "riddle": "Ask me the same question twice and you may get two different answers, yet I am never wrong. What am I?"
+      },
+      "vocab": [
+        [
+          "collision",
+          "Collision detection is checking whether two things are touching."
+        ],
+        [
+          "&& (and)",
+          "Every part must be true."
+        ],
+        [
+          "|| (or)",
+          "Only one part has to be true."
+        ],
+        [
+          "random",
+          "random(a, b) gives a surprise number between a and b."
+        ]
+      ],
+      "standards": [
+        "6-8.CT.b.1: Design solutions that use repetition and conditionals.",
+        "6-8.CT.b.3: Individually and collaboratively decompose a problem and create a sub-solution for each of its parts (e.g., video game, robot obstacle course, making dinner).",
+        "6-8.CT.d.4: Implement problem solutions using a programming language, including all of the following: looping behavior, conditional statements, expressions, variables, and functions.",
+        "6-8.CT.d.6: Use an iterative approach in development and debugging to understand the dimensions of a problem clearly."
+      ],
+      "main": "Make your game get harder as the player improves, and make it your own.",
+      "stretch": [
+        "Add a bad star, in a different color, that costs a life when you catch it.",
+        "Let players restart the game.",
+        "Keep and show a best score."
+      ],
+      "answer": "RIDDLE ANSWER: random (like rolling dice)"
+    }
+  ],
+  "steps": [
+    "1\nOpen your Chromebook and sign in with your school account",
+    "2\nOpen Pixel Trail",
+    "3\nOn Home, press Start lesson"
+  ]
+}
