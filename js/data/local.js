@@ -165,6 +165,32 @@ export function createLocalStore() {
       save();
     },
     getClass: async (id) => clone(db.classes.find((c) => c.id === id)),
+    // Lesson ratings, with the same rules as the server.
+    async rateLesson(lessonId, r = {}) {
+      const sid = readSession().id;
+      const st = db.students.find((x) => x.id === sid);
+      const stars = Math.round(Number(r.stars));
+      if (!(stars >= 1 && stars <= 5)) throw new Error('Pick 1 to 5 stars.');
+      if (!db.works.some((w) => w.student_id === sid && w.lesson_id === lessonId)) throw new Error('Start the lesson before you rate it.');
+      const picked = ['instructions', 'where', 'code', 'errors', 'questions', 'nothing'].filter((k) => (r.confusing || []).includes(k));
+      const nothing = picked.includes('nothing');
+      db.ratings = (db.ratings || []).filter((x) => !(x.student_id === sid && x.lesson_id === lessonId));
+      db.ratings.push({ student_id: sid, class_id: st.class_id, lesson_id: lessonId, stars, confusing: nothing ? ['nothing'] : picked, step: !nothing && r.step >= 0 ? Math.round(Number(r.step)) : -1, comment: String(r.comment || '').slice(0, 200) });
+      save();
+      return true;
+    },
+    async lessonRatings(classId) {
+      const by = new Map();
+      for (const r of (db.ratings || []).filter((x) => x.class_id === classId)) {
+        const t = by.get(r.lesson_id) || { lesson_id: r.lesson_id, count: 0, total: 0, stars: [0, 0, 0, 0, 0], confusing: {}, steps: {}, comments: [] };
+        t.count++; t.total += r.stars; t.stars[r.stars - 1]++;
+        r.confusing.forEach((k) => { t.confusing[k] = (t.confusing[k] || 0) + 1; });
+        if (r.step >= 0) t.steps[r.step] = (t.steps[r.step] || 0) + 1;
+        if (r.comment) t.comments.push(r.comment);
+        by.set(r.lesson_id, t);
+      }
+      return clone([...by.values()].map(({ total, ...t }) => ({ ...t, average: Math.round((total / t.count) * 10) / 10 })));
+    },
     // Trail Quest, with the same rules as the server.
     async setWorld(id, opts = {}) {
       const c = db.classes.find((x) => x.id === id && x.teacher_id === readSession()?.id);

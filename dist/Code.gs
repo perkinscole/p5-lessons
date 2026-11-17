@@ -23,6 +23,8 @@ const SCHEMA = {
   // music_open: the teacher lets students use the Music Maker. Blank means closed.
   // world_mode: Trail Quest is '' (closed), 'earned' (minutes from lessons), or 'free' (open to all).
   Classes: ['id', 'teacher_email', 'name', 'created_at', 'music_open', 'world_mode', 'world_mins'],
+  // What a student thought of a lesson. The teacher sees these added up, without names.
+  Ratings: ['student_id', 'class_id', 'lesson_id', 'stars', 'confusing', 'step', 'comment', 'updated_at'],
   // One row per student who has played Trail Quest. Coins come from play, never from grades.
   World: ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at',
     // A student's best run, replayed for classmates as a ghost: the world it was in, and the path walked.
@@ -43,9 +45,9 @@ const SCHEMA = {
   Links: ['class_id', 'course_id', 'course_name', 'synced_at'],
   Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
 };
-const NUMBERS = new Set(['ghost_seed', 'world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
+const NUMBERS = new Set(['stars', 'step', 'ghost_seed', 'world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
 const BOOLEANS = new Set(['run_free', 'auto_ok', 'shared', 'published', 'started', 'music_open']);
-const OBJECTS = new Set(['holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
+const OBJECTS = new Set(['confusing', 'holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
 const ML5_PARTS = 5; // Set by the build: how many ML5_n files it made.
 
@@ -415,6 +417,50 @@ function listSongs_(me, classId) {
 function mySongs_(me) {
   const mine = (s) => (me.role === 'student' ? s.student_id === me.student.id : s.teacher_email === me.email);
   return rows_('Songs').filter(mine);
+}
+
+// Lesson ratings -------------------------------------------------------------------------------------
+// After submitting, a student can rate a lesson and say what was confusing. It never touches grades
+// or XP. The teacher gets totals for a class, never who said what.
+const CONFUSING_ = ['instructions', 'where', 'code', 'errors', 'questions', 'nothing'];
+
+function rateLesson_(me, lessonId, rating) {
+  const lesson = String(lessonId);
+  if (!/^[a-z]\d{1,2}$/.test(lesson)) throw new Error('Unknown lesson.');
+  const r = rating || {};
+  const stars = Math.round(Number(r.stars));
+  if (!(stars >= 1 && stars <= 5)) throw new Error('Pick 1 to 5 stars.');
+  const picked = Array.isArray(r.confusing) ? CONFUSING_.filter((k) => r.confusing.includes(k)) : [];
+  const step = Math.round(Number(r.step));
+  const row = {
+    student_id: me.student.id, class_id: me.student.class_id, lesson_id: lesson, stars,
+    confusing: picked.includes('nothing') ? ['nothing'] : picked,
+    step: step >= 0 && step <= 40 && !picked.includes('nothing') ? step : -1,
+    comment: text_(r.comment, 200), updated_at: now_(),
+  };
+  withLock_(() => {
+    if (!metaWorks_().some((w) => w.student_id === me.student.id && w.lesson_id === lesson)) throw new Error('Start the lesson before you rate it.');
+    const old = rows_('Ratings').find((x) => x.student_id === me.student.id && x.lesson_id === lesson);
+    if (old) update_('Ratings', { ...row, _row: old._row });
+    else insert_('Ratings', row);
+  });
+  return true;
+}
+
+function lessonRatings_(me, classId) {
+  ownedClass_(me, classId);
+  const byLesson = new Map();
+  rows_('Ratings').filter((r) => r.class_id === classId).forEach((r) => {
+    const t = byLesson.get(r.lesson_id) || { lesson_id: r.lesson_id, count: 0, total: 0, stars: [0, 0, 0, 0, 0], confusing: {}, steps: {}, comments: [] };
+    t.count++;
+    t.total += r.stars;
+    t.stars[r.stars - 1]++;
+    (r.confusing || []).forEach((k) => { t.confusing[k] = (t.confusing[k] || 0) + 1; });
+    if (r.step >= 0) t.steps[r.step] = (t.steps[r.step] || 0) + 1;
+    if (r.comment) t.comments.push(r.comment);
+    byLesson.set(r.lesson_id, t);
+  });
+  return [...byLesson.values()].map(({ total, ...t }) => ({ ...t, average: Math.round((total / t.count) * 10) / 10 }));
 }
 
 // Trail Quest ---------------------------------------------------------------------------------------
@@ -993,6 +1039,7 @@ const TEACHER_ROUTES = {
   libraryPart: libraryPart_,
   listClasses: (me) => rows_('Classes').filter((c) => c.teacher_email === me.email),
   getClass: (me, id) => ownedClass_(me, id),
+  lessonRatings: lessonRatings_,
   setWorld: (me, id, opts) => withLock_(() => {
     const cls = ownedClass_(me, id);
     const mode = opts && (opts.mode === 'earned' || opts.mode === 'free') ? opts.mode : '';
@@ -1026,6 +1073,7 @@ const TEACHER_ROUTES = {
     deleteRows_('Links', (l) => l.class_id === id);
     deleteRows_('Pace', (p) => p.class_id === id);
     deleteRows_('World', (r) => r.class_id === id);
+    deleteRows_('Ratings', (r) => r.class_id === id);
     deleteRows_('Students', (s) => s.class_id === id);
     deleteRows_('Classes', (c) => c.id === id);
   }),
@@ -1059,6 +1107,7 @@ const TEACHER_ROUTES = {
     deleteRows_('Songs', (s) => s.student_id === id);
     deleteRows_('Contributions', (c) => c.student_id === id);
     deleteRows_('World', (r) => r.student_id === id);
+    deleteRows_('Ratings', (r) => r.student_id === id);
     rows_('Teams').filter((t) => (t.members || []).includes(id)).forEach((t) => {
       const members = t.members.filter((m) => m !== id);
       if (members.length < 2) dropTeam_(t);
@@ -1415,6 +1464,7 @@ function saveMyWork_(me, lessonId, patch, extra) {
 }
 
 const STUDENT_ROUTES = {
+  rateLesson: rateLesson_,
   worldState: worldState_,
   worldEnter: worldEnter_,
   worldRun: worldRun_,

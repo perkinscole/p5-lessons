@@ -179,6 +179,21 @@ textarea { width: 100%; }
 .item small { font-weight: 400; font-size: .72rem; color: var(--ink-2); }
 .item[aria-pressed='true'] { background: var(--sun); color: #2b2350; }
 .item:disabled { cursor: not-allowed; color: var(--ink-2); background: var(--paper-2); }
+/* Lesson ratings */
+.rate { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 2px solid var(--line); border-radius: 4px; background: var(--paper-2); text-align: left; }
+.rate-q { margin: 0; font-weight: 700; }
+.rate-stars { display: flex; gap: 2px; }
+.rate-star { font-size: 2rem; line-height: 1; background: none; border: 0; padding: 2px 4px; cursor: pointer; color: var(--ink-2); opacity: .45; }
+.rate-star.on { color: #e0a400; opacity: 1; }
+.rate-star:focus-visible { outline: 3px solid var(--accent); }
+.rate-word { font-weight: 700; }
+.rate-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rate-chip { font: 700 .85rem var(--font-body); padding: 5px 10px; border: 2px solid var(--line); border-radius: 14px; background: var(--card); color: var(--ink); cursor: pointer; }
+.rate-chip[aria-pressed='true'] { background: var(--sun); color: #2b2350; }
+.rate input { width: 100%; }
+.rate-bars { display: flex; align-items: flex-end; gap: 3px; height: 32px; margin-top: 4px; }
+.rate-bars span { width: 12px; background: #e0a400; border-radius: 2px 2px 0 0; }
+.rate-comments { margin: 6px 0 0; padding-left: 18px; }
 /* Trail Quest */
 .quest-lobby { display: grid; grid-template-columns: 300px 1fr 1fr; gap: 20px; align-items: start; }
 @media (max-width: 900px) { .quest-lobby { grid-template-columns: 1fr; } }

@@ -754,3 +754,31 @@ test('Trail Quest ghosts: a best run can be raced by classmates, and only by the
   assert.equal(ari('worldGhosts', 8).length, 1);
   assert.equal(ari('worldGhosts', 4242).length, 0);
 });
+
+test('lesson ratings: students rate their own lessons, and the teacher sees totals without names', () => {
+  const { teacher, other, ari, bea, zed, cls, clsB, ids } = setup();
+  denied(() => ari('rateLesson', 't1', { stars: 0 }));
+  denied(() => ari('rateLesson', 't1', { stars: 9 }));
+  denied(() => ari('rateLesson', 't9', { stars: 4 }), 'a lesson they never started');
+  denied(() => ari('rateLesson', '../x', { stars: 4 }));
+  denied(() => teacher('rateLesson', 't1', { stars: 4 }));
+  ari('rateLesson', 't1', { stars: 2, confusing: ['where', 'errors', 'made-up'], step: 3, comment: 'I got lost on the sun step' });
+  ari('rateLesson', 't1', { stars: 3, confusing: ['where', 'errors', 'made-up'], step: 3, comment: 'I got lost on the sun step' });
+  bea('rateLesson', 't1', { stars: 5, confusing: ['nothing', 'code'], step: 2, comment: '' });
+
+  denied(() => ari('lessonRatings', cls.id));
+  denied(() => other('lessonRatings', cls.id));
+  const [t1] = teacher('lessonRatings', cls.id);
+  assert.equal(t1.count, 2, 'rating again replaces the first rating');
+  assert.equal(t1.average, 4);
+  assert.deepEqual(t1.stars, [0, 0, 1, 0, 1]);
+  assert.deepEqual(t1.confusing, { where: 1, errors: 1, nothing: 1 }, 'only known reasons, and "nothing" stands alone');
+  assert.deepEqual(t1.steps, { 3: 1 });
+  assert.deepEqual(t1.comments, ['I got lost on the sun step']);
+  const text = JSON.stringify(teacher('lessonRatings', cls.id));
+  assert.ok(!text.includes(ids[ARI]) && !text.includes('Ari') && !text.includes('@'), 'no names, ids, or emails');
+  assert.deepEqual(other('lessonRatings', clsB.id), []);
+  teacher('removeStudent', ids[ARI]);
+  assert.equal(teacher('lessonRatings', cls.id)[0].count, 1);
+  void zed;
+});

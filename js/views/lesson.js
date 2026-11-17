@@ -4,6 +4,7 @@ import { app, go } from '../main.js';
 import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
+import { ratingBox } from './feedback.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
@@ -670,6 +671,7 @@ export async function viewLesson(main, id, previewPath) {
       h('h2', `+${after.xp - before.xp} XP`),
       rankedUp && h('p.rankup', `You are now a ${after.rank.name}!`),
       newBadges.length > 0 && h('div.stack', h('h3', 'New badge!'), h('div.badges', newBadges.map((b) => badgeChip(b)))),
+      ratingBox(id),
       app.session?.class?.world_mode === 'earned' && firstSubmit && h('p.quest-earned', `🗺️ +${app.session.class.world_mins || 5} minutes in Trail Quest`),
       h('div.row.end',
         app.session?.class?.world_mode && h('a.btn', { href: '#/quest', onclick: close }, 'Play Trail Quest'),
