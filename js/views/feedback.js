@@ -115,7 +115,7 @@ export function helpBox(lessonId, getStep, startOpen) {
     const go = async () => { if (await attempt(() => app.store.askHelp(lessonId, getStep(), note.value))) { waiting = true; watch(); draw(); } };
     clear(el).append(note,
       h('div.row', h('button.btn.small.primary', { type: 'button', onclick: go }, 'Ask my teacher'), h('button.linklike', { type: 'button', onclick: draw }, 'Never mind')),
-      h('p.muted.small', 'Your name shows on the class screen.'));
+      h('p.muted.small', 'Only your teacher sees who asked and what you wrote.'));
     note.focus();
   }
   watch();
@@ -133,8 +133,8 @@ export const helpPlace = (r) => { const l = getLesson(r.lesson_id); return l ? `
  * request arrives. onUpdate(list) lets a page react, for example to mark students on the display.
  * Returns { el, stop }.
  */
-export function helpCard(classId, { onUpdate, big = false } = {}) {
-  const el = h(`section.help-card${big ? '.big' : ''}`, { 'aria-live': 'polite' });
+export function helpCard(classId, { onUpdate } = {}) {
+  const el = h('section.help-card', { 'aria-live': 'polite' });
   let known = null;
   const draw = (list) => {
     clear(el);
@@ -150,7 +150,7 @@ export function helpCard(classId, { onUpdate, big = false } = {}) {
     let list;
     try { list = await app.store.helpRequests(classId); } catch (_) { return; }
     const ids = list.map((r) => `${r.student_id}@${r.at}`);
-    if (known && ids.some((id) => !known.includes(id))) { chime('doorbell'); chime('doorbell', 1.1); }
+    if (known && ids.some((id) => !known.includes(id))) chime('doorbell');
     known = ids;
     draw(list);
     if (onUpdate) onUpdate(list);

@@ -111,7 +111,7 @@ Finishing a step plays a short chime and the "Done" mark sparkles. A right answe
 
 ## Feedback and help
 
-**"I'm stuck."** Every lesson has a **✋ I'm stuck: ask for help** button. A student can add a short note, and their request appears within a few seconds on the class page and the class display, with a doorbell: their name, the exact step, and the note. Press **✓ Helped** to clear it, or the student can press **I figured it out**. The 🔔 button on the display tests the doorbell on that computer.
+**"I'm stuck."** Every lesson has a **✋ I'm stuck: ask for help** button. A student can add a short note, and their request appears within a few seconds on the class page, with a doorbell: their name, the exact step, and the note. On the projected class display it stays private: their character hops and glows, and a small **✋** button in the corner opens the list for you. Press **✓ Helped** to clear it, or the student can press **I figured it out**. The 🔔 button on the display tests the doorbell on that computer.
 
 **Confusing?** Under every step and check question, a student can tap **🤔 Confusing?** and pick a reason: instructions unclear, code didn't work, too hard, too easy, or other, with an optional note.
 
@@ -135,7 +135,7 @@ On a class's **Groups** tab, put 2 or 3 students together for a lesson. They sha
 
 ## Projecting a class
 
-On a class page, press **Project this class** for a display to leave up during student-led work. It shows the lesson most of the class is on as a race, with each student at the step they've reached and anyone who submits today at the finish, then where everyone is on the trail, the question of the day, time left, recent achievements, and the day's standards for visitors and administrators. **Set up today** lets you type your own items. Anything left blank fills in from where students are, and a blank question is the big question for the lesson most students are on, about why the day's idea matters. It never shows scores or feedback.
+On a class page, press **Project this class** for a display to leave up during student-led work. It shows the lesson most of the class is on as a race, with each student at the step they've reached and anyone who submits today at the finish, set in the scenery of the stage they're in, then the question of the day, time left, recent achievements, and the day's standards for visitors and administrators. **Set up today** lets you type your own items. Anything left blank fills in from where students are, and a blank question is the big question for the lesson most students are on, about why the day's idea matters. It never shows scores or feedback.
 
 ## Grading and points
 
