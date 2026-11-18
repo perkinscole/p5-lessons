@@ -6,7 +6,7 @@ import { app, render, refreshSession } from '../main.js';
 import { getSettings } from '../settings.js';
 import { avatarURL, defaultAvatar, petURL } from '../game/avatar.js';
 import { installSynth } from '../game/synth.js';
-import { TILE, W, H, T, generateWorld, regionAt, isSolid, powersFor, POWERS, GHOST_STEP, encodePath, decodePath, ghostAt } from '../game/quest.js';
+import { TILE, W, H, T, generateFloor, isSolid, powersFor, POWERS, RELICS, pickRelic, spikeUp, GHOST_STEP, DOWN, encodePath, decodePath, ghostAt } from '../game/quest.js';
 
 const synth = installSynth({}, {});
 const sfx = (name) => { if (getSettings().gameSound) { try { synth.playSound(name); } catch (_) { /* no audio here */ } } };
@@ -22,7 +22,7 @@ function drawTile(g, world, tx, ty) {
   const x = tx * TILE;
   const y = ty * TILE;
   const tile = world.tiles[ty * W + tx];
-  const region = regionAt(tx, ty);
+  const region = world.theme;
   const px = (dx, dy, w, hh, color) => { g.fillStyle = color; g.fillRect(x + dx, y + dy, w, hh); };
   px(0, 0, TILE, TILE, FLOOR[region][(tx + ty) % 2]);
   if (region === 'ruins' && !isSolid(tile)) { px(0, 15, 16, 1, '#a89671'); px(15, 0, 1, 16, '#a89671'); }
@@ -37,6 +37,8 @@ function drawTile(g, world, tx, ty) {
     px(0, 0, 16, 16, dark); px(0, 0, 16, 5, light); px(0, 5, 16, 1, line); px(0, 11, 16, 1, line); px(7, 6, 1, 5, line); px(3, 12, 1, 4, line); px(12, 12, 1, 4, line);
   }
   if (tile === T.PILLAR) { px(4, 2, 8, 13, '#8a7858'); px(3, 1, 10, 3, '#a39070'); px(3, 13, 10, 2, '#6e5f44'); px(6, 4, 1, 9, '#6e5f44'); }
+  if (tile === T.STAIRS) { px(1, 1, 14, 14, '#1b1530'); px(2, 2, 12, 3, '#5a4f80'); px(2, 6, 9, 3, '#463c69'); px(2, 10, 6, 3, '#322a52'); px(12, 11, 2, 2, '#ffd23f'); }
+  if (tile === T.SPIKE) { px(1, 1, 14, 14, '#3b3550'); for (const [dx, dy] of [[3, 3], [10, 3], [3, 10], [10, 10]]) px(dx, dy, 3, 3, '#221e2d'); }
   if (tile === T.ROCK) { px(2, 3, 12, 11, '#8d8794'); px(4, 1, 8, 14, '#8d8794'); px(4, 3, 5, 3, '#aaa5b0'); px(8, 4, 1, 5, '#3d3846'); px(6, 8, 3, 1, '#3d3846'); px(9, 9, 1, 4, '#3d3846'); }
 }
 const SPRITES = {
@@ -45,6 +47,11 @@ const SPRITES = {
   chest: (g, x, y) => { g.fillStyle = '#5c3a1a'; g.fillRect(x - 6, y - 5, 12, 10); g.fillStyle = '#9a6530'; g.fillRect(x - 5, y - 4, 10, 4); g.fillStyle = '#ffd23f'; g.fillRect(x - 6, y, 12, 1); g.fillRect(x - 1, y - 1, 2, 3); },
   slime: (g, x, y, t) => { const s = Math.round(Math.sin(t * 6 + x) * 1); g.fillStyle = '#2f7fd6'; g.fillRect(x - 6, y - 2 - s, 12, 7 + s); g.fillRect(x - 4, y - 4 - s, 8, 3); g.fillStyle = '#0f1f45'; g.fillRect(x - 3, y - 1 - s, 2, 2); g.fillRect(x + 1, y - 1 - s, 2, 2); },
   bat: (g, x, y, t) => { const f = Math.sin(t * 14) > 0 ? 2 : -1; g.fillStyle = '#8a5fd0'; g.fillRect(x - 2, y - 2, 4, 5); g.fillRect(x - 7, y - 2 + f, 5, 2); g.fillRect(x + 2, y - 2 + f, 5, 2); g.fillStyle = '#ffe14d'; g.fillRect(x - 1, y - 1, 1, 1); g.fillRect(x + 1, y - 1, 1, 1); },
+  heart: (g, x, y, t) => { const b = Math.round(Math.sin(t * 4 + x) * 1.5); g.fillStyle = '#e2445c'; g.fillRect(x - 5, y - 3 + b, 4, 4); g.fillRect(x + 1, y - 3 + b, 4, 4); g.fillRect(x - 4, y + b, 8, 3); g.fillRect(x - 2, y + 3 + b, 4, 2); g.fillStyle = '#ff9aa9'; g.fillRect(x - 4, y - 2 + b, 2, 2); },
+  relic: (g, x, y, t) => { const b = Math.round(Math.sin(t * 3) * 2); const glow = 0.5 + Math.sin(t * 6) * 0.3; g.globalAlpha = glow; g.fillStyle = '#fff3b0'; g.fillRect(x - 7, y - 7 + b, 14, 14); g.globalAlpha = 1; g.fillStyle = '#b06cff'; g.fillRect(x - 4, y - 4 + b, 8, 8); g.fillStyle = '#ffffff'; g.fillRect(x - 2, y - 2 + b, 3, 3); },
+  spitter: (g, x, y, t) => { const o = Math.sin(t * 4) > 0.6 ? 1 : 0; g.fillStyle = '#3f8f4f'; g.fillRect(x - 6, y - 3, 12, 9); g.fillRect(x - 4, y - 6, 8, 4); g.fillStyle = '#c9f27a'; g.fillRect(x - 3, y - 2, 6, 3 + o); g.fillStyle = '#16321d'; g.fillRect(x - 3, y - 5, 2, 2); g.fillRect(x + 1, y - 5, 2, 2); },
+  hunter: (g, x, y, t) => { const b = Math.round(Math.sin(t * 8) * 1); g.fillStyle = '#7a1f2b'; g.fillRect(x - 6, y - 6 + b, 12, 12); g.fillStyle = '#d6394c'; g.fillRect(x - 5, y - 5 + b, 10, 4); g.fillStyle = '#ffe14d'; g.fillRect(x - 4, y - 3 + b, 3, 2); g.fillRect(x + 1, y - 3 + b, 3, 2); g.fillStyle = '#2a0b10'; g.fillRect(x - 3, y + 2 + b, 6, 2); },
+  shot: (g, x, y) => { g.fillStyle = '#c9f27a'; g.fillRect(x - 2, y - 2, 4, 4); g.fillStyle = '#ffffff'; g.fillRect(x - 1, y - 1, 2, 2); },
   guard: (g, x, y, t) => { const b = Math.round(Math.sin(t * 3 + x) * 1); g.fillStyle = '#e9e4f5'; g.fillRect(x - 5, y - 6 + b, 10, 10); g.fillRect(x - 5, y + 4 + b, 2, 2); g.fillRect(x - 1, y + 4 + b, 2, 2); g.fillRect(x + 3, y + 4 + b, 2, 2); g.fillStyle = '#3b2f5c'; g.fillRect(x - 3, y - 3 + b, 2, 3); g.fillRect(x + 1, y - 3 + b, 2, 3); },
 };
 
@@ -59,17 +66,20 @@ const MARKS = ['#ffd23f', '#5cd3ff'];
  * Play one run on `canvas`.
  *   team:   one or two players, each { name, avatar, heroImg, petImg }
  *   ghosts: classmates' recorded runs in this same world, each { name, img, points }
- * Calls onHud as things change and onEnd({ seconds, coins, seed, path }) once. Returns { stop, finish }.
+ * Calls onHud as things change and onEnd({ seconds, coins, seed, path, floor }) once. Returns { stop, finish }.
  */
-function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
-  const world = generateWorld(seed);
+export function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd, fromDepth = 1 }) {
+  // Runs always begin on floor 1. Only tests/quest.html starts deeper, to look at later floors.
+  let depth = fromDepth;
+  let world = generateFloor(seed, depth);
   const g = canvas.getContext('2d');
   g.imageSmoothingEnabled = false;
   const map = document.createElement('canvas');
   map.width = W * TILE;
   map.height = H * TILE;
   const mg = map.getContext('2d');
-  for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) drawTile(mg, world, tx, ty);
+  const paint = () => { for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++) drawTile(mg, world, tx, ty); };
+  paint();
   const shade = document.createElement('canvas');
   shade.width = VIEW_W;
   shade.height = VIEW_H;
@@ -78,8 +88,9 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
   const players = team.map((m, i) => {
     const powers = powersFor(m.avatar);
     const x = world.start.x + i * 16;
-    return { ...m, n: i, powers, x, y: world.start.y, hearts: powers.hearts, safe: 0, dashT: 0, dashCd: 0, fx: 0, fy: 1, pet: { x: x - 12, y: world.start.y } };
+    return { ...m, n: i, powers, x, y: world.start.y, hearts: powers.hearts, shield: 0, relics: [], down: 0, safe: 0, dashT: 0, dashCd: 0, fx: 0, fy: 1, pet: { x: x - 12, y: world.start.y } };
   });
+  const shots = [];
   const duo = players.length > 1;
   const floats = [];
   const trail = [];
@@ -89,10 +100,12 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
   let time = 0;
   let over = false;
   let hinted = false;
+  // Set when the last player is knocked out: the run ends a moment later, so they see what hit them.
+  let endSoon = -1;
   let note = '';
   let noteT = 0;
   const say = (text) => { note = text; noteT = 2.6; };
-  const hud = () => onHud({ coins, left, note: noteT > 0 ? note : '', players: players.map((pl) => ({ hearts: pl.hearts, max: pl.powers.hearts, dash: pl.powers.dash, dashReady: pl.dashCd <= 0 })) });
+  const hud = () => onHud({ coins, left, depth, note: noteT > 0 ? note : '', players: players.map((pl) => ({ hearts: pl.down > 0 ? 0 : pl.hearts, max: pl.powers.hearts, shield: pl.shield, relics: pl.relics, dash: pl.powers.dash, dashReady: pl.dashCd <= 0 })) });
 
   const tileAt = (x, y) => { const tx = Math.floor(x / TILE); const ty = Math.floor(y / TILE); return tx < 0 || ty < 0 || tx >= W || ty >= H ? T.WALL : world.tiles[ty * W + tx]; };
   const CORNERS = (r) => [[-r, -r], [r, -r], [-r, r], [r, r]];
@@ -108,8 +121,42 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
     }
     return rock;
   }
-  const regionOf = (o) => regionAt(Math.floor(o.x / TILE), Math.floor(o.y / TILE));
-  const nearest = (o) => players.reduce((a, b) => (Math.hypot(a.x - o.x, a.y - o.y) <= Math.hypot(b.x - o.x, b.y - o.y) ? a : b));
+  const up = () => players.filter((pl) => pl.down <= 0);
+  const nearest = (o) => (up().length ? up() : players).reduce((a, b) => (Math.hypot(a.x - o.x, a.y - o.y) <= Math.hypot(b.x - o.x, b.y - o.y) ? a : b));
+
+  /** Down the stairs: a new, harder floor made from the same run seed. */
+  function descend() {
+    depth += 1;
+    world = generateFloor(seed, depth);
+    paint();
+    shots.length = 0;
+    floats.length = 0;
+    players.forEach((pl, i) => {
+      pl.x = world.start.x + i * 16; pl.y = world.start.y; pl.pet.x = pl.x - 12; pl.pet.y = pl.y;
+      pl.safe = 1.5; pl.shield = pl.powers.shield; pl.dashT = 0;
+      if (pl.down > 0) { pl.down = 0; pl.hearts = 1; }
+    });
+    trail.push(DOWN);
+    const bonus = depth * 5;
+    coins += bonus;
+    say(`Floor ${depth}${world.dark ? ': it is dark down here' : ''} · +${bonus} coins`);
+    sfx('powerup');
+    hud();
+  }
+
+  /** A relic changes what this player can do for the rest of the run. */
+  function giveRelic(pl, at) {
+    const id = pickRelic(pl.powers, Math.random());
+    if (!id) { coins += 20 * world.worth; floats.push({ x: at.x, y: at.y - 6, text: `+${20 * world.worth}`, t: 0.9 }); return; }
+    const before = pl.powers.hearts;
+    pl.powers = RELICS[id].give(pl.powers);
+    if (pl.powers.hearts > before) pl.hearts = pl.powers.hearts;
+    if (id === 'shield') pl.shield = pl.powers.shield;
+    pl.relics.push(id);
+    say(`${RELICS[id].icon} ${RELICS[id].name}! ${RELICS[id].does}`);
+    floats.push({ x: at.x, y: at.y - 8, text: RELICS[id].name, t: 1.4 });
+    sfx('win');
+  }
 
   const keys = new Set();
   const KEYMAP = duo ? DUO_KEYS : SOLO_KEYS;
@@ -122,28 +169,31 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
   window.addEventListener('blur', onBlur);
 
   function hurt(pl, from) {
-    if (pl.safe > 0) return;
-    pl.hearts -= 1;
+    if (pl.safe > 0 || pl.down > 0 || over) return;
     pl.safe = 1.3;
+    if (pl.shield > 0) { pl.shield -= 1; sfx('hit'); floats.push({ x: pl.x, y: pl.y - 12, text: 'Blocked!', t: 0.8 }); hud(); return; }
+    pl.hearts -= 1;
     sfx('hurt');
     const d = Math.hypot(pl.x - from.x, pl.y - from.y) || 1;
     move(pl, ((pl.x - from.x) / d) * 10, ((pl.y - from.y) / d) * 10, 5);
     if (pl.hearts <= 0) {
-      const lost = Math.min(coins, 10);
-      coins -= lost;
-      // Alone, you wake up back at camp. With a partner, you wake up beside them.
-      const mate = players.find((o) => o !== pl);
-      pl.x = mate ? mate.x : world.start.x;
-      pl.y = mate ? mate.y : world.start.y;
-      pl.hearts = pl.powers.hearts;
-      pl.safe = 2;
-      say(lost ? `Knocked out! You dropped ${lost} coins.` : 'Knocked out!');
       sfx('lose');
+      // With a partner still standing, you get back up beside them. Alone, the run is over.
+      const mate = players.find((o) => o !== pl && o.down <= 0);
+      if (!mate) { hud(); endSoon = 0.9; say('Knocked out!'); return; }
+      pl.down = 6;
+      say(`${pl.name.split(' ')[0]} is down! Back in a moment.`);
     }
     hud();
   }
 
   function stepPlayer(pl, dt) {
+    if (pl.down > 0) {
+      pl.down -= dt;
+      const mate = players.find((o) => o !== pl && o.down <= 0);
+      if (pl.down <= 0 && mate) { pl.x = mate.x; pl.y = mate.y; pl.hearts = 1; pl.safe = 2; hud(); } else if (pl.down <= 0) pl.down = 0.5;
+      return;
+    }
     pl.safe = Math.max(0, pl.safe - dt);
     const wasReady = pl.dashCd <= 0;
     pl.dashCd = Math.max(0, pl.dashCd - dt);
@@ -154,10 +204,10 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
     if (ix && iy) { ix *= 0.707; iy *= 0.707; }
     if (ix || iy) { pl.fx = ix; pl.fy = iy; }
     pl.moving = !!(ix || iy);
-    if (on('dash') && pl.powers.dash && pl.dashCd <= 0) { pl.dashT = 0.18; pl.dashCd = 1.5; sfx('dash'); hud(); }
+    if (on('dash') && pl.powers.dash && pl.dashCd <= 0) { pl.dashT = 0.18; pl.dashCd = pl.powers.dashWait; sfx('dash'); hud(); }
     keys.delete(`${pl.n}dash`);
-    let dx = ix * 78 * dt;
-    let dy = iy * 78 * dt;
+    let dx = ix * 78 * pl.powers.speed * dt;
+    let dy = iy * 78 * pl.powers.speed * dt;
     if (pl.dashT > 0) { pl.dashT -= dt; const n = Math.hypot(pl.fx, pl.fy) || 1; dx = (pl.fx / n) * 240 * dt; dy = (pl.fy / n) * 240 * dt; }
     // Partners share one screen, so neither can walk off it.
     const mate = players.find((o) => o !== pl);
@@ -172,8 +222,12 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
         drawTile(mg, world, rock[0], rock[1]);
         sfx('explode');
         floats.push({ x: rock[0] * TILE + 8, y: rock[1] * TILE + 4, text: 'Smash!', t: 0.9 });
-      } else if (!hinted) { hinted = true; say(mate && mate.powers.smash ? 'Cracked rock! Your partner can smash it.' : 'Cracked rock! Hold an item to smash it.'); hud(); }
+      } else if (!hinted) { hinted = true; say(mate && mate.powers.smash ? 'Cracked rock! Your partner can smash it.' : 'Cracked rock! A held item or a hammer smashes it.'); hud(); }
     }
+    // Spikes only hurt while they are up, and a dash carries you over them.
+    const tx = Math.floor(pl.x / TILE);
+    const ty = Math.floor(pl.y / TILE);
+    if (world.tiles[ty * W + tx] === T.SPIKE && pl.dashT <= 0 && spikeUp(tx, ty, time)) hurt(pl, { x: tx * TILE + 8 - pl.fx, y: ty * TILE + 8 - pl.fy });
     pl.pet.x += (pl.x - pl.fx * 14 - pl.pet.x) * Math.min(1, dt * 6);
     pl.pet.y += (pl.y - pl.fy * 14 - pl.pet.y) * Math.min(1, dt * 6);
   }
@@ -186,55 +240,84 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
     // Player 1's path becomes the ghost classmates can race.
     while (trail.length * GHOST_STEP <= time) trail.push([players[0].x, players[0].y]);
 
+    if (endSoon >= 0) { endSoon -= dt; if (endSoon < 0) { finish(); } return; }
+    if (up().some((pl) => Math.hypot(pl.x - world.stairs.x, pl.y - world.stairs.y) < 9)) { descend(); return; }
+
     for (const it of world.items) {
       if (it.taken) continue;
       const pl = nearest(it);
       const d = Math.hypot(it.x - pl.x, it.y - pl.y);
-      const puller = it.kind === 'chest' ? null : players.filter((o) => o.powers.magnet).find((o) => Math.hypot(it.x - o.x, it.y - o.y) < 46);
+      const pulled = it.kind === 'coin' || it.kind === 'gem';
+      const puller = pulled ? up().filter((o) => o.powers.magnet).find((o) => Math.hypot(it.x - o.x, it.y - o.y) < 46) : null;
       if (puller) { const pd = Math.hypot(it.x - puller.x, it.y - puller.y); if (pd > 1) { it.x += ((puller.x - it.x) / pd) * 150 * dt; it.y += ((puller.y - it.y) / pd) * 150 * dt; } }
-      if (d < 10) {
-        it.taken = true;
-        coins += it.value;
+      if (d >= 10 || pl.down > 0) continue;
+      it.taken = true;
+      if (it.kind === 'heart') {
+        if (pl.hearts < pl.powers.hearts) { pl.hearts += 1; floats.push({ x: it.x, y: it.y - 6, text: '+❤', t: 0.8 }); } else { coins += 5 * world.worth; floats.push({ x: it.x, y: it.y - 6, text: `+${5 * world.worth}`, t: 0.7 }); }
+        sfx('powerup');
+      } else if (it.kind === 'relic') giveRelic(pl, it);
+      else {
+        const worth = Math.round(it.value * pl.powers.luck);
+        coins += worth;
         sfx(it.kind === 'coin' ? 'coin' : it.kind === 'gem' ? 'gem' : 'powerup');
-        floats.push({ x: it.x, y: it.y - 6, text: `+${it.value}`, t: 0.7 });
-        hud();
+        floats.push({ x: it.x, y: it.y - 6, text: `+${worth}`, t: 0.7 });
+        // A vault chest sometimes holds a relic too.
+        if (it.relic && Math.random() < 0.6) giveRelic(pl, it);
       }
+      hud();
     }
 
+    const fast = world.speed;
     for (const e of world.enemies) {
       e.hit = false;
+      const pl = nearest(e);
+      const d = Math.hypot(pl.x - e.x, pl.y - e.y) || 1;
       if (e.kind === 'slime') {
         e.wait -= dt;
-        if (e.wait <= 0) { e.wait = 0.8 + Math.random() * 1.4; const a = Math.random() * 6.28; const go = Math.random() < 0.75 ? 22 : 0; e.vx = Math.cos(a) * go; e.vy = Math.sin(a) * go; }
+        if (e.wait <= 0) { e.wait = 0.8 + Math.random() * 1.4; const a = Math.random() * 6.28; const go = Math.random() < 0.75 ? 22 * fast : 0; e.vx = Math.cos(a) * go; e.vy = Math.sin(a) * go; }
         move(e, e.vx * dt, e.vy * dt, 5);
         if (e.hit) e.wait = 0;
       } else if (e.kind === 'bat') {
-        const pl = nearest(e);
-        const d = Math.hypot(pl.x - e.x, pl.y - e.y) || 1;
         // A bat that has just bitten flies off for a moment, so one bat can't take every heart.
         if (e.flee > 0) e.flee -= dt;
-        else if (regionOf(pl) === 'cave' && d < 76) { e.vx = ((pl.x - e.x) / d) * 40; e.vy = ((pl.y - e.y) / d) * 40; } else {
+        else if (d < 84) { e.vx = ((pl.x - e.x) / d) * 40 * fast; e.vy = ((pl.y - e.y) / d) * 40 * fast; } else {
           e.wait -= dt;
           if (e.wait <= 0) { e.wait = 1 + Math.random(); const a = Math.random() * 6.28; e.vx = Math.cos(a) * 18; e.vy = Math.sin(a) * 18; }
         }
-        // Bats fly over cave walls, but never leave the caves.
-        e.x = Math.max(33 * TILE + 6, Math.min(63 * TILE - 6, e.x + e.vx * dt));
-        e.y = Math.max(TILE + 6, Math.min(20 * TILE - 6, e.y + e.vy * dt));
-      } else {
-        if (!e.vx) e.vx = 40;
-        move(e, e.vx * dt, 0, 6);
-        if (e.hit) e.vx = -e.vx;
+        // Bats fly over walls, but never leave the floor.
+        e.x = Math.max(TILE + 6, Math.min((W - 1) * TILE - 6, e.x + e.vx * dt));
+        e.y = Math.max(TILE + 6, Math.min((H - 1) * TILE - 6, e.y + e.vy * dt));
+      } else if (e.kind === 'guard') {
+        // Guards march in a straight line and turn round at a wall.
+        if (!e.vx && !e.vy) { if (Math.random() < 0.5) e.vx = 40 * fast; else e.vy = 40 * fast; }
+        move(e, e.vx * dt, e.vy * dt, 6);
+        if (e.hit) { e.vx = -e.vx; e.vy = -e.vy; }
+      } else if (e.kind === 'spitter') {
+        // Spitters stay put and spit at whoever comes near.
+        e.wait -= dt;
+        if (e.wait <= 0 && d < 150) { e.wait = 2.4 / fast; shots.push({ x: e.x, y: e.y, vx: ((pl.x - e.x) / d) * 70 * fast, vy: ((pl.y - e.y) / d) * 70 * fast, t: 3 }); sfx('laser'); }
+      } else if (d < 130) {
+        // Hunters come straight for you, sliding along walls, and never give up while you are near.
+        move(e, ((pl.x - e.x) / d) * 34 * fast * dt, ((pl.y - e.y) / d) * 34 * fast * dt, 6);
       }
-      for (const pl of players) {
-        if (Math.hypot(pl.x - e.x, pl.y - e.y) >= 11) continue;
-        hurt(pl, e);
-        if (e.kind === 'bat') { const d = Math.hypot(e.x - pl.x, e.y - pl.y) || 1; e.flee = 1.6; e.vx = ((e.x - pl.x) / d) * 60; e.vy = ((e.y - pl.y) / d) * 60; }
+      for (const who of up()) {
+        if (Math.hypot(who.x - e.x, who.y - e.y) >= 11) continue;
+        hurt(who, e);
+        if (e.kind === 'bat') { const bd = Math.hypot(e.x - who.x, e.y - who.y) || 1; e.flee = 1.6; e.vx = ((e.x - who.x) / bd) * 60; e.vy = ((e.y - who.y) / bd) * 60; }
       }
     }
+    for (const sh of shots) {
+      sh.t -= dt;
+      sh.x += sh.vx * dt;
+      sh.y += sh.vy * dt;
+      if (isSolid(tileAt(sh.x, sh.y))) sh.t = 0;
+      for (const who of up()) if (sh.t > 0 && Math.hypot(who.x - sh.x, who.y - sh.y) < 8) { hurt(who, sh); sh.t = 0; }
+    }
+    for (let i = shots.length - 1; i >= 0; i--) if (shots[i].t <= 0) shots.splice(i, 1);
 
     for (const f of floats) { f.t -= dt; f.y -= 22 * dt; }
     while (floats.length && floats[0].t <= 0) floats.shift();
-    dark += ((players.some((pl) => regionOf(pl) === 'cave') ? 1 : 0) - dark) * Math.min(1, dt * 4);
+    dark += ((world.dark ? 1 : 0) - dark) * Math.min(1, dt * 4);
   }
 
   function draw() {
@@ -244,14 +327,23 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
     const cy = Math.round(Math.max(0, Math.min(H * TILE - VIEW_H, my - VIEW_H / 2)));
     g.drawImage(map, cx, cy, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
     const on = (o) => o.x > cx - 12 && o.x < cx + VIEW_W + 12 && o.y > cy - 12 && o.y < cy + VIEW_H + 12;
+    // Spikes that are up right now.
+    g.fillStyle = '#e9e4f5';
+    for (const [tx, ty] of world.spikes) {
+      const sx = tx * TILE - cx;
+      const sy = ty * TILE - cy;
+      if (sx < -TILE || sy < -TILE || sx > VIEW_W || sy > VIEW_H || !spikeUp(tx, ty, time)) continue;
+      for (const [dx, dy] of [[3, 3], [10, 3], [3, 10], [10, 10]]) { g.fillRect(sx + dx, sy + dy - 3, 3, 5); g.fillRect(sx + dx + 1, sy + dy - 5, 1, 2); }
+    }
     for (const it of world.items) if (!it.taken && on(it)) SPRITES[it.kind](g, Math.round(it.x - cx), Math.round(it.y - cy), time);
+    for (const sh of shots) if (on(sh)) SPRITES.shot(g, Math.round(sh.x - cx), Math.round(sh.y - cy));
     for (const e of world.enemies) if (on(e)) SPRITES[e.kind](g, Math.round(e.x - cx), Math.round(e.y - cy), time);
     g.font = 'bold 8px monospace';
     g.textAlign = 'center';
     // Ghosts: classmates' best runs in this same world, see-through, with a name tag.
     for (const gh of ghosts) {
       const at = ghostAt(gh.points, time);
-      if (!at || !on(at)) continue;
+      if (!at || at.floor !== depth || !on(at)) continue;
       g.globalAlpha = at.done ? 0.25 : 0.5;
       if (gh.img) g.drawImage(gh.img, 0, 0, 16, 16, Math.round(at.x - cx - 8), Math.round(at.y - cy - 11), 16, 16);
       g.globalAlpha = at.done ? 0.4 : 0.8;
@@ -261,7 +353,9 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
     }
     for (const pl of players) {
       if (pl.petImg) g.drawImage(pl.petImg, Math.round(pl.pet.x - cx - 4), Math.round(pl.pet.y - cy - 2 + Math.sin(time * 6) * 1));
+      if (pl.down > 0) continue;
       if (pl.safe > 0 && !(Math.floor(time * 12) % 2)) continue;
+      if (pl.shield > 0) { g.strokeStyle = '#7fe9ff'; g.lineWidth = 1; g.strokeRect(Math.round(pl.x - cx - 9) + 0.5, Math.round(pl.y - cy - 13) + 0.5, 18, 19); }
       const bob = pl.moving ? Math.round(Math.abs(Math.sin(time * 10))) : 0;
       if (pl.heroImg) g.drawImage(pl.heroImg, 0, 0, 16, 16, Math.round(pl.x - cx - 8), Math.round(pl.y - cy - 11 - bob), 16, 16);
       else { g.fillStyle = MARKS[pl.n]; g.fillRect(pl.x - cx - 5, pl.y - cy - 8, 10, 12); }
@@ -273,7 +367,7 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
       sg.fillStyle = `rgba(6, 4, 18, ${0.95 * dark})`;
       sg.fillRect(0, 0, VIEW_W, VIEW_H);
       sg.globalCompositeOperation = 'destination-out';
-      for (const pl of players) {
+      for (const pl of up()) {
         const r = pl.powers.light * TILE * (1 + Math.sin(time * 3) * 0.03);
         const hole = sg.createRadialGradient(pl.x - cx, pl.y - cy - 4, r * 0.35, pl.x - cx, pl.y - cy - 4, r);
         hole.addColorStop(0, 'rgba(0,0,0,1)');
@@ -282,6 +376,14 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
         sg.fillRect(0, 0, VIEW_W, VIEW_H);
       }
       g.drawImage(shade, 0, 0);
+    }
+    // A gold marker on the edge of the screen points toward the stairs when they are out of sight.
+    if (!on(world.stairs)) {
+      const ax = Math.max(8, Math.min(VIEW_W - 8, world.stairs.x - cx));
+      const ay = Math.max(8, Math.min(VIEW_H - 8, world.stairs.y - cy));
+      const beat = Math.sin(time * 5) > 0 ? 1 : 0;
+      g.fillStyle = '#1b1530'; g.fillRect(ax - 5 - beat, ay - 5 - beat, 10 + beat * 2, 10 + beat * 2);
+      g.fillStyle = '#ffd23f'; g.fillRect(ax - 4, ay - 4, 8, 3); g.fillRect(ax - 4, ay, 5, 2); g.fillRect(ax - 4, ay + 3, 2, 1);
     }
     for (const f of floats) { g.fillStyle = '#1b1530'; g.fillText(f.text, f.x - cx + 1, f.y - cy + 1); g.fillStyle = '#fff6c2'; g.fillText(f.text, f.x - cx, f.y - cy); }
   }
@@ -310,7 +412,7 @@ function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd }) {
   function finish() {
     if (over) return;
     stop();
-    onEnd({ seconds: Math.round(seconds - Math.max(0, left)), coins, seed, path: encodePath(trail) });
+    onEnd({ seconds: Math.round(seconds - Math.max(0, left)), coins, seed, path: encodePath(trail), floor: depth, knocked: endSoon !== -1 });
   }
   hud();
   draw();
@@ -359,14 +461,20 @@ export async function viewQuest() {
         h('section.card.stack',
           h('h2', 'Your powers'),
           powerList(),
-          POWERS.some((pw) => !has(pw.slot)) && h('a.btn.small', { href: '#/character' }, 'Get more gear')),
+          POWERS.some((pw) => !has(pw.slot)) && h('a.btn.small', { href: '#/character' }, 'Get more gear'),
+          h('details', h('summary', 'How to play'),
+            h('ul.quest-how',
+              h('li', 'Find the stairs to go down a floor. Every floor is new, and harder.'),
+              h('li', 'Treasure is worth more the deeper you go.'),
+              h('li', 'Look for glowing relics and chests. They give you new powers for the run.'),
+              h('li', 'Lose all your hearts and the run ends. You keep your coins.')))),
         h('section.card.stack',
           h('h2', 'Best runs'),
           s.board.length ? h('ol.quest-board', s.board.map((b) => h('li', { class: b.id === student.id ? 'me' : '' },
-            h('img', { src: avatarURL(b.avatar || defaultAvatar(b.id), 2), alt: '' }), h('span', b.display_name), h('strong', `${b.best} 🪙`),
+            h('img', { src: avatarURL(b.avatar || defaultAvatar(b.id), 2), alt: '' }), h('span', b.display_name), h('strong', `${b.floor > 1 ? `Floor ${b.floor} · ` : ''}${b.best} 🪙`),
             canPlay && b.seed > 0 && h('button.btn.small', { 'aria-label': `Race ${b.display_name}'s ghost`, onclick: () => play(b.seed) }, '👻 Race')))) : h('p.muted', 'Nobody has played yet. Be the first!'),
-          s.board.some((b) => b.seed > 0) && h('p.muted.small', 'Race a ghost: play the same world, with their best run beside you.'),
-          s.runs > 0 && h('p.small', `Your best: ${s.best} · All your coins: ${s.total}`),
+          s.board.some((b) => b.seed > 0) && h('p.muted.small', 'Race a ghost: play the same dungeon, with their best run beside you.'),
+          s.runs > 0 && h('p.small', `Your best: ${s.best} · Deepest floor: ${s.floor || 1} · All your coins: ${s.total}`),
           h('h3', `Class treasure · Level ${s.chest.level}`),
           h('div.xpbar', { role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(s.chest.goal), 'aria-valuenow': String(s.chest.have), 'aria-label': 'Class treasure' }, h('div.xpfill', { style: `width:${Math.round((s.chest.have / s.chest.goal) * 100)}%` })),
           h('p.muted.small', `${s.chest.have} of ${s.chest.goal} coins. Everyone's coins count.`))),
@@ -391,22 +499,27 @@ export async function viewQuest() {
     const hearts = team.map((m, i) => h('span.quest-hearts', { style: team.length > 1 ? `border-bottom:3px solid ${MARKS[i]}` : null }));
     const dashes = team.map((m, i) => h('span.quest-chip', `🦸 ${team.length > 1 && i === 1 ? 'Enter' : 'Space'}`));
     const coinBox = h('strong', '0');
+    const floorBox = h('strong', '1');
+    const relicBox = h('span.quest-relics', { translate: 'no' });
     const timeBox = h('strong', clock(entry.run_seconds));
     const note = h('div.quest-note', { 'aria-live': 'polite' });
     const end = h('button.btn.small', { onclick: () => run && run.finish() }, 'End run');
     clear(root).append(h('div.quest-play',
       h('div.quest-hud', team.map((m, i) => h('span.quest-player', team.length > 1 && h('span.small', `${m.name.split(' ')[0]} `), hearts[i], ' ', powersFor(m.avatar).dash && dashes[i])),
-        h('span', '🪙 ', coinBox), h('span', '⏱ ', timeBox), ghosts.length > 0 && h('span.small', `👻 ${ghosts.map((gh) => `${gh.name} ${gh.best}`).join(' · ')}`), end),
+        h('span', 'Floor ', floorBox), h('span', '🪙 ', coinBox), h('span', '⏱ ', timeBox), relicBox, ghosts.length > 0 && h('span.small', `👻 ${ghosts.map((gh) => `${gh.name} ${gh.best}`).join(' · ')}`), end),
       h('div.quest-stage', canvas, note)));
     canvas.focus();
     run = startRun({
       canvas, seed, team, ghosts, seconds: entry.run_seconds,
       onHud: (v) => {
         v.players.forEach((pl, i) => {
-          hearts[i].textContent = '❤️'.repeat(pl.hearts) + '🖤'.repeat(pl.max - pl.hearts);
+          hearts[i].textContent = '❤️'.repeat(Math.max(0, pl.hearts)) + '🖤'.repeat(Math.max(0, pl.max - pl.hearts)) + '🛡️'.repeat(pl.shield);
           dashes[i].className = `quest-chip ${pl.dashReady ? 'ready' : ''}`;
         });
         coinBox.textContent = v.coins;
+        floorBox.textContent = v.depth;
+        relicBox.textContent = v.players.flatMap((pl) => pl.relics).map((id) => RELICS[id].icon).join('');
+        relicBox.title = v.players.flatMap((pl) => pl.relics).map((id) => RELICS[id].name).join(', ');
         timeBox.textContent = clock(Math.ceil(v.left));
         timeBox.className = v.left <= 20 ? 'warn' : '';
         note.textContent = v.note;
@@ -415,13 +528,15 @@ export async function viewQuest() {
         run = null;
         sfx('win');
         const before = state.best;
+        const deepest = state.floor || 0;
         const after = await attempt(() => app.store.worldRun(result));
-        if (after) { state.best = after.best; lobby(after); } else render();
+        if (after) { state.best = after.best; state.floor = after.floor; lobby(after); } else render();
         const rivals = ghosts.filter((gh) => !gh.mine);
         const beaten = rivals.filter((gh) => result.coins > gh.best);
         modal((close) => h('div.stack.celebrate',
-          h('p.eyebrow', ghosts.length ? 'Race complete' : 'Run complete'),
-          h('h2', `${result.coins} 🪙`),
+          h('p.eyebrow', result.knocked ? 'Knocked out' : ghosts.length ? 'Race complete' : 'Run complete'),
+          h('h2', `Floor ${result.floor} · ${result.coins} 🪙`),
+          after && result.floor > deepest && result.floor > 1 && h('p.rankup', 'Your deepest floor yet!'),
           after && result.coins > before && result.coins > 0 && h('p.rankup', 'New personal best!'),
           rivals.length > 0 && h('ul.quest-race', rivals.map((gh) => h('li', result.coins > gh.best ? '🏆 ' : '👻 ', `${gh.name}'s ghost: ${gh.best}`))),
           rivals.length > 0 && h('p', beaten.length === rivals.length ? 'You beat every ghost!' : beaten.length ? `You beat ${beaten.length} of ${rivals.length} ghosts.` : 'The ghosts won this time. Race again?'),
@@ -432,5 +547,5 @@ export async function viewQuest() {
   }
 
   lobby(state);
-  return h('div.stack', h('div', h('h1', '🗺️ Trail Quest'), h('p.muted', 'Explore as your character. Your gear gives you powers.')), root);
+  return h('div.stack', h('div', h('h1', '🗺️ Trail Quest'), h('p.muted', 'How deep can you go? Your gear gives you powers.')), root);
 }

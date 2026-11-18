@@ -138,11 +138,13 @@ Finishing a step plays a short chime and the "Done" mark sparkles. A right answe
 
 ## Trail Quest
 
-Trail Quest is a small adventure game students play as their own character: a meadow, a forest maze, dark caves, and ruins with treasure rooms, different every run. Their gear gives them powers there. A glow lights the caves, a cape dashes, a pet pulls in coins, a hat adds a heart, and a held item smashes the cracked rocks that seal the treasure rooms.
+Trail Quest is a dungeon game students play as their own character. A run goes down through floors that never end: find the stairs, go down, and the next floor is new and harder. Floors come as open meadows, mazes, caverns, and rooms joined by halls. Deeper floors add more enemies that move faster (bats from floor 2, marching guards from 3, spitters that shoot from 4, hunters that chase from 6), spikes to time from floor 3, and darkness. Treasure is worth more the deeper it is found. Losing every heart ends the run; the coins are kept.
 
-It starts closed. On a class page, press **Trail Quest** and choose **Earned** (each lesson a student submits earns play time, 5 minutes unless you change it) or **Open** (everyone can play with no time used up, for a reward day). Students see a class board of best runs and a class treasure that everyone's coins fill. Coins and play time never come from grades.
+Their gear gives them powers there. A glow lights dark floors, a cape dashes (and carries them over spikes), a pet pulls in coins, a hat adds a heart, and a held item smashes the cracked rocks that seal treasure vaults. Students can also find **relics** in vault chests and deep in each floor: swift boots, a lantern, a magnet, a hammer, a feather, a lucky clover, a shield, and a heart stone. Relics last for that run only, so a student with little gear can still get lucky, and a student with good gear gets further.
 
-Two ways to play together: **two players on one Chromebook** (choose Player 2 from the class list; one uses W A S D and Space, the other the arrow keys and Enter), and **ghost races** (press **Race** beside a classmate on the board to play the same world with their best run replayed beside you). A two-player run uses the signed-in student's play time and counts on their record.
+It starts closed. On a class page, press **Trail Quest** and choose **Earned** (each lesson a student submits earns play time, 5 minutes unless you change it) or **Open** (everyone can play with no time used up, for a reward day). Students see a class board of best runs and deepest floors, and a class treasure that everyone's coins fill. Coins and play time never come from grades.
+
+Two ways to play together: **two players on one Chromebook** (choose Player 2 from the class list; one uses W A S D and Space, the other the arrow keys and Enter), and **ghost races** (press **Race** beside a classmate on the board to play the same dungeon, floor by floor, with their best run replayed beside you). A two-player run uses the signed-in student's play time and counts on their record.
 
 The game runs in the student's browser and only contacts the server when a run starts and ends, so it barely touches the class's quota. Classmates don't see each other moving; the shared parts are the board and the treasure.
 

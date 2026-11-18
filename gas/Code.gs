@@ -32,7 +32,9 @@ const SCHEMA = {
   // One row per student who has played Trail Quest. Coins come from play, never from grades.
   World: ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at',
     // A student's best run, replayed for classmates as a ghost: the world it was in, and the path walked.
-    'ghost_seed', 'ghost'],
+    'ghost_seed', 'ghost',
+    // The deepest dungeon floor they have reached.
+    'best_floor'],
   Students: ['id', 'class_id', 'email', 'display_name', 'avatar', 'path', 'game_name', 'created_at', 'google_id'],
   Works: [...WORK_META, ...chunkCols_(WORK_CELLS), ...WORK_TAIL],
   Grades: ['work_id', 'scores', 'total', 'max_total', 'feedback', 'graded_at'],
@@ -53,7 +55,7 @@ const SCHEMA = {
   // Problems people reported. who is a student id or a teacher's email; details is what the page noticed.
   Bugs: ['id', 'at', 'role', 'who', 'name', 'class_id', 'page', 'note', 'details', 'status'],
 };
-const NUMBERS = new Set(['stars', 'step', 'ghost_seed', 'world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
+const NUMBERS = new Set(['best_floor', 'stars', 'step', 'ghost_seed', 'world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
 const BOOLEANS = new Set(['run_free', 'auto_ok', 'shared', 'published', 'started', 'music_open']);
 const OBJECTS = new Set(['details', 'quiz_first', 'confusing', 'holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
@@ -692,7 +694,7 @@ function lessonRatings_(me, classId) {
 // The server only keeps time and coins: minutes are earned by submitting lessons, a run is stamped
 // when it starts, and what the browser reports is held to what that run could really have been.
 const WORLD_RUN_MAX = 300;
-const WORLD_COIN_MAX = 600;
+const WORLD_COIN_MAX = 4000;
 const WORLD_CHEST = 2000;
 // Everything about a run except the ghost's path, which is long and only needed for a race.
 const WORLD_META = ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at', 'ghost_seed'];
@@ -700,6 +702,15 @@ const WORLD_META = ['student_id', 'class_id', 'seconds_used', 'best_coins', 'tot
 const WORLD_PATH = /^p([0-9a-z]{4}){1,600}$/;
 const worldMode_ = (cls) => (cls && (cls.world_mode === 'earned' || cls.world_mode === 'free') ? cls.world_mode : '');
 const worldMins_ = (cls) => Math.max(1, Math.min(15, Number(cls && cls.world_mins) || 5));
+
+/** Everyone's Trail Quest rows without their recorded paths, plus the deepest floor from the end of the row. */
+function worldMeta_() {
+  const rows = rows_('World', WORLD_META);
+  if (!rows.length) return rows;
+  const deep = sheet_('World').getRange(2, SCHEMA.World.indexOf('best_floor') + 1, rows.length, 1).getValues();
+  rows.forEach((r, i) => { r.best_floor = decode_('best_floor', deep[i][0]); });
+  return rows;
+}
 
 function worldEarned_(student, cls) {
   const done = myWorkList_(student.id).filter((w) => w.status !== 'in_progress').length;
@@ -716,17 +727,17 @@ function worldState_(me) {
   const student = me.student;
   const cls = rows_('Classes').find((c) => c.id === student.class_id);
   const mode = worldMode_(cls);
-  const all = rows_('World', WORLD_META).filter((r) => r.class_id === student.class_id);
+  const all = worldMeta_().filter((r) => r.class_id === student.class_id);
   const mine = all.find((r) => r.student_id === student.id);
   const names = new Map(rows_('Students').filter((x) => x.class_id === student.class_id).map((x) => [x.id, x]));
   const total = all.reduce((a, r) => a + r.total_coins, 0);
   return {
     mode, mins: worldMins_(cls), run_max: WORLD_RUN_MAX,
     seconds_left: mode === 'earned' ? Math.max(0, worldEarned_(student, cls) - (mine ? mine.seconds_used : 0) - worldPending_(mine)) : 0,
-    best: mine ? mine.best_coins : 0, total: mine ? mine.total_coins : 0, runs: mine ? mine.runs : 0,
+    best: mine ? mine.best_coins : 0, total: mine ? mine.total_coins : 0, runs: mine ? mine.runs : 0, floor: mine ? mine.best_floor || 0 : 0,
     // Classmates see names, characters, and coins from play. Nothing here comes from grades.
     board: all.filter((r) => r.runs > 0 && names.has(r.student_id)).sort((a, b) => b.best_coins - a.best_coins).slice(0, 8)
-      .map((r) => ({ id: r.student_id, display_name: names.get(r.student_id).display_name, avatar: names.get(r.student_id).avatar, best: r.best_coins, seed: r.ghost_seed || 0 })),
+      .map((r) => ({ id: r.student_id, display_name: names.get(r.student_id).display_name, avatar: names.get(r.student_id).avatar, best: r.best_coins, floor: r.best_floor || 0, seed: r.ghost_seed || 0 })),
     chest: { level: Math.floor(total / WORLD_CHEST) + 1, have: total % WORLD_CHEST, goal: WORLD_CHEST },
   };
 }
@@ -761,10 +772,12 @@ function worldRun_(me, result) {
     if (!row || !row.started_ms) throw new Error('That run already ended.');
     const elapsed = (Date.now() - row.started_ms) / 1000;
     const seconds = Math.max(0, Math.min(Math.round(Number(result && result.seconds) || 0), row.run_allowed, Math.ceil(elapsed) + 5));
-    const coins = Math.max(0, Math.min(Math.round(Number(result && result.coins) || 0), WORLD_COIN_MAX, 40 + seconds * 6));
+    // Deeper floors pay more, but nobody gets down a floor in under a few seconds.
+    const coins = Math.max(0, Math.min(Math.round(Number(result && result.coins) || 0), WORLD_COIN_MAX, 40 + seconds * 13));
+    const floor = Math.max(1, Math.min(Math.round(Number(result && result.floor) || 1), 1 + Math.floor(seconds / 4), 99));
     const next = {
       ...row, seconds_used: row.seconds_used + (row.run_free ? 0 : seconds), best_coins: Math.max(row.best_coins, coins), total_coins: row.total_coins + coins,
-      runs: row.runs + 1, started_ms: 0, run_allowed: 0, run_free: false, updated_at: now_(),
+      best_floor: Math.max(row.best_floor || 0, floor), runs: row.runs + 1, started_ms: 0, run_allowed: 0, run_free: false, updated_at: now_(),
     };
     // A new best run becomes this student's ghost. A path that isn't in the right form is left out.
     const seed = Math.round(Number(result && result.seed));
@@ -1918,6 +1931,8 @@ function combinePlan_(src, countersToo) {
     let out = twin.vals.slice();
     const best = at('World', 'best_coins');
     if (n(w[best]) > n(out[best])) ['best_coins', 'ghost_seed', 'ghost'].forEach((f) => { out[at('World', f)] = w[at('World', f)]; });
+    const deep = at('World', 'best_floor');
+    if (n(w[deep]) > n(out[deep])) out[deep] = w[deep];
     if (countersToo) ['seconds_used', 'total_coins', 'runs'].forEach((f) => { out[at('World', f)] = String(n(out[at('World', f)]) + n(w[at('World', f)])); });
     if (out.join('\u0001') !== twin.vals.join('\u0001')) plan.set.push({ name: 'World', row: twin.row, vals: out });
   });

@@ -696,7 +696,8 @@ test('Trail Quest: time is earned by lessons, runs are held to what was possible
 
   // The browser can't claim more time or coins than the run allowed.
   const after = bea('worldRun', { seconds: 4, coins: 99999 });
-  assert.equal(after.best, 40 + 4 * 6);
+  assert.equal(after.best, 40 + 4 * 13);
+  assert.equal(after.floor, 1, 'no floor was claimed, so it counts as the first');
   assert.ok(after.seconds_left >= 115 && after.seconds_left <= 120);
   denied(() => bea('worldRun', { seconds: 1, coins: 5 }), 'a run can only be reported once');
   assert.equal(bea('worldState').runs, 1);
@@ -731,8 +732,13 @@ test('Trail Quest ghosts: a best run can be raced by classmates, and only by the
   other('setWorld', clsB.id, { mode: 'free' });
   const path = 'p' + '0a0b'.repeat(10);
   bea('worldEnter');
-  const first = bea('worldRun', { seconds: 5, coins: 30, seed: 4242, path });
+  // A run can't claim to be deeper than its time allowed, and a path may include trips down the stairs.
+  const first = bea('worldRun', { seconds: 5, coins: 30, seed: 4242, path, floor: 50 });
   assert.equal(first.board[0].seed, 4242);
+  assert.equal(first.floor, 2);
+  assert.equal(first.board[0].floor, 2);
+  bea('worldEnter');
+  assert.equal(bea('worldRun', { seconds: 0, coins: 1, seed: 1, path: 'pzzzz0a0b', floor: 1 }).floor, 2, 'the deepest floor is kept');
   assert.ok(!JSON.stringify(first).includes(path), 'the board does not carry paths');
   const ghosts = ari('worldGhosts', 4242);
   assert.equal(ghosts.length, 1);
