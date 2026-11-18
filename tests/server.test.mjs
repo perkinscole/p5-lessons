@@ -696,7 +696,7 @@ test('Trail Quest: time is earned by lessons, runs are held to what was possible
 
   // The browser can't claim more time or coins than the run allowed.
   const after = bea('worldRun', { seconds: 4, coins: 99999 });
-  assert.equal(after.best, 40 + 4 * 13);
+  assert.equal(after.best, 40 + 4 * 20);
   assert.equal(after.floor, 1, 'no floor was claimed, so it counts as the first');
   assert.ok(after.seconds_left >= 115 && after.seconds_left <= 120);
   denied(() => bea('worldRun', { seconds: 1, coins: 5 }), 'a run can only be reported once');

@@ -759,3 +759,10 @@ ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: colum
 .bug-errors { font-size: .78rem; max-height: 8em; overflow: auto; }
 
 .preview-banner { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+
+.quest-goal { padding: 1px 8px; background: #ffd23f; color: #1b1530; border-radius: 3px; }
+.quest-goal.go { background: #7dffb0; animation: help-glow 1s ease-in-out infinite; }
+.quest-par { display: inline-flex; align-items: center; gap: 4px; }
+.quest-par-bar { width: 70px; height: 8px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line); }
+.quest-par-fill { height: 100%; background: #ffd23f; transition: width .2s linear; }
+.quest-hearts.boosted { filter: drop-shadow(0 0 4px #ffd23f); }

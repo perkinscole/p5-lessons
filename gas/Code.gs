@@ -694,8 +694,8 @@ function lessonRatings_(me, classId) {
 // The server only keeps time and coins: minutes are earned by submitting lessons, a run is stamped
 // when it starts, and what the browser reports is held to what that run could really have been.
 const WORLD_RUN_MAX = 300;
-const WORLD_COIN_MAX = 4000;
-const WORLD_CHEST = 2000;
+const WORLD_COIN_MAX = 6000;
+const WORLD_CHEST = 10000;
 // Everything about a run except the ghost's path, which is long and only needed for a race.
 const WORLD_META = ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at', 'ghost_seed'];
 // A path is the letter p, then 4 characters per half second: never something a Sheet reads as a number.
@@ -773,7 +773,7 @@ function worldRun_(me, result) {
     const elapsed = (Date.now() - row.started_ms) / 1000;
     const seconds = Math.max(0, Math.min(Math.round(Number(result && result.seconds) || 0), row.run_allowed, Math.ceil(elapsed) + 5));
     // Deeper floors pay more, but nobody gets down a floor in under a few seconds.
-    const coins = Math.max(0, Math.min(Math.round(Number(result && result.coins) || 0), WORLD_COIN_MAX, 40 + seconds * 13));
+    const coins = Math.max(0, Math.min(Math.round(Number(result && result.coins) || 0), WORLD_COIN_MAX, 40 + seconds * 20));
     const floor = Math.max(1, Math.min(Math.round(Number(result && result.floor) || 1), 1 + Math.floor(seconds / 4), 99));
     const next = {
       ...row, seconds_used: row.seconds_used + (row.run_free ? 0 : seconds), best_coins: Math.max(row.best_coins, coins), total_coins: row.total_coins + coins,

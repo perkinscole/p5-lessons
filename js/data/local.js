@@ -256,7 +256,7 @@ export function createLocalStore() {
       return clone({
         mode, mins, run_max: 300, seconds_left: mode === 'earned' ? Math.max(0, earned - mine.used) : 0, best: mine.best, total: mine.total, runs: mine.runs, floor: mine.floor || 0,
         board: mates.filter((s) => world[s.id]?.runs > 0).sort((a, b) => world[b.id].best - world[a.id].best).slice(0, 8).map((s) => ({ id: s.id, display_name: s.display_name, avatar: s.avatar, best: world[s.id].best, floor: world[s.id].floor || 0, seed: world[s.id].ghost_seed || 0 })),
-        chest: { level: Math.floor(total / 2000) + 1, have: total % 2000, goal: 2000 },
+        chest: { level: Math.floor(total / 10000) + 1, have: total % 10000, goal: 10000 },
       });
     },
     async worldEnter() {
@@ -273,7 +273,7 @@ export function createLocalStore() {
       const row = (db.world || {})[readSession().id];
       if (!row || !row.started) throw new Error('That run already ended.');
       const seconds = Math.max(0, Math.min(Math.round(Number(result.seconds) || 0), row.allowed));
-      const coins = Math.max(0, Math.min(Math.round(Number(result.coins) || 0), 4000, 40 + seconds * 13));
+      const coins = Math.max(0, Math.min(Math.round(Number(result.coins) || 0), 6000, 40 + seconds * 20));
       const floor = Math.max(1, Math.min(Math.round(Number(result.floor) || 1), 1 + Math.floor(seconds / 4), 99));
       const seed = Math.round(Number(result.seed));
       const path = String(result.path || '');

@@ -1,47 +1,54 @@
 // Trail Quest: the rules and the map, with no drawing, so tests can check them.
-// A run goes down through dungeon floors, one after another, for as long as the player lasts. Every
-// floor is made fresh from the run's seed and its depth, and each is harder than the one before.
+// A run is a race down through rooms, one after another, for as long as the player lasts. A room
+// fills the screen: grab the key, get to the door, and beat the clock for a bonus. Every room is
+// made fresh from the run's seed and its depth, and each is harder than the one before.
 // What a student's character wears decides what they can do there (powersFor), and relics found
 // on the way add to it for the rest of the run.
 
 export const TILE = 16;
-export const W = 64;
-export const H = 40;
+// A room is exactly one screen, so nothing is ever out of sight.
+export const W = 30;
+export const H = 19;
 export const T = { OPEN: 0, TREE: 1, WALL: 2, ROCK: 3, FLOWER: 4, PILLAR: 5, SPIKE: 6, STAIRS: 7 };
 export const VALUE = { coin: 1, gem: 5, chest: 25 };
 export const isSolid = (tile) => tile === T.TREE || tile === T.WALL || tile === T.ROCK || tile === T.PILLAR;
 
-/** What each kind of gear does. Any item in the slot gives the power. */
+/**
+ * What each kind of gear does. Any item in the slot gives the power. Everyone can dash, which
+ * carries them safely through enemies and over spikes; gear makes the dash and the rest stronger.
+ */
 export function powersFor(av) {
   const a = av || {};
   const has = (slot) => !!a[slot] && a[slot] !== 'none';
   return {
-    light: has('aura') ? (a.aura === 'rainbow' ? 6.5 : 4.5) : 2.3,
-    dash: has('cape'),
+    light: has('aura') ? (a.aura === 'rainbow' ? 7.5 : 5.5) : 3,
+    dashWait: has('cape') ? 0.55 : 1.3,
+    dashTime: has('cape') ? 0.24 : 0.15,
     magnet: has('pet'),
     hearts: 3 + (has('hat') ? 1 : 0),
+    // A held item turns the dash into a strike: it defeats enemies and smashes cracked rocks.
     smash: has('held'),
     // These start the same for everyone and only change with relics found during a run.
-    speed: 1, luck: 1, shield: 0, dashWait: 1.5,
+    speed: 1, luck: 1, shield: 0,
   };
 }
 export const POWERS = [
-  { slot: 'aura', icon: '✨', name: 'Glow', does: 'lights up dark floors' },
-  { slot: 'cape', icon: '🦸', name: 'Cape', does: 'dash with Space, right over spikes' },
-  { slot: 'pet', icon: '🐾', name: 'Pet', does: 'pulls coins to you' },
+  { slot: 'held', icon: '⚔️', name: 'Held item', does: 'your dash defeats enemies and smashes rocks' },
+  { slot: 'cape', icon: '🦸', name: 'Cape', does: 'dash further, twice as often' },
   { slot: 'hat', icon: '🎩', name: 'Hat', does: 'gives an extra heart' },
-  { slot: 'held', icon: '⚒️', name: 'Held item', does: 'smashes cracked rocks to open vaults' },
+  { slot: 'pet', icon: '🐾', name: 'Pet', does: 'pulls coins to you' },
+  { slot: 'aura', icon: '✨', name: 'Glow', does: 'lights up dark rooms' },
 ];
 
-// Relics: found in chests and deep in a floor. They last until the run ends.
+// Relics: found in vault chests and some rooms. They last until the run ends.
 export const RELICS = {
   boots: { icon: '👟', name: 'Swift boots', does: 'You run faster.', give: (p) => ({ ...p, speed: Math.min(1.6, p.speed + 0.15) }), useful: (p) => p.speed < 1.6 },
-  lantern: { icon: '🏮', name: 'Lantern', does: 'You see further in the dark.', give: (p) => ({ ...p, light: Math.min(9, p.light + 1.5) }), useful: (p) => p.light < 9 },
+  lantern: { icon: '🏮', name: 'Lantern', does: 'You see further in the dark.', give: (p) => ({ ...p, light: Math.min(10, p.light + 2) }), useful: (p) => p.light < 10 },
   magnet: { icon: '🧲', name: 'Magnet', does: 'Coins fly to you.', give: (p) => ({ ...p, magnet: true }), useful: (p) => !p.magnet },
-  hammer: { icon: '🔨', name: 'Hammer', does: 'You can smash cracked rocks.', give: (p) => ({ ...p, smash: true }), useful: (p) => !p.smash },
-  feather: { icon: '🪶', name: 'Feather', does: 'Dash with Space, or dash more often.', give: (p) => (p.dash ? { ...p, dashWait: 0.8 } : { ...p, dash: true }), useful: (p) => !p.dash || p.dashWait > 0.8 },
+  blade: { icon: '🗡️', name: 'Blade', does: 'Your dash now defeats enemies.', give: (p) => ({ ...p, smash: true }), useful: (p) => !p.smash },
+  feather: { icon: '🪶', name: 'Feather', does: 'You dash more often.', give: (p) => ({ ...p, dashWait: Math.max(0.3, p.dashWait - 0.35) }), useful: (p) => p.dashWait > 0.3 },
   clover: { icon: '🍀', name: 'Lucky clover', does: 'Treasure is worth more.', give: (p) => ({ ...p, luck: Math.min(2, p.luck + 0.25) }), useful: (p) => p.luck < 2 },
-  shield: { icon: '🛡️', name: 'Shield', does: 'Blocks one hit on every floor.', give: (p) => ({ ...p, shield: p.shield + 1 }), useful: (p) => p.shield < 2 },
+  shield: { icon: '🛡️', name: 'Shield', does: 'Blocks one hit in every room.', give: (p) => ({ ...p, shield: p.shield + 1 }), useful: (p) => p.shield < 2 },
   heart: { icon: '💖', name: 'Heart stone', does: 'One more heart.', give: (p) => ({ ...p, hearts: p.hearts + 1 }), useful: (p) => p.hearts < 8 },
 };
 /** Pick a relic this player can still use. `roll` is a number from 0 up to 1. Null when they have it all. */
@@ -49,6 +56,13 @@ export function pickRelic(powers, roll) {
   const ids = Object.keys(RELICS).filter((id) => RELICS[id].useful(powers));
   return ids.length ? ids[Math.min(ids.length - 1, Math.floor(roll * ids.length))] : null;
 }
+
+// Boosts: picked up in a room, strong, and gone in a few seconds (a bomb goes off at once).
+export const BOOSTS = {
+  bolt: { icon: '⚡', name: 'Speed!', seconds: 6 },
+  star: { icon: '⭐', name: 'Unstoppable!', seconds: 5 },
+  bomb: { icon: '💣', name: 'Boom!', seconds: 0 },
+};
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -61,18 +75,22 @@ function rng(seed) {
   };
 }
 
-/** How hard a floor is. Everything that scales with depth is here, so it can be tuned in one place. */
+/** How hard a room is. Everything that scales with depth is here, so it can be tuned in one place. */
 export function difficulty(depth) {
   const d = Math.max(1, Math.floor(depth));
   return {
-    enemies: Math.min(34, 5 + d * 2),
-    kinds: ['slime', ...(d >= 2 ? ['bat'] : []), ...(d >= 3 ? ['guard'] : []), ...(d >= 4 ? ['spitter'] : []), ...(d >= 6 ? ['hunter'] : [])],
-    speed: Math.min(2, 1 + (d - 1) * 0.08),
-    spikes: d < 3 ? 0 : Math.min(36, (d - 2) * 5),
-    vaults: d === 1 ? 1 : d < 5 ? 2 : 3,
+    // A room is one screen, so even a few enemies are close. By room 10 it is crowded.
+    enemies: Math.min(24, 3 + Math.round(d * 1.6)),
+    kinds: ['slime', ...(d >= 2 ? ['bat'] : []), ...(d >= 3 ? ['guard'] : []), ...(d >= 4 ? ['spitter'] : []), ...(d >= 5 ? ['hunter'] : [])],
+    speed: Math.min(1.9, 1 + (d - 1) * 0.07),
+    spikes: d < 3 ? 0 : Math.min(16, (d - 2) * 2),
+    vaults: d >= 2 && d % 2 === 0 ? 1 : 0,
+    boosts: d >= 5 ? 2 : 1,
     // Treasure is worth more the deeper it is found.
-    worth: 1 + Math.floor((d - 1) / 3),
-    gems: Math.min(18, 3 + d),
+    worth: Math.min(4, 1 + Math.floor((d - 1) / 4)),
+    gems: Math.min(8, 2 + Math.floor(d / 2)),
+    // Seconds to clear the room for a speed bonus.
+    par: 12,
   };
 }
 
@@ -106,7 +124,7 @@ export function reachable(world, smash) {
   return distances(world.tiles, world.startTile, smash).map((d) => (d >= 0 ? 1 : 0));
 }
 
-const LAYOUTS = ['rooms', 'rooms', 'maze', 'maze', 'cavern', 'cavern', 'field'];
+const LAYOUTS = ['rooms', 'rooms', 'maze', 'cavern', 'cavern', 'field', 'field'];
 const THEMES = { field: ['meadow'], maze: ['forest', 'ruins'], cavern: ['cave'], rooms: ['ruins', 'cave'] };
 
 /** The seed of one floor of a run. The same run seed always leads down through the same floors. */
@@ -123,31 +141,31 @@ export function generateFloor(seed, depth = 1) {
   const at = (x, y) => tiles[y * W + x];
   const set = (x, y, v) => { tiles[y * W + x] = v; };
   const inside = (x, y) => x > 0 && y > 0 && x < W - 1 && y < H - 1;
-  let start = { tx: 6, ty: 6 };
+  let start = { tx: 2, ty: 9 };
   let theme = 'meadow';
   let solid = T.TREE;
 
   const carveField = () => {
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) set(x, y, inside(x, y) ? T.OPEN : solid);
     // Clumps of trees or stones to walk around.
-    for (let i = 0; i < 46; i++) {
+    for (let i = 0; i < 15; i++) {
       const cx = 2 + pick(W - 4);
       const cy = 2 + pick(H - 4);
       const size = 1 + pick(3);
       for (let dy = 0; dy < size; dy++) for (let dx = 0; dx < size; dx++) {
         const x = cx + dx;
         const y = cy + dy;
-        if (inside(x, y) && Math.abs(x - 6) + Math.abs(y - 6) > 4 && rand() < 0.8) set(x, y, solid);
+        if (inside(x, y) && Math.abs(x - 2) + Math.abs(y - 9) > 3 && rand() < 0.8) set(x, y, solid);
       }
     }
-    start = { tx: 6, ty: 6 };
+    start = { tx: 2, ty: 9 };
   };
   // Rooms are 2 by 2 tiles on a grid 3 tiles apart, joined by knocking out the wall between neighbors.
   // Every room is joined to the first, and some extra walls are knocked out so there are loops.
   const carveMaze = () => {
     tiles.fill(solid);
-    const cols = 20;
-    const rows = 12;
+    const cols = 9;
+    const rows = 5;
     const room = (cx, cy) => { for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) set(2 + cx * 3 + dx, 2 + cy * 3 + dy, T.OPEN); };
     const join = (cx, cy, dx, dy) => { for (let k = 0; k < 2; k++) set(2 + cx * 3 + (dx ? (dx > 0 ? 2 : -1) : k), 2 + cy * 3 + (dy ? (dy > 0 ? 2 : -1) : k), T.OPEN); };
     const ok = (cx, cy) => cx >= 0 && cy >= 0 && cx < cols && cy < rows;
@@ -165,7 +183,7 @@ export function generateFloor(seed, depth = 1) {
       stack.push([cx + dx, cy + dy]);
     }
     for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) {
-      if (rand() < 0.28) { const [dx, dy] = DIRS[pick(4)]; if (ok(cx + dx, cy + dy)) join(cx, cy, dx, dy); }
+      if (rand() < 0.45) { const [dx, dy] = DIRS[pick(4)]; if (ok(cx + dx, cy + dy)) join(cx, cy, dx, dy); }
     }
     start = { tx: 2, ty: 2 };
   };
@@ -173,12 +191,12 @@ export function generateFloor(seed, depth = 1) {
   const carveRooms = () => {
     tiles.fill(solid);
     const rooms = [];
-    for (let tries = 0; tries < 220 && rooms.length < 13; tries++) {
-      const w = 6 + pick(8);
-      const hh = 5 + pick(5);
-      const x = 2 + pick(W - w - 4);
-      const y = 2 + pick(H - hh - 4);
-      if (rooms.some((r) => x < r.x + r.w + 2 && x + w + 2 > r.x && y < r.y + r.h + 2 && y + hh + 2 > r.y)) continue;
+    for (let tries = 0; tries < 160 && rooms.length < 6; tries++) {
+      const w = 6 + pick(5);
+      const hh = 4 + pick(3);
+      const x = 1 + pick(W - w - 2);
+      const y = 1 + pick(H - hh - 2);
+      if (rooms.some((r) => x < r.x + r.w + 1 && x + w + 1 > r.x && y < r.y + r.h + 1 && y + hh + 1 > r.y)) continue;
       rooms.push({ x, y, w, h: hh });
       for (let dy = 0; dy < hh; dy++) for (let dx = 0; dx < w; dx++) set(x + dx, y + dy, T.OPEN);
     }
@@ -190,14 +208,14 @@ export function generateFloor(seed, depth = 1) {
     };
     for (let i = 1; i < rooms.length; i++) hall(...mid(rooms[i - 1]), ...mid(rooms[i]));
     // A few extra halls make loops, so there is more than one way round.
-    for (let i = 0; i < 3 && rooms.length > 3; i++) hall(...mid(rooms[pick(rooms.length)]), ...mid(rooms[pick(rooms.length)]));
+    for (let i = 0; i < 2 && rooms.length > 3; i++) hall(...mid(rooms[pick(rooms.length)]), ...mid(rooms[pick(rooms.length)]));
     const [sx, sy] = mid(rooms[0]);
     start = { tx: sx, ty: sy };
   };
   // Caves: scatter stone, then smooth it a few times so it clumps into winding caverns.
   const carveCavern = () => {
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) set(x, y, !inside(x, y) || rand() < 0.44 ? solid : T.OPEN);
-    for (let round = 0; round < 4; round++) {
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) set(x, y, !inside(x, y) || rand() < 0.38 ? solid : T.OPEN);
+    for (let round = 0; round < 3; round++) {
       const next = tiles.slice();
       for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
         let walls = 0;
@@ -225,17 +243,17 @@ export function generateFloor(seed, depth = 1) {
     if (kind === 'field') carveField();
     else if (kind === 'maze') carveMaze();
     else if (kind === 'rooms') carveRooms();
-    else if (carveCavern() < 600) { layout = 'rooms'; build('rooms'); }
+    else if (carveCavern() < 170) { layout = 'rooms'; build('rooms'); }
   };
   build(layout);
   const startKey = start.ty * W + start.tx;
 
-  // Vaults: 5 by 5 walls around a chest, closed by one cracked rock that needs a held item or a hammer.
+  // Vaults: 5 by 5 walls around a chest, closed by one cracked rock that needs a held item or a blade.
   const vaults = [];
   for (let tries = 0; tries < 80 && vaults.length < hard.vaults; tries++) {
-    const x = 2 + pick(W - 9);
-    const y = 2 + pick(H - 9);
-    if (Math.abs(x + 2 - start.tx) + Math.abs(y + 2 - start.ty) < 9) continue;
+    const x = 1 + pick(W - 6);
+    const y = 1 + pick(H - 6);
+    if (Math.abs(x + 2 - start.tx) + Math.abs(y + 2 - start.ty) < 7) continue;
     if (vaults.some((v) => Math.abs(v.x - x) < 8 && Math.abs(v.y - y) < 8)) continue;
     const [dx, dy] = DIRS[pick(4)];
     const door = [x + 2 + dx * 2, y + 2 + dy * 2];
@@ -256,7 +274,7 @@ export function generateFloor(seed, depth = 1) {
 
   const dist = distances(tiles, start, false);
   const open = [];
-  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (dist[y * W + x] > 2 && !inVault(x, y)) open.push([x, y]);
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (dist[y * W + x] > 1 && !inVault(x, y)) open.push([x, y]);
   for (let i = open.length - 1; i > 0; i--) { const j = pick(i + 1); [open[i], open[j]] = [open[j], open[i]]; }
   const taken = new Set([startKey]);
   const free = (ok) => {
@@ -267,51 +285,63 @@ export function generateFloor(seed, depth = 1) {
     return cell;
   };
 
-  // The stairs down are as far from the start as the floor allows.
+  // The door out is as far from the start as the room allows. It is locked until someone has the key,
+  // and the key is put where it is a detour from both, so every room has to be crossed.
   let far = start;
   let farDist = 0;
   for (const [x, y] of open) if (dist[y * W + x] > farDist) { farDist = dist[y * W + x]; far = { tx: x, ty: y }; }
   set(far.tx, far.ty, T.STAIRS);
   taken.add(far.ty * W + far.tx);
+  const fromDoor = distances(tiles, far, false);
+  let keyAt = null;
+  let keyScore = -1;
+  for (const [x, y] of open) {
+    const score = Math.min(dist[y * W + x], fromDoor[y * W + x]);
+    if (!taken.has(y * W + x) && score > keyScore) { keyScore = score; keyAt = [x, y]; }
+  }
 
   const items = [];
   const enemies = [];
   const put = (kind, x, y, extra) => items.push({ kind, x: x * TILE + 8, y: y * TILE + 8, value: (VALUE[kind] || 0) * hard.worth, taken: false, ...extra });
   const some = (n, make, ok) => { for (let i = 0; i < n; i++) { const c = free(ok); if (c) make(c[0], c[1]); } };
+  taken.add(keyAt[1] * W + keyAt[0]);
+  put('key', keyAt[0], keyAt[1]);
 
   for (const v of vaults) {
     put('chest', v.x + 2, v.y + 2, { relic: true });
     for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) put('gem', v.x + 2 + dx, v.y + 2 + dy);
   }
-  some(36, (x, y) => put('coin', x, y));
-  some(hard.gems, (x, y) => put('gem', x, y), (x, y) => dist[y * W + x] > 12);
-  // Something to find on every floor: a heart, and past the first floor a relic deep inside.
-  some(depth > 1 ? 2 : 1, (x, y) => put('heart', x, y), (x, y) => dist[y * W + x] > 10);
-  if (depth > 1) some(1, (x, y) => put('relic', x, y), (x, y) => dist[y * W + x] > farDist * 0.55);
+  some(14, (x, y) => put('coin', x, y));
+  some(hard.gems, (x, y) => put('gem', x, y), (x, y) => dist[y * W + x] > 6);
+  // Something to grab in every room: a boost, past the first room a heart, and now and then a relic.
+  const kinds = Object.keys(BOOSTS);
+  some(hard.boosts, (x, y) => put('boost', x, y, { boost: kinds[pick(kinds.length)] }), (x, y) => dist[y * W + x] > 4);
+  if (depth > 1) some(1, (x, y) => put('heart', x, y), (x, y) => dist[y * W + x] > 5);
+  if (depth % 3 === 0) some(1, (x, y) => put('relic', x, y), (x, y) => dist[y * W + x] > farDist * 0.5);
 
   // Spikes go where you have to walk: tiles with a wall beside them, never a whole room.
   const spikes = [];
   some(hard.spikes, (x, y) => { set(x, y, T.SPIKE); spikes.push([x, y]); },
-    (x, y) => dist[y * W + x] > 6 && DIRS.some(([dx, dy]) => isSolid(at(x + dx, y + dy))));
+    (x, y) => dist[y * W + x] > 3 && DIRS.some(([dx, dy]) => isSolid(at(x + dx, y + dy))));
 
   for (let i = 0; i < hard.enemies; i++) {
     const kind = hard.kinds[pick(hard.kinds.length)];
     // Far enough that nothing is on top of a player who has just arrived, even a bat that flies over walls.
-    const c = free((x, y) => dist[y * W + x] > 9 && Math.hypot(x - start.tx, y - start.ty) > 7);
+    const c = free((x, y) => dist[y * W + x] > 5 && Math.hypot(x - start.tx, y - start.ty) > 5);
     if (c) enemies.push({ kind, x: c[0] * TILE + 8, y: c[1] * TILE + 8, vx: 0, vy: 0, wait: rand() * 2 });
   }
 
   if (theme === 'meadow' || theme === 'forest') {
-    for (let i = 0; i < 40; i++) { const x = 1 + pick(W - 2); const y = 1 + pick(H - 2); if (at(x, y) === T.OPEN && !taken.has(y * W + x)) set(x, y, T.FLOWER); }
+    for (let i = 0; i < 14; i++) { const x = 1 + pick(W - 2); const y = 1 + pick(H - 2); if (at(x, y) === T.OPEN && !taken.has(y * W + x)) set(x, y, T.FLOWER); }
   }
 
   return {
     seed, depth, layout, theme, tiles, items, enemies, spikes,
-    // Caves are always dark. Deeper down, other floors can be too.
-    dark: theme === 'cave' || (depth >= 5 && rand() < 0.4),
-    speed: hard.speed, worth: hard.worth,
+    // Deep caves are dark. The first few rooms never are, so the rules can be learned in the light.
+    dark: depth >= 4 && (theme === 'cave' ? rand() < 0.7 : rand() < 0.2),
+    speed: hard.speed, worth: hard.worth, par: hard.par,
     startTile: start, start: { x: start.tx * TILE + 8, y: start.ty * TILE + 8 },
-    stairs: { x: far.tx * TILE + 8, y: far.ty * TILE + 8 },
+    door: { x: far.tx * TILE + 8, y: far.ty * TILE + 8 },
   };
 }
 /** Spikes rise and fall. Each one keeps its own beat, so a row of them makes a wave to time. */
