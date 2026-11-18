@@ -48,10 +48,14 @@ const SCHEMA = {
   Daily: ['class_id', 'plan', 'updated_at'],
   Links: ['class_id', 'course_id', 'course_name', 'synced_at'],
   Pace: ['class_id', 'term_start', 'term_end', 'updated_at'],
+  // Sentences already translated, kept for everyone. key is a fingerprint of the language and the English.
+  Translations: ['key', 'lang', 'text'],
+  // Problems people reported. who is a student id or a teacher's email; details is what the page noticed.
+  Bugs: ['id', 'at', 'role', 'who', 'name', 'class_id', 'page', 'note', 'details', 'status'],
 };
 const NUMBERS = new Set(['stars', 'step', 'ghost_seed', 'world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
 const BOOLEANS = new Set(['run_free', 'auto_ok', 'shared', 'published', 'started', 'music_open']);
-const OBJECTS = new Set(['quiz_first', 'confusing', 'holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
+const OBJECTS = new Set(['details', 'quiz_first', 'confusing', 'holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
 const ML5_PARTS = 5; // Set by the build: how many ML5_n files it made.
 
@@ -108,7 +112,7 @@ function route_(me, routes, method, args) {
 
 const TEACHER_READS = new Set(['listClasses', 'getClass', 'listStudents', 'classBoard', 'classWork', 'getWorkFull', 'getClassPlan', 'classroomWork',
   'classAlerts', 'alertSummary', 'getPace', 'getDigest', 'arcade', 'listSprites', 'listSongs', 'listTeams', 'gradeSyncStatus', 'lessonRatings',
-  'helpRequests', 'markHelped', 'listGoogleCourses', 'dataInfo', 'libraryPart']);
+  'helpRequests', 'markHelped', 'listGoogleCourses', 'dataInfo', 'libraryPart', 'translate', 'reportBug', 'bugReports', 'closeBug']);
 const BOARD_WRITES = new Set(['updateProfile', 'submitWork', 'setShared', 'saveSprite', 'deleteSprite', 'rateLesson']);
 
 /** Several calls in one trip, since each trip costs about a second. Each still goes through route_. */
@@ -1203,6 +1207,10 @@ function cleanPlan_(p) {
 }
 
 const TEACHER_ROUTES = {
+  translate: translate_,
+  reportBug: reportBug_,
+  bugReports: bugReports_,
+  closeBug: closeBug_,
   dataInfo: dataInfo_,
   backupNow: backupNow_,
   dataSwitch: dataSwitch_,
@@ -1958,7 +1966,115 @@ function dataCombine_(me, link, go) {
 }
 
 
+// Translation -------------------------------------------------------------------------------------
+// The page sends sentences it has no translation for. Each is translated once and kept, first in the
+// cache and for good in the Translations tab, so a class costs Google's translator almost nothing.
+
+const LANGS_ = { 'pt-BR': 'pt' };
+const TRANSLATE_SECONDS = 8;
+
+const trKey_ = (lang, text) => Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, `${lang}|${text}`, Utilities.Charset.UTF_8));
+
+function translate_(me, lang, texts) {
+  const to = LANGS_[lang];
+  if (!to) throw new Error('That language is not available yet.');
+  if (!Array.isArray(texts) || texts.length > 40) throw new Error('Too much to translate at once.');
+  const list = texts.map((t) => String(t)).map((t) => (t.length > 1500 ? '' : t));
+  const keys = list.map((t) => trKey_(lang, t));
+  const out = list.map(() => null);
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (_) { cache = null; }
+  let hits = {};
+  try { hits = cache ? cache.getAll(keys.map((k) => `tr:${k}`)) : {}; } catch (_) { hits = {}; }
+  list.forEach((t, i) => { if (t && hits[`tr:${keys[i]}`]) out[i] = hits[`tr:${keys[i]}`]; });
+  const fresh = {};
+  if (list.some((t, i) => t && out[i] === null)) {
+    const kept = new Map(rows_('Translations').map((r) => [r.key, r.text]));
+    list.forEach((t, i) => { if (t && out[i] === null && kept.has(keys[i])) { out[i] = kept.get(keys[i]); fresh[`tr:${keys[i]}`] = out[i]; } });
+  }
+  // Translating is slow, so it stops after a few seconds and the page asks again for the rest.
+  const started = Date.now();
+  const made = [];
+  for (let i = 0; i < list.length; i++) {
+    if (!list[i] || out[i] !== null) continue;
+    if (Date.now() - started > TRANSLATE_SECONDS * 1000) break;
+    const twin = made.find((m) => m.key === keys[i]);
+    if (twin) { out[i] = twin.text; continue; }
+    try {
+      const text = String(LanguageApp.translate(list[i], 'en', to, { contentType: 'html' }) || '');
+      if (!text || text.length > 6000) continue;
+      out[i] = text;
+      made.push({ key: keys[i], lang, text });
+      fresh[`tr:${keys[i]}`] = text;
+    } catch (e) {
+      console.warn(`TRANSLATE_FAILED: ${e && e.message}`);
+      break;
+    }
+  }
+  // Only the quick write happens while holding the lock, never the translating.
+  if (made.length) {
+    try {
+      withLock_(() => {
+        const sh = sheet_('Translations');
+        sh.getRange(sh.getLastRow() + 1, 1, made.length, 3).setValues(made.map((m) => toCells_('Translations', m)));
+      });
+    } catch (_) { /* Still in the cache; it will be kept next time someone needs it. */ }
+  }
+  try { if (cache && Object.keys(fresh).length) cache.putAll(fresh, 21600); } catch (_) { /* The cache is only a shortcut. */ }
+  return out;
+}
+
+// Problem reports ---------------------------------------------------------------------------------
+
+const BUGS_A_DAY = 5;
+
+function reportBug_(me, note, details) {
+  const text = text_(note, 1500).trim();
+  if (!text) throw new Error('Say what went wrong first.');
+  const who = me.role === 'student' ? me.student.id : me.email;
+  const d = details && typeof details === 'object' ? details : {};
+  const clean = {};
+  ['page', 'lesson', 'step', 'browser', 'screen', 'language', 'theme', 'version'].forEach((k) => { if (d[k] !== undefined) clean[k] = text_(d[k], 200); });
+  clean.errors = (Array.isArray(d.errors) ? d.errors : []).slice(-5).map((e) => text_(e, 300));
+  withLock_(() => {
+    const day = now_().slice(0, 10);
+    const mine = rows_('Bugs', ['id', 'at', 'role', 'who']).filter((b) => b.who === who && b.at.slice(0, 10) === day);
+    if (mine.length >= BUGS_A_DAY) throw new Error('Thanks! You have sent a few reports today. Tell your teacher about anything else.');
+    insert_('Bugs', {
+      id: uuid_(), at: now_(), role: me.role, who, name: me.role === 'student' ? me.student.display_name : me.teacher.display_name,
+      class_id: me.role === 'student' ? me.student.class_id : '', page: text_(d.page, 200), note: text, details: clean, status: 'open',
+    });
+  });
+  return true;
+}
+
+/** The owner sees every report. Another teacher sees their own and their students'. */
+function bugsFor_(me) {
+  const all = rows_('Bugs');
+  if (me.email === ownerEmail_()) return all;
+  const mine = new Set(rows_('Classes').filter((c) => c.teacher_email === me.email).map((c) => c.id));
+  return all.filter((b) => (b.role === 'teacher' ? b.who === me.email : mine.has(b.class_id)));
+}
+
+function bugReports_(me) {
+  const classes = new Map(rows_('Classes').map((c) => [c.id, c.name]));
+  return bugsFor_(me).filter((b) => b.status !== 'done').sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 100)
+    .map((b) => ({ id: b.id, at: b.at, role: b.role, name: b.name, class_name: classes.get(b.class_id) || '', page: b.page, note: b.note, details: b.details || {} }));
+}
+
+function closeBug_(me, id) {
+  withLock_(() => {
+    const bug = bugsFor_(me).find((b) => b.id === String(id));
+    if (!bug) throw new Error('That report was not found.');
+    update_('Bugs', { ...bug, status: 'done' });
+  });
+  return bugReports_(me);
+}
+
+
 const STUDENT_ROUTES = {
+  translate: translate_,
+  reportBug: reportBug_,
   rateLesson: rateLesson_,
   flagStep: flagStep_,
   myFlags: myFlags_,

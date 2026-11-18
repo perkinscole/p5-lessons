@@ -2,7 +2,7 @@
 import { h, clear, modal, toast } from './ui.js';
 
 const KEY = 'pixeltrail.settings';
-const DEFAULTS = { theme: 'auto', editor: 'night', codeSize: 14, textSize: 100, spacing: 'normal', plainHeadings: false, wrap: false, readRate: 1, autoRead: false, gameSound: true };
+const DEFAULTS = { lang: 'en', font: 'atkinson', theme: 'auto', editor: 'night', codeSize: 14, textSize: 100, spacing: 'normal', plainHeadings: false, wrap: false, readRate: 1, autoRead: false, gameSound: true };
 
 let settings = { ...DEFAULTS };
 try { settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (_) { /* private mode: use defaults */ }
@@ -20,6 +20,8 @@ export function applySettings() {
   const root = document.documentElement;
   if (settings.theme === 'auto') delete root.dataset.theme; else root.dataset.theme = settings.theme;
   root.dataset.editor = settings.editor;
+  if (settings.font === 'atkinson') delete root.dataset.font; else root.dataset.font = settings.font;
+  root.lang = settings.lang === 'pt-BR' ? 'pt-BR' : 'en';
   root.dataset.spacing = settings.spacing;
   if (settings.plainHeadings) root.dataset.plainHeadings = 'true'; else delete root.dataset.plainHeadings;
   root.style.setProperty('--ui-scale', settings.textSize / 100);
@@ -48,10 +50,18 @@ export function forSpeech(text) {
     .replace(/\s+/g, ' ').trim();
 }
 
-export function speak(text) {
+// translate.js fills this in, so read aloud speaks the language on screen.
+let speechTranslator = null;
+export const setSpeechTranslator = (fn) => { speechTranslator = fn; };
+
+export async function speak(text) {
   if (!canSpeak()) { toast('Read aloud is not available in this browser.', 'error'); return; }
   stopSpeaking();
-  const u = new SpeechSynthesisUtterance(forSpeech(text));
+  let words = forSpeech(text);
+  const other = settings.lang !== 'en' && speechTranslator;
+  if (other) { try { words = await speechTranslator(words); } catch (_) { /* read it in English */ } }
+  const u = new SpeechSynthesisUtterance(words);
+  if (other) u.lang = settings.lang;
   u.rate = settings.readRate;
   window.speechSynthesis.speak(u);
 }
@@ -74,9 +84,19 @@ function toggle(label, key) {
   return h('label.check', h('input', { type: 'checkbox', checked: settings[key], onchange: (e) => update({ [key]: e.target.checked }) }), h('span', label));
 }
 
+/** Changing language reloads the page, so every screen is drawn again in that language. */
+function languageChoice() {
+  return h('div.options', { role: 'radiogroup', 'aria-label': 'Language' }, [['en', 'English'], ['pt-BR', 'Português (Brasil)']].map(([value, text]) => h('button.item', {
+    type: 'button', role: 'radio', 'aria-checked': settings.lang === value ? 'true' : 'false',
+    onclick: () => { if (settings.lang !== value) { update({ lang: value }); location.reload(); } },
+  }, text)));
+}
+
 export function openSettings() {
   modal((close) => h('div.stack.settings',
     h('h2', 'Display'),
+    h('section.setting', { translate: 'no' }, h('h3.subhead', 'Language · Idioma'), languageChoice()),
+    choice('Font', 'font', [['atkinson', 'Atkinson'], ['lexend', 'Lexend'], ['system', 'Plain'], ['rounded', 'Rounded']]),
     choice('Theme', 'theme', [['auto', 'Match my device'], ['light', 'Light'], ['dark', 'Dark'], ['contrast', 'High contrast']]),
     choice('Text size', 'textSize', [[100, 'Normal'], [115, 'Large'], [130, 'Larger'], [150, 'Largest']]),
     choice('Line spacing', 'spacing', [['normal', 'Normal'], ['wide', 'Wide']]),

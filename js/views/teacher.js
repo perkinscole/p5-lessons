@@ -12,12 +12,13 @@ import { makeEditor } from './lesson.js';
 import { openImport, assignmentsTab, keepingUpTab } from './classroom.js';
 import { groupsTab, sendGradesTab, teamPanel } from './groups.js';
 import { feedbackTab, helpCard } from './feedback.js';
+import { bugsCard } from './bugs.js';
 import { badgeChip } from './student.js';
 
 export async function viewTeacherHome() {
-  const [classes, alerts, data] = await Promise.all([app.store.listClasses(), app.store.alertSummary ? app.store.alertSummary() : {},
+  const [classes, alerts, data, bugs] = await Promise.all([app.store.listClasses(), app.store.alertSummary ? app.store.alertSummary() : {},
     // Only the teacher who set the app up gets an answer here.
-    app.store.dataInfo().catch(() => null)]);
+    app.store.dataInfo().catch(() => null), app.store.bugReports().catch(() => [])]);
   const name = h('input', { required: true, maxlength: 80, placeholder: 'Period 3: Game Design', 'aria-label': 'New class name' });
   return h('div.stack',
     h('div.row.between', h('h1', 'Your classes'), app.store.hasClassroom && h('button.btn', { onclick: () => openImport(render) }, 'Import from Google Classroom')),
@@ -31,6 +32,7 @@ export async function viewTeacherHome() {
         if (c) go(`/class/${c.id}`);
       },
     }, name, h('button.btn.primary', { type: 'submit' }, 'Create class')),
+    bugsCard(bugs),
     data && dataCard(data),
     h('section.card.stack',
       h('h2', 'How a class works'),

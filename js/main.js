@@ -15,6 +15,8 @@ import { viewStandards } from './views/standards.js';
 import { viewProject } from './views/project.js';
 import { viewQuest } from './views/quest.js';
 import { applySettings, openSettings } from './settings.js';
+import { initLanguage } from './translate.js';
+import { openBugReport, noteError } from './views/bugs.js';
 
 // On Apps Script the page has google.script. Anywhere else it runs as a browser-only demo.
 const store = window.google?.script ? createAppsScriptStore() : createLocalStore();
@@ -44,9 +46,9 @@ function topbar() {
     ? [h('img.mini-av', { src: avatarURL(s.student.avatar || defaultAvatar(s.student.id), 2), alt: '' }), s.student.display_name]
     : [s.teacher.display_name];
   return h('header.topbar',
-    h('a.brand', { href: '#/' }, 'Pixel Trail'),
+    h('a.brand', { href: '#/', translate: 'no' }, 'Pixel Trail'),
     h('nav.navs', { 'aria-label': 'Main' }, links),
-    h('div.who', h('button.btn.small', { onclick: openSettings }, 'Display'), who, store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
+    h('div.who', h('button.btn.small', { onclick: openSettings }, 'Display'), h('button.btn.small', { onclick: openBugReport, title: 'Report a problem', 'aria-label': 'Report a problem' }, '🐞'), h('span.who-name', { translate: 'no' }, who), store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
   );
 }
 
@@ -108,6 +110,10 @@ export async function refreshSession() {
 }
 
 window.addEventListener('hashchange', render);
+// Remembered for a moment, so a problem report can say what the page saw go wrong.
+window.addEventListener('error', (e) => noteError(`${e.message} (${String(e.filename || '').split('/').pop()}:${e.lineno || 0})`));
+window.addEventListener('unhandledrejection', (e) => noteError(`Promise: ${e.reason?.message || e.reason}`));
+initLanguage(store);
 
 // While the server is busy and requests are being retried, say so quietly instead of showing an error.
 let busyNote = null;

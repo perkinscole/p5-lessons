@@ -26,12 +26,12 @@ const { call, direct } = createQueue(send, {
 // Reads that are safe to reuse for a few seconds. Anything else might change data, so it clears them.
 const READS = new Set(['session', 'listClasses', 'getClass', 'listStudents', 'classBoard', 'myWorks', 'classWork', 'getClassPlan',
   'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'getDigest', 'arcade', 'listSprites', 'mySprites', 'listSongs', 'mySongs',
-  'listTeams', 'gradeSyncStatus', 'worldState', 'worldGhosts', 'lessonRatings', 'dataInfo']);
+  'listTeams', 'gradeSyncStatus', 'worldState', 'worldGhosts', 'lessonRatings', 'dataInfo', 'bugReports']);
 const FRESH_MS = 15000;
 const cache = new Map();
 let generation = 0;
 // Checked every few seconds, so they skip the cache both ways: never reused, and never clearing it.
-const LIVE = new Set(['helpRequests', 'myHelp']);
+const LIVE = new Set(['helpRequests', 'myHelp', 'translate']);
 function cachedCall(method, ...args) {
   if (LIVE.has(method)) return call(method, ...args);
   if (!READS.has(method)) {
@@ -55,7 +55,7 @@ function cachedCall(method, ...args) {
 const METHODS = [
   'listClasses', 'createClass', 'deleteClass', 'getClass', 'listStudents', 'addStudents', 'removeStudent', 'setStudentPath',
   'classBoard', 'updateProfile', 'myWorks', 'saveWork', 'submitWork', 'setShared', 'classWork', 'getWorkFull', 'saveGrade',
-  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'createAssignments', 'setMusicOpen', 'setWorld', 'worldState', 'worldEnter', 'worldRun', 'worldGhosts', 'rateLesson', 'lessonRatings', 'flagStep', 'myFlags', 'askHelp', 'cancelHelp', 'myHelp', 'helpRequests', 'markHelped', 'saveSprite', 'deleteSprite', 'dataInfo', 'backupNow', 'dataSwitch', 'dataCombine',
+  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'createAssignments', 'setMusicOpen', 'setWorld', 'worldState', 'worldEnter', 'worldRun', 'worldGhosts', 'rateLesson', 'lessonRatings', 'flagStep', 'myFlags', 'askHelp', 'cancelHelp', 'myHelp', 'helpRequests', 'markHelped', 'saveSprite', 'deleteSprite', 'dataInfo', 'backupNow', 'dataSwitch', 'dataCombine', 'translate', 'reportBug', 'bugReports', 'closeBug',
 ];
 
 // ml5 is about 4 MB and only changes when the app is redeployed, so each device keeps its own copy.

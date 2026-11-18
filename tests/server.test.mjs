@@ -1037,3 +1037,60 @@ test('reliability: switching checks the Sheet, and combining brings students bac
   assert.equal(server.current(), old);
   assert.ok(teacher('dataInfo').history.length >= 2);
 });
+
+test('translate: each sentence is translated once and then shared', () => {
+  const { server, kids } = classOf();
+  const a = server.as(kids[0]);
+  const texts = ['Draw a circle.', 'Change <span id="m0" class="notranslate" translate="no">fill(255)</span> to red.'];
+  assert.deepEqual(a('translate', 'pt-BR', texts), texts.map((t) => `[pt] ${t}`));
+  assert.equal(server.translated.length, 2);
+  // A classmate, and a new day with an empty cache, cost the translator nothing.
+  assert.deepEqual(server.as(kids[1])('translate', 'pt-BR', [texts[1], 'Draw a circle.']), [`[pt] ${texts[1]}`, '[pt] Draw a circle.']);
+  server.clearCache();
+  assert.equal(server.as(OWNER)('translate', 'pt-BR', ['Draw a circle.'])[0], '[pt] Draw a circle.');
+  assert.equal(server.translated.length, 2);
+  assert.equal(server.sheets.get('Translations').getLastRow(), 3);
+});
+
+test('translate: limits, unknown languages, and a translator that is out of quota', () => {
+  const { server, kids } = classOf();
+  const a = server.as(kids[0]);
+  assert.equal(server.raw(kids[0], 'translate', ['xx', ['hi']]).ok, false);
+  assert.equal(server.raw(kids[0], 'translate', ['pt-BR', Array(41).fill('hi')]).ok, false);
+  assert.equal(server.raw('stranger@school.test', 'translate', ['pt-BR', ['hi']]).ok, false);
+  assert.deepEqual(a('translate', 'pt-BR', ['x'.repeat(1501), '=SUM(A1)']), [null, '[pt] =SUM(A1)']);
+  server.fail.translate = true;
+  assert.deepEqual(a('translate', 'pt-BR', ['New words here']), [null]);
+  server.fail.translate = false;
+  // Saving a translation must wait its turn like any write, but a busy lock doesn't lose the answer.
+  server.fail.busyLock = true;
+  assert.deepEqual(a('translate', 'pt-BR', ['Busy words']), ['[pt] Busy words']);
+  server.fail.busyLock = false;
+});
+
+test('problem reports: anyone signed in can send one, and the right teacher sees it', () => {
+  const { server, teacher, kids } = classOf();
+  server.current().getSheetByName('Teachers').appendRow(['co@school.test', 'Co Teacher', 'now']);
+  const co = server.as('co@school.test');
+  const a = server.as(kids[0]);
+  assert.equal(server.raw(kids[0], 'reportBug', ['   ', {}]).ok, false);
+  assert.equal(server.raw('stranger@school.test', 'reportBug', ['hi', {}]).ok, false);
+  a('reportBug', '=HYPERLINK("x") the Run button did nothing', { page: '/lesson/t3', lesson: 't3', step: '2', errors: ['boom'], secret: 'dropped', browser: 'x'.repeat(999) });
+  co('reportBug', 'gradebook is blank', { page: '/class/abc' });
+  const seen = teacher('bugReports');
+  assert.equal(seen.length, 2);
+  const kid = seen.find((b) => b.role === 'student');
+  assert.equal(kid.note, '=HYPERLINK("x") the Run button did nothing');
+  assert.equal(kid.class_name, 'Period 1');
+  assert.deepEqual(kid.details.errors, ['boom']);
+  assert.equal(kid.details.secret, undefined);
+  assert.equal(kid.details.browser.length, 200);
+  // Another teacher sees their own report, not this class's. Students can't read reports at all.
+  assert.deepEqual(co('bugReports').map((b) => b.note), ['gradebook is blank']);
+  assert.equal(server.raw(kids[1], 'bugReports', []).ok, false);
+  assert.equal(server.raw('co@school.test', 'closeBug', [kid.id]).ok, false);
+  assert.equal(teacher('closeBug', kid.id).length, 1);
+  // A student can't flood the list.
+  for (let i = 0; i < 4; i++) a('reportBug', `again ${i}`, {});
+  assert.match(server.raw(kids[0], 'reportBug', ['one more', {}]).error, /few reports today/);
+});

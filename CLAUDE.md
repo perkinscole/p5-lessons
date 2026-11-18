@@ -107,6 +107,12 @@ Constraints that follow from this:
 
 `js/views/feedback.js` has the student controls (`confusingButton`, `helpBox`, `ratingBox`) and the teacher's Feedback tab and live `helpCard`. `js/curriculum/report.js` builds the Markdown report with no DOM, so it is tested. On the server, `Flags` holds one row per student, lesson, and target (`step:3` or `quiz:1`, both counted from 0), plus an append-only row with reason `help` each time a student asks for help on a new step; `Help` holds at most one open request per student. `helpRequests` and `myHelp` are polled, so `appsscript.js` lists them in `LIVE`: never cached, and never clearing the cache. First tries on check questions are kept once in the `quiz_first` column (`firstTries_`). Flags and first tries are stored by step and question position, so inserting a step or question in the middle of a live lesson shifts what earlier feedback points at; add to the end or accept the shift.
 
+### Language and problem reports
+
+Screens are written in English only. `js/translate.js` watches the page and swaps text for its translation, a sentence at a time, so don't add a second copy of any string. Mark anything that must stay as written with `translate: 'no'` (names, what a person typed, standards text); `pre`, `code`, and the editor are always skipped. A translation is only ever put on the page as text and copies of the page's own `strong`/`em`/`code` elements, never as HTML. `translate_` on the server translates each sentence once with `LanguageApp`, outside the lock, and keeps it in the cache and the `Translations` tab. To add a language, add it to `LANGS_` and to `languageChoice` in `settings.js`. Text that changes constantly (clocks, counts with names) costs a translation each time, so mark it `translate: 'no'`.
+
+`js/views/bugs.js` has the report form and the teacher's list; `buildBugReport` in `report.js` makes the Markdown. `noteError` keeps the page's last five errors to send along. Reports are capped per person per day on the server.
+
 ### Trail Quest
 
 `js/game/quest.js` holds the rules and the world generator with no drawing, so `tests/quest.test.mjs` can check that every world is fair (everything reachable, only chests behind cracked rocks). `js/views/quest.js` draws and runs it on a plain canvas in the app's own page, not the sandbox, since it is our code. `powersFor` maps character slots to powers; a new slot power goes there and in `POWERS`.
@@ -121,4 +127,4 @@ Group projects share one document. Each file has its own keyboard (the `Teams` r
 
 Grades can only be written to Classroom assignments this app's Google Cloud project created, so `pushGrades_` makes its own and records them in `GradeSync`. Changing the script's Cloud project would make those assignments unwritable.
 
-These need a real deployment: anything on real Apps Script, the Google Classroom API (including grade writes on students who haven't turned anything in) and daily email, full-class quota limits, whether Apps Script's outer frame permits the camera, and loading an actual Teachable Machine model.
+These need a real deployment: anything on real Apps Script, `LanguageApp` translation (quality, speed, daily quota, and whether it asks for a new permission), the Google Classroom API (including grade writes on students who haven't turned anything in) and daily email, full-class quota limits, whether Apps Script's outer frame permits the camera, and loading an actual Teachable Machine model.

@@ -75,7 +75,7 @@ function fitTrail(root) {
 const sameDay = (iso) => !!iso && new Date(iso).toLocaleDateString('en-CA') === todayKey();
 // A student who asked for help just bounces and glows a little. Who it is and what they wrote stay
 // off the projector: the teacher opens the list from the small ✋ button.
-const personChip = (s) => h('div.pj-person', { class: needsHelp.has(s.id) ? 'needs-help' : '', title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
+const personChip = (s) => h('div.pj-person', { translate: 'no', class: needsHelp.has(s.id) ? 'needs-help' : '', title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
   h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '' }),
   h('span', s.display_name));
 
@@ -240,7 +240,7 @@ export async function viewProject(main, classId) {
     const codes = plan.standards.length ? plan.standards : autoStandards(lessons);
     return h('section.pj-panel.pj-standards',
       h('h2', 'MA DLCS standards'),
-      h('ul', codes.map((c) => h('li', h('strong', shortCode(c)), ' ', standardByCode(c).text))),
+      h('ul', codes.map((c) => h('li', { translate: 'no' }, h('strong', shortCode(c)), ' ', standardByCode(c).text))),
     );
   }
 

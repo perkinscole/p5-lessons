@@ -1,7 +1,7 @@
 // A stand-in for Google's services, so gas/Code.gs can run here. It copies the limits that matter
 // (50,000 characters a cell, formulas in cells). It is a model: real Apps Script may still differ.
 import vm from 'node:vm';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 const CELL_LIMIT = 50000;
@@ -117,6 +117,7 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
   const spreadsheet = makeBook('fake-sheet-000000000000000', 'Pixel Trail Data');
   const sheets = spreadsheet.tabs;
   const cacheStore = new Map();
+  const translated = [];
   let activeEmail = '';
   const mail = [];
   const triggers = [];
@@ -139,12 +140,26 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
     },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) ?? null, setProperty: (k, v) => props.set(k, v) }) },
     LockService: { getScriptLock: () => ({ waitLock() { if (fail.busyLock) throw new Error('Lock timeout: another process was holding the lock for too long.'); }, releaseLock() {} }) },
-    Utilities: { getUuid: () => randomUUID(), sleep() {}, formatDate: (d) => d.toISOString().slice(0, 10) },
+    Utilities: {
+      getUuid: () => randomUUID(), sleep() {}, formatDate: (d) => d.toISOString().slice(0, 10),
+      DigestAlgorithm: { MD5: 'md5' }, Charset: { UTF_8: 'utf8' },
+      computeDigest: (alg, text) => [...createHash(alg).update(text, 'utf8').digest()],
+      base64Encode: (bytes) => Buffer.from(bytes).toString('base64'),
+    },
+    // A pretend translator: it marks the text so tests can see it went through, and keeps the tags.
+    LanguageApp: { translate: (text, from, to, opts) => {
+      translated.push(text);
+      if (fail.translate) throw new Error('Service invoked too many times for one day: translate.');
+      if (!opts || opts.contentType !== 'html') throw new Error('expected html');
+      return `[${to}] ${text}`;
+    } },
     // Like the real cache: text only, under 100 KB a value, gone after its time.
     CacheService: { getScriptCache: () => ({
       get: (k) => { const hit = cacheStore.get(k); return hit && hit.until > Date.now() ? hit.value : null; },
       put: (k, v, seconds = 600) => { if (String(v).length > 100000) throw new Error('Argument too large: value'); cacheStore.set(k, { value: String(v), until: Date.now() + seconds * 1000 }); },
       remove: (k) => { cacheStore.delete(k); },
+      getAll: (keys) => Object.fromEntries(keys.map((k) => [k, cacheStore.get(k)]).filter(([, hit]) => hit && hit.until > Date.now()).map(([k, hit]) => [k, hit.value])),
+      putAll: (values, seconds = 600) => { for (const [k, v] of Object.entries(values)) cacheStore.set(k, { value: String(v), until: Date.now() + seconds * 1000 }); },
     }) },
     Classroom: fakeClassroom(classroom || {}),
     MailApp: { sendEmail: (to, subject, body) => mail.push({ to, subject, body }) },
@@ -182,6 +197,8 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
     createdCount: () => created,
     books,
     props,
+    /** Every text the pretend translator was asked for. */
+    translated,
     /** Another spreadsheet in the same Drive. */
     newBook: (name) => makeBook(`fake-other-${String(books.size).padStart(3, '0')}-abcdefghijklmn`, name),
     fail,

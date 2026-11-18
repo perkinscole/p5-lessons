@@ -546,3 +546,13 @@ test('the feedback report names files and steps the way students see them, with 
   assert.match(text, /student names removed/);
   assert.equal(buildReport([entry], { className: 'P', students: 1, date: 'd' }, 't3').includes('Hello, Canvas'), false);
 });
+
+test('problem reports read well as Markdown', async () => {
+  const { buildBugReport } = await import('../js/curriculum/report.js');
+  const text = buildBugReport([{ role: 'student', class_name: 'Period 1', at: '2026-11-18T14:00:00Z', page: '/lesson/t3', note: 'Run did nothing\nI pressed it twice', details: { lesson: 't3', step: '2', browser: 'CrOS Chrome/130', screen: '1366x768', errors: ['boom (App:1)'] } }], { date: '11/18/2026' });
+  assert.match(text, /## 1\. Run did nothing/);
+  assert.match(text, /lesson t3, step 3, source `js\/curriculum\/trunk\.js`/);
+  assert.match(text, /> Run did nothing\n> I pressed it twice/);
+  assert.match(text, /boom \(App:1\)/);
+  assert.doesNotMatch(text, /undefined/);
+});

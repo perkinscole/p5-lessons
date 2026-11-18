@@ -76,6 +76,23 @@ function lessonSection(entry) {
  * The whole report, or one lesson's when `only` is its id.
  *   info: { className, students, date }
  */
+/** Problem reports as Markdown, to read or to paste to whoever fixes the app. */
+export function buildBugReport(bugs, info = {}) {
+  const lines = ['# Pixel Trail problem reports', '', `${bugs.length} open${info.date ? `, as of ${info.date}` : ''}.`, ''];
+  bugs.forEach((b, i) => {
+    const d = b.details || {};
+    lines.push(`## ${i + 1}. ${String(b.note).split('\n')[0].slice(0, 80)}`, '');
+    lines.push(`- **Who:** ${b.role === 'teacher' ? 'teacher' : 'a student'}${b.class_name ? ` in ${b.class_name}` : ''}`);
+    lines.push(`- **When:** ${b.at}`);
+    if (b.page) lines.push(`- **Page:** \`${b.page}\`${d.lesson ? ` (lesson ${d.lesson}${d.step !== undefined && d.step !== '' ? `, step ${Number(d.step) + 1}` : ''}, source \`${sourceFile(d.lesson)}\`)` : ''}`);
+    const setup = [d.browser, d.screen && `screen ${d.screen}`, d.language && `language ${d.language}`, d.theme && `theme ${d.theme}`].filter(Boolean);
+    if (setup.length) lines.push(`- **Setup:** ${setup.join('; ')}`);
+    lines.push('', '> ' + String(b.note).split('\n').join('\n> '), '');
+    if ((d.errors || []).length) lines.push('Errors the page saw just before:', '', '```', ...d.errors, '```', '');
+  });
+  return lines.join('\n');
+}
+
 export function buildReport(entries, info, only) {
   const order = allLessons().map((l) => l.id);
   const list = entries.filter((e) => getLesson(e.lesson_id) && (!only || e.lesson_id === only)).sort((a, b) => order.indexOf(a.lesson_id) - order.indexOf(b.lesson_id));

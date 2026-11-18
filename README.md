@@ -110,7 +110,11 @@ After updating to this version, open the Apps Script editor, run any function on
 
 ## Display and project files
 
-The **Display** button lets each person choose light, dark, or high contrast, an editor style, larger text and code, wider spacing, plain headings, and read aloud. Choices are saved in that browser.
+The **Display** button lets each person choose a language, a font (Atkinson Hyperlegible, Lexend, a plain one, or a rounded one), light, dark, or high contrast, an editor style, larger text and code, wider spacing, plain headings, and read aloud. Choices are saved in that browser.
+
+**Português (Brasil)** shows the whole app in Brazilian Portuguese, and read aloud speaks it. The translation is done by Google's translator, so it is a machine translation: good enough to follow, not polished. Each sentence is translated once and kept in the `Translations` tab of your Sheet for everyone, and you can correct a translation there by editing its `text` cell. Code is never translated, since it has to be typed exactly, and the state's standards stay in their official wording.
+
+The **🐞** button next to it lets anyone report a problem with the app. It sends what they wrote plus the page, screen size, browser, and any errors the page just had, never their code. Reports appear on **Your classes** under **Problem reports**, where you can copy them all as one report and mark each done. A student can send five a day.
 
 In a lesson, students can add up to 8 extra code files and upload images, using the buttons above the editor or by dragging them in. Images are shrunk to fit the class Sheet and load with `loadImage(SPRITES.name)`. Sound files aren't supported yet.
 

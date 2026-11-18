@@ -53,6 +53,9 @@ html[data-editor='contrast'] { --code-bg: #000000; --code-fg: #ffffff; --code-gu
 
 html { font-size: calc(100% * var(--ui-scale, 1)); }
 :root[data-spacing='wide'] body { line-height: 1.9; word-spacing: .12em; letter-spacing: .02em; }
+:root[data-font='lexend'] { --font-body: 'Lexend', 'Atkinson Hyperlegible', system-ui, sans-serif; }
+:root[data-font='system'] { --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; }
+:root[data-font='rounded'] { --font-body: 'Comic Sans MS', 'Comic Neue', 'Chalkboard SE', 'Lexend', sans-serif; }
 :root[data-plain-headings] { --font-display: var(--font-body); }
 
 * { box-sizing: border-box; }
@@ -750,3 +753,7 @@ body.projecting .page { max-width: none; padding: 0; }
 .team-turn { font-weight: 700; }
 .group-row { align-items: center; flex-wrap: wrap; }
 ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: column; gap: 4px; }
+
+.bug { border-top: 2px solid var(--line); padding-top: 8px; }
+.bug p { margin: 0 0 4px; }
+.bug-errors { font-size: .78rem; max-height: 8em; overflow: auto; }

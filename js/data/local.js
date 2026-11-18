@@ -468,6 +468,22 @@ export function createLocalStore() {
       db.contributions = (db.contributions || []).filter((c) => !dropped.has(c.team_id));
       save();
     },
+    // Translating needs Google's translator, which only the real app has.
+    async translate(lang, texts) { return texts.map(() => null); },
+    async reportBug(note, details) {
+      if (!String(note || '').trim()) throw new Error('Say what went wrong first.');
+      db.bugs = db.bugs || [];
+      const who = me();
+      db.bugs.push({ id: uid(), at: new Date().toISOString(), role: who.role, name: who.role === 'student' ? who.student.display_name : 'Teacher', class_name: '', page: details?.page || '', note: String(note).slice(0, 1500), details: details || {}, status: 'open' });
+      save();
+      return true;
+    },
+    async bugReports() { return (db.bugs || []).filter((b) => b.status !== 'done').reverse(); },
+    async closeBug(id) {
+      (db.bugs || []).forEach((b) => { if (b.id === id) b.status = 'done'; });
+      save();
+      return this.bugReports();
+    },
     // The demo keeps everything in this browser, so there is no Sheet to back up or move.
     async dataInfo() { return null; },
     async backupNow() { throw new Error('Backups are only in the real app.'); },
