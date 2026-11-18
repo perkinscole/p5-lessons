@@ -782,3 +782,63 @@ test('lesson ratings: students rate their own lessons, and the teacher sees tota
   assert.equal(teacher('lessonRatings', cls.id)[0].count, 1);
   void zed;
 });
+
+test('confusing flags and first tries: per student, added up for the teacher without names', () => {
+  const { teacher, other, ari, bea, zed, cls, ids } = setup();
+  denied(() => ari('flagStep', 't1', 'step:99x', 'unclear', ''));
+  denied(() => ari('flagStep', 't1', 'step:2', 'made-up', ''));
+  denied(() => teacher('flagStep', 't1', 'step:2', 'unclear', ''));
+  ari('flagStep', 't1', 'step:2', 'unclear', 'where does the sun line go');
+  ari('flagStep', 't1', 'step:2', 'broken', 'my code says error');
+  bea('flagStep', 't1', 'step:2', 'unclear', '');
+  bea('flagStep', 't1', 'quiz:1', 'hard', '');
+  bea('flagStep', 't1', 'quiz:1', '', '');
+  assert.deepEqual(ari('myFlags', 't1'), [{ target: 'step:2', reason: 'broken' }], 'flagging again replaces, and only your own show');
+
+  // The first try on each check question is kept, whatever is sent later.
+  ari('saveWork', 't1', { code: 'x', assets: {}, quiz_first: { 0: false, 1: true, junk: true } });
+  ari('saveWork', 't1', { code: 'x', assets: {}, quiz_first: { 0: true, 2: true } });
+  assert.deepEqual(ari('myWorks').find((w) => w.lesson_id === 't1').quiz_first, { 0: false, 1: true, 2: true });
+
+  const t1 = teacher('lessonRatings', cls.id).find((l) => l.lesson_id === 't1');
+  assert.equal(t1.started, 2);
+  assert.equal(t1.finished, 1);
+  assert.deepEqual(t1.flags, { 'step:2': { count: 2, reasons: { broken: 1, unclear: 1 }, notes: ['my code says error'] } });
+  assert.deepEqual(t1.quiz['0'], { tries: 1, missed: 1 });
+  denied(() => other('lessonRatings', cls.id));
+  const text = JSON.stringify(teacher('lessonRatings', cls.id));
+  assert.ok(!text.includes(ids[ARI]) && !text.includes('Ari') && !text.includes('@'));
+
+  // Rating a lesson shows on the board only as a count, which earns XP.
+  bea('rateLesson', 't1', { stars: 4, hardest: 'the sun', better: 'more pictures' });
+  const board = ari('classBoard', cls.id);
+  assert.equal(board.find((s) => s.id === ids[BEA]).rated, 1);
+  assert.ok(!JSON.stringify(board).includes('more pictures'));
+  assert.deepEqual(teacher('lessonRatings', cls.id).find((l) => l.lesson_id === 't1').better, ['more pictures']);
+  void zed;
+});
+
+test('"I\'m stuck": one open request per student, seen and cleared only by their teacher', () => {
+  const { teacher, other, ari, bea, zed, cls, clsB, ids } = setup();
+  assert.deepEqual(ari('myHelp'), { open: false });
+  ari('askHelp', 't1', 2, 'x'.repeat(300));
+  ari('askHelp', 't1', 2, 'I cannot find line 6');
+  bea('askHelp', 't3', 0, '');
+  assert.deepEqual(ari('myHelp'), { open: true });
+  denied(() => ari('helpRequests', cls.id));
+  denied(() => other('helpRequests', cls.id));
+  denied(() => other('markHelped', cls.id, ids[ARI]));
+  const list = teacher('helpRequests', cls.id);
+  assert.deepEqual(list.map((h) => [h.display_name, h.lesson_id, h.step, h.note]), [['Ari M', 't1', 2, 'I cannot find line 6'], ['Bea T', 't3', 0, '']]);
+  assert.ok(!JSON.stringify(list).includes('@'), 'no emails');
+  assert.deepEqual(other('helpRequests', clsB.id), []);
+
+  teacher('markHelped', cls.id, ids[ARI]);
+  assert.deepEqual(ari('myHelp'), { open: false });
+  bea('cancelHelp');
+  assert.deepEqual(teacher('helpRequests', cls.id), []);
+  // Asking twice about the same step counts once; the report still knows the step needed help.
+  assert.deepEqual(teacher('lessonRatings', cls.id).find((l) => l.lesson_id === 't1').help, { 2: 1 });
+  assert.deepEqual(ari('myFlags', 't1'), [], 'a help request is not a "confusing" flag');
+  void zed;
+});

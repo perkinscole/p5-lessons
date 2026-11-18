@@ -175,21 +175,63 @@ export function createLocalStore() {
       const picked = ['instructions', 'where', 'code', 'errors', 'questions', 'nothing'].filter((k) => (r.confusing || []).includes(k));
       const nothing = picked.includes('nothing');
       db.ratings = (db.ratings || []).filter((x) => !(x.student_id === sid && x.lesson_id === lessonId));
-      db.ratings.push({ student_id: sid, class_id: st.class_id, lesson_id: lessonId, stars, confusing: nothing ? ['nothing'] : picked, step: !nothing && r.step >= 0 ? Math.round(Number(r.step)) : -1, comment: String(r.comment || '').slice(0, 200) });
+      db.ratings.push({ student_id: sid, class_id: st.class_id, lesson_id: lessonId, stars, confusing: nothing ? ['nothing'] : picked, step: !nothing && r.step >= 0 ? Math.round(Number(r.step)) : -1, comment: String(r.comment || '').slice(0, 200), hardest: String(r.hardest || '').slice(0, 200), better: String(r.better || '').slice(0, 200) });
       save();
       return true;
     },
+    async flagStep(lessonId, target, reason, note) {
+      const sid = readSession().id;
+      const st = db.students.find((x) => x.id === sid);
+      db.flags = (db.flags || []).filter((f) => !(f.student_id === sid && f.lesson_id === lessonId && f.target === target && f.reason !== 'help'));
+      if (reason) db.flags.push({ student_id: sid, class_id: st.class_id, lesson_id: lessonId, target, reason, note: String(note || '').slice(0, 200) });
+      save();
+      return true;
+    },
+    myFlags: async (lessonId) => clone((db.flags || []).filter((f) => f.student_id === readSession().id && f.lesson_id === lessonId && f.reason !== 'help').map((f) => ({ target: f.target, reason: f.reason }))),
+    async askHelp(lessonId, step, note) {
+      const sid = readSession().id;
+      const st = db.students.find((x) => x.id === sid);
+      const old = (db.help || []).find((x) => x.student_id === sid);
+      db.help = [...(db.help || []).filter((x) => x.student_id !== sid), { student_id: sid, class_id: st.class_id, lesson_id: lessonId, step: Number(step) || 0, note: String(note || '').slice(0, 140), at: now() }];
+      if (!old || old.lesson_id !== lessonId || old.step !== (Number(step) || 0)) db.flags = [...(db.flags || []), { student_id: sid, class_id: st.class_id, lesson_id: lessonId, target: `step:${Number(step) || 0}`, reason: 'help', note: '' }];
+      save();
+      return true;
+    },
+    async cancelHelp() { db.help = (db.help || []).filter((x) => x.student_id !== readSession().id); save(); return true; },
+    myHelp: async () => ({ open: (db.help || []).some((x) => x.student_id === readSession().id) }),
+    async helpRequests(classId) {
+      return clone((db.help || []).filter((x) => x.class_id === classId).map((x) => {
+        const st = db.students.find((s) => s.id === x.student_id) || {};
+        return { ...x, display_name: st.display_name || '', avatar: st.avatar || null };
+      }));
+    },
+    async markHelped(classId, studentId) { db.help = (db.help || []).filter((x) => !(x.class_id === classId && x.student_id === studentId)); save(); return true; },
     async lessonRatings(classId) {
+      const ids = new Set(db.students.filter((x) => x.class_id === classId).map((x) => x.id));
       const by = new Map();
-      for (const r of (db.ratings || []).filter((x) => x.class_id === classId)) {
-        const t = by.get(r.lesson_id) || { lesson_id: r.lesson_id, count: 0, total: 0, stars: [0, 0, 0, 0, 0], confusing: {}, steps: {}, comments: [] };
-        t.count++; t.total += r.stars; t.stars[r.stars - 1]++;
-        r.confusing.forEach((k) => { t.confusing[k] = (t.confusing[k] || 0) + 1; });
-        if (r.step >= 0) t.steps[r.step] = (t.steps[r.step] || 0) + 1;
-        if (r.comment) t.comments.push(r.comment);
-        by.set(r.lesson_id, t);
+      const of = (id) => { if (!by.has(id)) by.set(id, { lesson_id: id, started: 0, finished: 0, count: 0, total: 0, stars: [0, 0, 0, 0, 0], confusing: {}, steps: {}, comments: [], hardest: [], better: [], flags: {}, help: {}, quiz: {} }); return by.get(id); };
+      for (const w of db.works.filter((x) => ids.has(x.student_id))) {
+        const t = of(w.lesson_id);
+        t.started++;
+        if (w.status !== 'in_progress') t.finished++;
+        for (const [q, right] of Object.entries(w.quiz_first || {})) { const tally = t.quiz[q] || { tries: 0, missed: 0 }; tally.tries++; if (!right) tally.missed++; t.quiz[q] = tally; }
       }
-      return clone([...by.values()].map(({ total, ...t }) => ({ ...t, average: Math.round((total / t.count) * 10) / 10 })));
+      for (const r of (db.ratings || []).filter((x) => x.class_id === classId)) {
+        const t = of(r.lesson_id);
+        t.count++; t.total += r.stars; t.stars[r.stars - 1]++;
+        (r.confusing || []).forEach((k) => { t.confusing[k] = (t.confusing[k] || 0) + 1; });
+        if (r.step >= 0) t.steps[r.step] = (t.steps[r.step] || 0) + 1;
+        for (const k of ['comment', 'hardest', 'better']) if (r[k]) t[k === 'comment' ? 'comments' : k].push(r[k]);
+      }
+      for (const f of (db.flags || []).filter((x) => x.class_id === classId)) {
+        const t = of(f.lesson_id);
+        if (f.reason === 'help') { const n = f.target.split(':')[1]; t.help[n] = (t.help[n] || 0) + 1; continue; }
+        const tally = t.flags[f.target] || { count: 0, reasons: {}, notes: [] };
+        tally.count++; tally.reasons[f.reason] = (tally.reasons[f.reason] || 0) + 1;
+        if (f.note) tally.notes.push(f.note);
+        t.flags[f.target] = tally;
+      }
+      return clone([...by.values()].map(({ total, ...t }) => ({ ...t, average: t.count ? Math.round((total / t.count) * 10) / 10 : 0 })));
     },
     // Trail Quest, with the same rules as the server.
     async setWorld(id, opts = {}) {
@@ -366,6 +408,7 @@ export function createLocalStore() {
       works: db.works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, step_at: w.step_at || 0, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
       awards: db.awards.filter((a) => a.student_id === s.id).map((a) => ({ badge_id: a.badge_id, note: a.note, created_at: a.created_at })),
       sprites_shared: db.sprites.filter((sp) => sp.student_id === s.id && sp.published).length,
+      rated: (db.ratings || []).filter((r) => r.student_id === s.id).length,
     })),
 
     async updateProfile(patch) {
@@ -508,7 +551,8 @@ export function createLocalStore() {
         db.works.push(w);
       }
       if (w.status === 'approved') throw new Error('This lesson was approved. Ask your teacher to reopen it.');
-      Object.assign(w, patch, { updated_at: now() });
+      const firstTries = { ...(patch.quiz_first || {}), ...(w.quiz_first || {}) }; // a first try is kept once
+      Object.assign(w, patch, { quiz_first: firstTries, updated_at: now() });
       save();
       return { ...clone(w), team_lost: lost };
     },
