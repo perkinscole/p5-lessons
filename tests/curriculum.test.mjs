@@ -464,3 +464,95 @@ test('stripComments ignores commented code but keeps strings', () => {
   assert.equal(stripComments('"// keep"'), '"// keep"');
   assert.equal(stripComments('x /* gone */ y'), 'x  y');
 });
+
+test('every lesson has a short big question for the class display', async () => {
+  const { BIG_QUESTIONS } = await import('../js/curriculum/big.js');
+  for (const l of allLessons()) {
+    const q = BIG_QUESTIONS[l.id];
+    assert.ok(q, `${l.id} needs a big question in big.js`);
+    assert.match(q, /\?$/, `${l.id}: a big question ends with a question mark`);
+    assert.ok(q.split(/\s+/).length <= 18, `${l.id}: big question is over 18 words`);
+  }
+});
+
+test('placeFor finds where a step goes in the student\'s own code', async () => {
+  const { placeFor } = await import('../js/curriculum/engine.js');
+  const src = 'function setup() {\n  createCanvas(400, 400);\n}\n\nfunction draw() {\n    background(135,206,235);\n  ellipse(1, 2, 3, 4);\n}\n';
+  assert.deepEqual(placeFor(src, { after: 'background(135, 206, 235);' }), { line: 6, how: 'after' });
+  assert.deepEqual(placeFor(src, { before: 'ellipse(1, 2, 3, 4);' }), { line: 7, how: 'before' });
+  assert.deepEqual(placeFor(src, { endOf: 'function draw() {' }), { line: 8, how: 'before' });
+  assert.deepEqual(placeFor(src, { replace: 'createCanvas(400, 400);' }), { line: 2, how: 'replace' });
+  assert.deepEqual(placeFor(src, { end: true }), { line: 8, how: 'end' });
+  assert.equal(placeFor(src, { after: 'nothing like this' }), null);
+  // Every step with an anchor can be placed in the code the student has just before it.
+  let missing = [];
+  for (const l of allLessons()) {
+    for (const path of l.path ? [l.path] : ['platformer', 'adventure', 'arcade', 'mind']) {
+      l.steps.forEach((step, i) => {
+        const at = step.at || step.edits?.[0]?.at;
+        if (!at) return;
+        let before;
+        try { before = buildThrough(l.id, path, i); } catch (_) { return; }
+        if (!placeFor(before, at)) missing.push(`${l.id}/${path} step ${i + 1}`);
+      });
+    }
+  }
+  assert.deepEqual([...new Set(missing)], []);
+});
+
+test('no step hides its first action under "Why?"', () => {
+  // The short instruction is picked from the end of a step's text. If the step has an earlier
+  // action ("Delete the ), then read the message"), only the later part would show. Such steps
+  // need their instruction written by hand in briefs.js.
+  const ACTION = /^(Add|Replace|Write|Change|Make|Create|Press|Run|Use|Put|Click|Open|Try|Move|Draw|Show|Call|Give|Play|Pick|Set|Have|Cut|Delete|Comment|Keep|Read|Wrap|Build|Start|Swap|Choose|Look|Place)\b/;
+  const hidden = [];
+  for (const l of allLessons()) {
+    for (const s of l.steps) {
+      if (s.brief) continue;
+      const { brief } = briefOf(s);
+      const sentences = (s.say || '').split(/(?<=[.!?:])\s+(?=[A-Z`*])/).map((x) => x.trim()).filter(Boolean);
+      if (sentences.some((x) => ACTION.test(x.replace(/^\*+/, '')) && !brief.includes(x))) hidden.push(`${l.id}/${s.title}`);
+    }
+  }
+  assert.deepEqual(hidden, []);
+});
+
+test('instructions say what "it" is', () => {
+  const vague = [];
+  for (const l of allLessons()) for (const s of l.steps) {
+    const { brief } = briefOf(s);
+    if (/^(Add|Put|Use|Call|Wrap|Make|Have) (it|them)\b/.test(brief) || brief.split(/\s+/).length < 4) vague.push(`${l.id}/${s.title}: ${brief}`);
+  }
+  assert.deepEqual(vague, []);
+});
+
+test('the feedback report names files and steps the way students see them, with no ids', async () => {
+  const { buildReport, troubleSteps, quizRows, sourceFile } = await import('../js/curriculum/report.js');
+  const entry = {
+    lesson_id: 't1', started: 3, finished: 1, count: 3, average: 4, stars: [0, 0, 1, 1, 1], confusing: {}, steps: {}, comments: [],
+    hardest: ['making the sun'], better: ['more pictures'],
+    flags: { 'step:2': { count: 2, reasons: { unclear: 2 }, notes: ['where does the | sun line go'] }, 'quiz:1': { count: 1, reasons: { hard: 1 }, notes: [] } },
+    help: { 2: 1, 5: 1 }, quiz: { 0: { tries: 3, missed: 2 } },
+  };
+  assert.equal(sourceFile('m6'), 'js/curriculum/mind.js');
+  assert.deepEqual(troubleSteps(entry).map((s) => [s.index, s.flags, s.help]), [[2, 2, 1], [5, 0, 1]]);
+  assert.equal(quizRows(entry)[0].rate, 2 / 3);
+  const text = buildReport([entry, { ...entry, lesson_id: 'zz' }], { className: 'Period 3', students: 3, date: '2026-11-18' });
+  assert.match(text, /File: `js\/curriculum\/trunk\.js`/);
+  assert.match(text, /\| 3 \| Add a sun \| 2 \| the instructions were unclear 2 \| 1 \|/);
+  assert.match(text, /- Step 3: "where does the \| sun line go"/);
+  assert.match(text, /67% \(2\/3\)/);
+  assert.match(text, /### "What would make this lesson better\?"\n\n- more pictures/);
+  assert.match(text, /student names removed/);
+  assert.equal(buildReport([entry], { className: 'P', students: 1, date: 'd' }, 't3').includes('Hello, Canvas'), false);
+});
+
+test('problem reports read well as Markdown', async () => {
+  const { buildBugReport } = await import('../js/curriculum/report.js');
+  const text = buildBugReport([{ role: 'student', class_name: 'Period 1', at: '2026-11-18T14:00:00Z', page: '/lesson/t3', note: 'Run did nothing\nI pressed it twice', details: { lesson: 't3', step: '2', browser: 'CrOS Chrome/130', screen: '1366x768', errors: ['boom (App:1)'] } }], { date: '11/18/2026' });
+  assert.match(text, /## 1\. Run did nothing/);
+  assert.match(text, /lesson t3, step 3, source `js\/curriculum\/trunk\.js`/);
+  assert.match(text, /> Run did nothing\n> I pressed it twice/);
+  assert.match(text, /boom \(App:1\)/);
+  assert.doesNotMatch(text, /undefined/);
+});

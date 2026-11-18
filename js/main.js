@@ -13,7 +13,10 @@ import { viewArcade } from './views/arcade.js';
 import { viewTeacherHome, viewClass, viewReview, viewCurriculum } from './views/teacher.js';
 import { viewStandards } from './views/standards.js';
 import { viewProject } from './views/project.js';
+import { viewQuest } from './views/quest.js';
 import { applySettings, openSettings } from './settings.js';
+import { initLanguage } from './translate.js';
+import { openBugReport, noteError } from './views/bugs.js';
 
 // On Apps Script the page has google.script. Anywhere else it runs as a browser-only demo.
 const store = window.google?.script ? createAppsScriptStore() : createLocalStore();
@@ -23,7 +26,7 @@ export const go = (hash) => { location.hash = hash; };
 
 const STUDENT_ROUTES = [
   [/^\/$/, viewHome], [/^\/road$/, viewChooseRoad], [/^\/map$/, viewMap], [/^\/character$/, viewCharacter], [/^\/standards$/, viewStandards],
-  [/^\/lesson\/(\w+)$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/sounds$/, viewSounds], [/^\/arcade$/, viewArcade],
+  [/^\/lesson\/(\w+)$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/sounds$/, viewSounds], [/^\/arcade$/, viewArcade], [/^\/quest$/, viewQuest],
 ];
 const TEACHER_ROUTES = [
   [/^\/project\/([\w-]+)$/, viewProject],
@@ -37,16 +40,32 @@ function topbar() {
   const hash = location.hash.slice(1) || '/';
   const link = (href, label) => h('a.nav', { href: `#${href}`, 'aria-current': (href === '/' ? hash === '/' : hash.startsWith(href)) ? 'page' : null }, label);
   const links = s.role === 'student'
-    ? [link('/', 'Home'), link('/map', 'Journey'), link('/character', 'Character'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds'), link('/arcade', 'Arcade')]
-    : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds')];
+    ? [link('/', 'Home'), link('/map', 'Journey'), link('/character', 'Character'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds'), link('/arcade', 'Arcade'), s.class?.world_mode && link('/quest', 'Quest')]
+    : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds'),
+      store.setPreview && h('button.btn.small', { onclick: () => studentView(true), title: 'Use the app as a student would' }, '👀 Student view')];
   const who = s.role === 'student'
     ? [h('img.mini-av', { src: avatarURL(s.student.avatar || defaultAvatar(s.student.id), 2), alt: '' }), s.student.display_name]
     : [s.teacher.display_name];
   return h('header.topbar',
-    h('a.brand', { href: '#/' }, 'Pixel Trail'),
+    h('a.brand', { href: '#/', translate: 'no' }, 'Pixel Trail'),
     h('nav.navs', { 'aria-label': 'Main' }, links),
-    h('div.who', h('button.btn.small', { onclick: openSettings }, 'Display'), who, store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
+    h('div.who', h('button.btn.small', { onclick: openSettings }, 'Display'), h('button.btn.small', { onclick: openBugReport, title: 'Report a problem', 'aria-label': 'Report a problem' }, '🐞'), h('span.who-name', { translate: 'no' }, who), store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
   );
+}
+
+/** Teachers can step into a pretend student of their own, and back out. */
+async function studentView(on) {
+  store.setPreview(on);
+  const s = await attempt(() => store.session());
+  if (!s) { store.setPreview(false); return; }
+  app.session = s;
+  if (location.hash.slice(1) && location.hash.slice(1) !== '/') go('/'); else render();
+}
+function previewBanner() {
+  return h('aside.demo-banner.preview-banner', { 'aria-label': 'Student view' },
+    h('span', '👀 Student view: this is what a student sees. Nothing here reaches your classes. On Character, everything is unlocked so you can try it.'),
+    h('button.btn.small', { onclick: async () => { if (await attempt(() => store.previewReset())) { await studentView(true); toast('Started over as a new student.'); } } }, 'Start over'),
+    h('button.btn.small', { onclick: () => studentView(false) }, 'Back to teacher'));
 }
 
 async function signOut() {
@@ -79,7 +98,7 @@ export async function render() {
   if (!view) { go('/'); return; }
 
   const main = h('main.page', h('p.muted', 'Loading...'));
-  clear(root).append(store.mode === 'local' ? demoBanner() : '', topbar(), main);
+  clear(root).append(store.mode === 'local' ? demoBanner() : '', app.session.preview ? previewBanner() : '', topbar(), main);
   try {
     const content = await view(main, ...match.slice(1));
     if (token !== renderToken) return;
@@ -107,6 +126,22 @@ export async function refreshSession() {
 }
 
 window.addEventListener('hashchange', render);
+// Remembered for a moment, so a problem report can say what the page saw go wrong.
+window.addEventListener('error', (e) => noteError(`${e.message} (${String(e.filename || '').split('/').pop()}:${e.lineno || 0})`));
+window.addEventListener('unhandledrejection', (e) => noteError(`Promise: ${e.reason?.message || e.reason}`));
+initLanguage(store);
+
+// While the server is busy and requests are being retried, say so quietly instead of showing an error.
+let busyNote = null;
+window.addEventListener('app-busy', (e) => {
+  if (e.detail && !busyNote) {
+    busyNote = h('div.toast.busy-note', 'Busy… saving your work. Keep going.');
+    document.getElementById('toasts').append(busyNote);
+  } else if (!e.detail && busyNote) {
+    busyNote.remove();
+    busyNote = null;
+  }
+});
 
 // Handle in-app links here, so they always stay inside the frame Apps Script serves the app in.
 document.addEventListener('click', (e) => {
@@ -119,7 +154,9 @@ document.addEventListener('click', (e) => {
 applySettings();
 
 (async function start() {
+  window.__ptBooted = true; // Index.html's startup check reads these two.
   document.getElementById('app').append(h('p.muted.boot', 'Loading Pixel Trail...'));
   app.session = await attempt(() => store.session()) || null;
-  render();
+  await render();
+  window.__ptStarted = true;
 })();

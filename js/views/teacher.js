@@ -11,11 +11,14 @@ import { buildMap, legend, leaderboard } from './map.js';
 import { makeEditor } from './lesson.js';
 import { openImport, assignmentsTab, keepingUpTab } from './classroom.js';
 import { groupsTab, sendGradesTab, teamPanel } from './groups.js';
+import { feedbackTab, helpCard } from './feedback.js';
+import { bugsCard } from './bugs.js';
 import { badgeChip } from './student.js';
 
 export async function viewTeacherHome() {
-  const classes = await app.store.listClasses();
-  const alerts = app.store.alertSummary ? await app.store.alertSummary() : {};
+  const [classes, alerts, data, bugs] = await Promise.all([app.store.listClasses(), app.store.alertSummary ? app.store.alertSummary() : {},
+    // Only the teacher who set the app up gets an answer here.
+    app.store.dataInfo().catch(() => null), app.store.bugReports().catch(() => [])]);
   const name = h('input', { required: true, maxlength: 80, placeholder: 'Period 3: Game Design', 'aria-label': 'New class name' });
   return h('div.stack',
     h('div.row.between', h('h1', 'Your classes'), app.store.hasClassroom && h('button.btn', { onclick: () => openImport(render) }, 'Import from Google Classroom')),
@@ -29,6 +32,8 @@ export async function viewTeacherHome() {
         if (c) go(`/class/${c.id}`);
       },
     }, name, h('button.btn.primary', { type: 'submit' }, 'Create class')),
+    bugsCard(bugs),
+    data && dataCard(data),
     h('section.card.stack',
       h('h2', 'How a class works'),
       h('ol.howto',
@@ -41,6 +46,42 @@ export async function viewTeacherHome() {
       ),
     ),
   );
+}
+
+/** Where the app keeps its data, with backups and the tools to get it back. Only the owner sees it. */
+function dataCard(first) {
+  const body = h('div.stack');
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : (word.endsWith('s') ? 'es' : 's')}`;
+  const draw = (d) => {
+    const switchLink = h('input', { placeholder: 'Paste a Google Sheet link', 'aria-label': 'Link to the Sheet to use' });
+    const combineLink = h('input', { placeholder: 'Paste a Google Sheet link', 'aria-label': 'Link to the Sheet to bring in' });
+    clear(body).append(
+      h('p', 'Everything is stored in ', h('a', { href: d.url, target: '_blank', rel: 'noopener' }, d.name), `: ${plural(d.classes, 'class')}, ${plural(d.students, 'student')}.`),
+      h('div.row',
+        h('button.btn.small', { onclick: async () => { const next = await attempt(() => app.store.backupNow()); if (next) { toast('Backup saved to your Google Drive.'); draw(next); } } }, 'Back up now'),
+        h('span.muted', d.backups.length ? 'Backups: ' : 'A backup is made each day you open the app.'),
+        d.backups.slice(0, 5).map((b) => h('a', { href: b.url, target: '_blank', rel: 'noopener' }, b.day))),
+      h('details', h('summary', 'Classes or students look missing?'),
+        h('div.stack',
+          h('p.muted', 'Do not make them again. First check the Sheet above is the right one. If your data is in a different Sheet, use it or bring it in here.'),
+          d.history.length > 1 && h('p.muted', 'Sheets this app has used: ', d.history.map((x, i) => [i ? ', ' : '', h('a', { href: `https://docs.google.com/spreadsheets/d/${x.id}/edit`, target: '_blank', rel: 'noopener' }, new Date(x.at).toLocaleDateString())])),
+          h('form.row', { onsubmit: async (e) => {
+            e.preventDefault();
+            if (!await confirmBox('Use this Sheet instead?', 'The app will read and save there from now on. Nothing is copied or deleted.', 'Use it')) return;
+            const next = await attempt(() => app.store.dataSwitch(switchLink.value));
+            if (next) { toast('Now using that Sheet.'); location.reload(); }
+          } }, switchLink, h('button.btn.small', { type: 'submit' }, 'Use this Sheet')),
+          h('form.row', { onsubmit: async (e) => {
+            e.preventDefault();
+            const plan = await attempt(() => app.store.dataCombine(combineLink.value, false));
+            if (!plan) return;
+            const adds = `It adds ${plural(plan.classes, 'class')}, ${plural(plan.students, 'student')}, and ${plural(plan.lessons, 'lesson')}. ${plural(plan.same_students, 'student')} in both keep the best of each lesson (${plan.better_lessons} improved). Nothing is removed, and a backup is made first.`;
+            if (!await confirmBox(`Bring in "${plan.name}"?`, adds, 'Bring it in')) return;
+            if (await attempt(() => app.store.dataCombine(combineLink.value, true))) { toast('Combined.'); location.reload(); }
+          } }, combineLink, h('button.btn.small', { type: 'submit' }, 'Bring in its data')))));
+  };
+  draw(first);
+  return h('details.card.data-card', h('summary', h('strong', 'Your data and backups')), body);
 }
 
 function rosterTab(cls, students, board, reload) {
@@ -219,25 +260,69 @@ function journeyTab(board, cls) {
   );
 }
 
+/** Trail Quest: closed, earned by lessons, or open to everyone. It starts closed. */
+function questButton(cls) {
+  const mode = cls.world_mode || '';
+  const label = mode === 'earned' ? '🗺️ Trail Quest: Earned' : mode === 'free' ? '🗺️ Trail Quest: Open' : '🔒 Trail Quest: Closed';
+  return h('button.btn', { onclick: () => modal((close) => {
+    const choice = (value, title, text) => h('label.check', h('input', { type: 'radio', name: 'quest-mode', value, checked: mode === value }), h('span', h('strong', title), ` ${text}`));
+    const mins = h('input', { type: 'number', min: 1, max: 15, value: cls.world_mins || 5, style: 'width:5em', 'aria-label': 'Minutes each lesson earns' });
+    const form = h('form.stack', { onsubmit: async (e) => {
+      e.preventDefault();
+      const picked = form.querySelector('input[name="quest-mode"]:checked').value;
+      if (await attempt(() => app.store.setWorld(cls.id, { mode: picked, mins: Number(mins.value) }))) { toast('Trail Quest updated.'); close(); render(); }
+    } },
+    h('h2', 'Trail Quest'),
+    h('p.muted.small', 'A small adventure game students play as their character. Their gear gives them powers. It never uses grades.'),
+    choice('', 'Closed.', 'Nobody can play.'),
+    choice('earned', 'Earned.', 'Each lesson a student submits earns play time.'),
+    choice('free', 'Open.', 'Everyone can play, with no time used up. Good for a reward day.'),
+    h('label.field.small', h('span', 'Minutes each lesson earns'), mins),
+    h('div.row.end', h('button.btn', { type: 'button', onclick: close }, 'Cancel'), h('button.btn.primary', { type: 'submit' }, 'Save')));
+    return form;
+  }) }, label);
+}
+
+/** Lets students use the Music Maker, or closes it. It starts closed. */
+function musicToggle(cls) {
+  const open = !!cls.music_open;
+  return h('button.btn', {
+    'aria-pressed': open ? 'true' : 'false',
+    title: open ? 'Students can compose music. Press to close the Music Maker.' : 'Students can\'t use the Music Maker. Press to open it.',
+    onclick: async () => {
+      if (await attempt(() => app.store.setMusicOpen(cls.id, !open))) {
+        toast(open ? 'Music Maker closed for this class.' : 'Music Maker open for this class.');
+        render();
+      }
+    },
+  }, open ? '🎵 Music Maker: Open' : '🔒 Music Maker: Closed');
+}
+
 export async function viewClass(main, classId, tabParam) {
   const tab = tabParam || 'journey';
-  const cls = await app.store.getClass(classId);
+  // Asked for together, so they travel to the server as one trip.
+  const [cls, students, board, works, alerts] = await Promise.all([app.store.getClass(classId), app.store.listStudents(classId), app.store.classBoard(classId), app.store.classWork(classId),
+    app.store.classAlerts ? app.store.classAlerts(classId, false) : { students: [] }]);
   if (!cls) throw new Error('That class was not found.');
-  const [students, board, works] = await Promise.all([app.store.listStudents(classId), app.store.classBoard(classId), app.store.classWork(classId)]);
   const waiting = works.filter((w) => w.status === 'submitted').length;
   const link = (id, label) => h('a.tab', { href: `#/class/${classId}/${id}`, role: 'tab', 'aria-selected': tab === id ? 'true' : 'false' }, label);
-  const alerts = app.store.classAlerts ? await app.store.classAlerts(classId, false) : { students: [] };
   const needing = alerts.students.filter((s) => s.level !== 'ok').length;
   const content = tab === 'roster' ? rosterTab(cls, students, board, render)
     : tab === 'grades' ? gradebookTab(cls, students, works)
       : tab === 'groups' ? await groupsTab(cls, students, render)
+      : tab === 'feedback' ? await feedbackTab(cls, students).catch((e) => h('p.warn', e.message))
       : tab === 'send' ? await sendGradesTab(cls, render).catch((e) => h('p.warn', e.message))
       : tab === 'assignments' ? await assignmentsTab(cls)
         : tab === 'keeping' ? await keepingUpTab(cls, render)
           : journeyTab(board, cls);
+  // Students asking for help show here straight away, with a doorbell, whichever tab is open.
+  const help = helpCard(classId);
+  const before = app.cleanup;
+  app.cleanup = () => { help.stop(); if (before) return before(); return undefined; };
   return h('div.stack',
-    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
-    h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('groups', 'Groups'), link('send', 'Send grades'), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
+    h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), musicToggle(cls), questButton(cls), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
+    h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('groups', 'Groups'), link('feedback', 'Feedback'), link('send', 'Classroom grades'), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
+    help.el,
     content,
   );
 }

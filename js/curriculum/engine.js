@@ -111,6 +111,47 @@ export function applyEdit(src, code, at) {
   throw new Error(`Unknown edit position: ${JSON.stringify(at)}`);
 }
 
+/**
+ * Where a step's code goes in the student's own code, as a line number, so the lesson can say
+ * "new line after line 6". Matches the anchor's first line ignoring spaces, since students indent
+ * their own way. Returns null when the student's code no longer has the anchor.
+ *   { line, how }  how: 'after' | 'before' | 'replace' | 'top' | 'end'
+ */
+export function placeFor(src, at) {
+  if (!at) return null;
+  const lines = src.split('\n');
+  const squash = (t) => t.replace(/\s+/g, '');
+  const find = (needle) => {
+    const first = squash(String(needle).split('\n')[0]);
+    if (!first) return -1;
+    return lines.findIndex((l) => squash(l).includes(first));
+  };
+  if (at.top) return { line: 1, how: 'top' };
+  if (at.end) {
+    let last = lines.length;
+    while (last > 1 && !lines[last - 1].trim()) last--;
+    return { line: last, how: 'end' };
+  }
+  if (at.replace !== undefined) { const i = find(at.replace); return i < 0 ? null : { line: i + 1, how: 'replace' }; }
+  if (at.after !== undefined) {
+    const i = find(at.after);
+    if (i < 0) return null;
+    // An anchor can span lines; the new code goes after its last line.
+    const span = String(at.after).split('\n').length - 1;
+    return { line: i + 1 + span, how: 'after' };
+  }
+  if (at.before !== undefined) { const i = find(at.before); return i < 0 ? null : { line: i + 1, how: 'before' }; }
+  if (at.endOf !== undefined) {
+    const i = find(at.endOf);
+    if (i < 0) return null;
+    const offset = lines.slice(0, i).reduce((a, l) => a + l.length + 1, 0);
+    const close = matchingBrace(src, offset);
+    if (close === -1) return null;
+    return { line: src.slice(0, close).split('\n').length, how: 'before' };
+  }
+  return null;
+}
+
 /** The code a lesson starts from when the student has no saved prior work. */
 export function fallbackStarter(l, prevId, path) {
   if (l.starter !== undefined) return l.starter;

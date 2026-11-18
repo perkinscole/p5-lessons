@@ -1,16 +1,21 @@
 // The class display: what a teacher projects during student-led work time.
 // Everything here is safe to show the room: no scores, feedback, or emails.
-import { h, clear, md, modal, toast, attempt } from '../ui.js';
+import { h, clear, modal, toast, attempt } from '../ui.js';
 import { app, go } from '../main.js';
 import { readButton } from '../settings.js';
 import { getLesson } from '../curriculum/engine.js';
-import { PATHS, STAGES, stageOf, isSideTrail } from '../curriculum/graph.js';
+import { PATHS, STAGES, stageOf, isSideTrail, sequence } from '../curriculum/graph.js';
 import { alignmentFor, coverage, standardByCode } from '../curriculum/alignment.js';
-import { checksFor } from '../curriculum/checks.js';
+import { bigQuestionFor } from '../curriculum/big.js';
 import { recentAchievements } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { stageSceneStyle } from '../game/world.js';
 import { standingOn } from './map.js';
+import { helpCard } from './feedback.js';
+import { chime } from '../celebrate.js';
+
+// Students with an open "I'm stuck" request, so their character can wave on the display.
+let needsHelp = new Set();
 
 const todayKey = () => new Date().toLocaleDateString('en-CA');
 const shortCode = (code) => code.replace('6-8.', '');
@@ -28,14 +33,10 @@ export function lessonsInUse(board) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ id, n }));
 }
 
-function dayNumber() {
-  return Math.floor(Date.now() / 86400000);
-}
-
-/** A check question from whatever most of the class is working on, stable for the day. */
+/** The big question of the lesson most of the class is on: what today is really about. */
 function suggestedQuestion(lessons) {
-  const pool = lessons.slice(0, 3).flatMap(({ id }) => checksFor(id));
-  return pool.length ? pool[dayNumber() % pool.length] : null;
+  for (const { id } of lessons) if (bigQuestionFor(id)) return { q: bigQuestionFor(id), id };
+  return null;
 }
 
 function autoStandards(lessons) {
@@ -58,28 +59,78 @@ const columnOf = (id) => {
   return st.beyond ? 'beyond' : st.id;
 };
 
-function progression(board) {
-  const groups = new Map(COLUMNS.map((c) => [c.key, []]));
-  for (const s of board) groups.get(columnOf(standingOn(s)))?.push(s);
-  // Busier stages get more room, so nobody ends up off the bottom.
-  const widths = COLUMNS.map((c) => `minmax(11vh, ${(1 + groups.get(c.key).length / 2.5).toFixed(2)}fr)`).join(' ');
-  return h('div.pj-trail', { style: `grid-template-columns:${widths}` }, COLUMNS.map((c) => h('section.pj-stage', { style: stageSceneStyle(c.key) },
-    h('h3', c.name),
-    h('div.pj-people', groups.get(c.key).map((s) => h('div.pj-person', { title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
-      h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '' }),
-      h('span', s.display_name)))),
-  )));
+/** Use the largest character size at which every student is visible, on the trail and in the race. */
+function fitTrail(root) {
+  for (const [box, part] of [['.pj-race', '.pj-racers']]) {
+    const el = root.querySelector(box);
+    if (!el) continue;
+    for (const size of ['large', 'medium', 'small', 'tiny']) {
+      el.classList.remove('large', 'medium', 'small', 'tiny');
+      el.classList.add(size);
+      if (![...el.querySelectorAll(part)].some((st) => st.scrollHeight > st.clientHeight + 1)) break;
+    }
+  }
 }
 
-/** Use the largest character size at which every student is visible. */
-function fitTrail(root) {
-  const trail = root.querySelector('.pj-trail');
-  if (!trail) return;
-  for (const size of ['large', 'medium', 'small', 'tiny']) {
-    trail.classList.remove('large', 'medium', 'small', 'tiny');
-    trail.classList.add(size);
-    if (![...trail.querySelectorAll('.pj-stage')].some((st) => st.scrollHeight > st.clientHeight + 1)) return;
+const sameDay = (iso) => !!iso && new Date(iso).toLocaleDateString('en-CA') === todayKey();
+// A student who asked for help just bounces and glows a little. Who it is and what they wrote stay
+// off the projector: the teacher opens the list from the small ✋ button.
+const personChip = (s) => h('div.pj-person', { translate: 'no', class: needsHelp.has(s.id) ? 'needs-help' : '', title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
+  h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '' }),
+  h('span', s.display_name));
+
+/**
+ * The lesson most of the class is on, as a race: each step is a stop, and each student stands at
+ * the furthest step they have reached. Students who submit it today cross the finish.
+ */
+function racePanel(board, lessons, focus) {
+  const main = lessons[0];
+  if (!main) return h('section.pj-panel.pj-race-panel', h('h2', 'Today'), h('p.pj-sub', 'Nobody has started yet. Open Home to begin.'));
+  const lesson = getLesson(main.id);
+  const last = lesson.steps.length - 1;
+  const stops = [
+    { key: 'start', mark: '▶', label: 'Not started' },
+    ...lesson.steps.map((st, i) => ({ key: i, mark: String(i + 1), label: st.title })),
+    { key: 'finish', mark: '🏁', label: 'Submitted' },
+  ];
+  const at = new Map(stops.map((st) => [st.key, []]));
+  const others = [];
+  for (const s of board) {
+    const w = s.works.find((x) => x.lesson_id === main.id);
+    const handedIn = w && (w.status === 'submitted' || w.status === 'approved');
+    if (standingOn(s) === main.id) {
+      if (!w) at.get('start').push(s);
+      else if (handedIn) at.get('finish').push(s);
+      else at.get(Math.min(Number(w.step_at) || 0, last)).push(s);
+    } else if (handedIn && sameDay(w.submitted_at)) at.get('finish').push(s);
+    else others.push(s);
   }
+  const working = lesson.steps.reduce((a, _, i) => a + at.get(i).length, 0);
+  const busiest = Math.max(...lesson.steps.map((_, i) => at.get(i).length));
+  const where = (s) => {
+    const id = standingOn(s);
+    const n = sequence(s.path).indexOf(id) + 1;
+    return n ? `Lesson ${n}` : getLesson(id).title;
+  };
+  return h('section.pj-panel.pj-race-panel',
+    h('div.pj-race-head',
+      h('h2', `Today: ${lesson.title}`),
+      h('span.pj-sub', `${working} working · ${at.get('finish').length} submitted · ${at.get('start').length} not started`)),
+    focus.length > 0 && h('ul.pj-race-focus', focus.map((x) => h('li', x))),
+    // The race happens inside its stage's scenery: Base Camp's tents, the forest, the summit.
+    // A crowded stop gets a wider column, so the characters can stay big.
+    h('div.pj-race.pj-scene', { style: `grid-template-columns:${stops.map((st) => `minmax(9.5vh, ${1.5 + 1.5 * at.get(st.key).length}fr)`).join(' ')};${stageSceneStyle(columnOf(main.id))}` },
+      stops.map((st) => {
+        const here = at.get(st.key);
+        const busy = typeof st.key === 'number' && here.length > 0 && here.length === busiest;
+        return h('div.pj-stop', { class: `${typeof st.key === 'number' ? '' : st.key} ${busy ? 'busy' : ''}` },
+          h('div.pj-stop-mark', st.mark),
+          h('div.pj-stop-label', st.label),
+          h('div.pj-racers', here.map(personChip)));
+      })),
+    others.length > 0 && h('div.pj-others', h('strong', 'On other lessons:'),
+      others.map((s) => h('span.pj-other', { class: needsHelp.has(s.id) ? 'needs-help' : '' }, h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 2), alt: '' }), `${s.display_name} · ${where(s)}`))),
+  );
 }
 
 function achievements(board) {
@@ -99,7 +150,7 @@ function achievements(board) {
 function openSetup(plan, lessons, onSave) {
   const suggested = suggestedQuestion(lessons);
   const q = h('textarea', { rows: 2, maxlength: 200, value: plan.question, placeholder: suggested ? `Blank uses: ${suggested.q}` : 'Type a question' });
-  const focus = h('textarea', { rows: 3, maxlength: 300, value: plan.focus, placeholder: 'One item per line. Blank shows the lessons students are on.' });
+  const focus = h('textarea', { rows: 3, maxlength: 300, value: plan.focus, placeholder: 'Optional. One item per line, shown above the race.' });
   const endValue = plan.timer_end ? new Date(plan.timer_end) : null;
   const pad = (n) => String(n).padStart(2, '0');
   const end = h('input', { type: 'time', value: endValue ? `${pad(endValue.getHours())}:${pad(endValue.getMinutes())}` : '' });
@@ -133,11 +184,10 @@ function openSetup(plan, lessons, onSave) {
 }
 
 export async function viewProject(main, classId) {
-  const cls = await app.store.getClass(classId);
+  const [cls, firstBoard, savedPlan] = await Promise.all([app.store.getClass(classId), app.store.classBoard(classId), app.store.getClassPlan(classId)]);
   if (!cls) throw new Error('That class was not found.');
-  let board = await app.store.classBoard(classId);
-  let plan = currentPlan(await app.store.getClassPlan(classId));
-  let showAnswer = false;
+  let board = firstBoard;
+  let plan = currentPlan(savedPlan);
 
   const clock = h('div.pj-clock', { 'aria-live': 'off' });
   const panels = h('div.pj-panels');
@@ -174,30 +224,14 @@ export async function viewProject(main, classId) {
     openSetup(plan, lessonsInUse(board), savePlan);
   }
 
-  function workPanel(lessons) {
-    const custom = plan.focus.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 3);
-    return h('section.pj-panel.pj-work',
-      h('h2', 'Today'),
-      custom.length
-        ? h('ul.pj-focus', custom.map((x) => h('li', x)))
-        : h('ul.pj-focus', lessons.slice(0, 3).map(({ id, n }) => h('li', getLesson(id).title, h('span.pj-count', n)))),
-      !custom.length && h('p.pj-sub', 'Open Home and keep going on your next lesson.'),
-    );
-  }
-
   function questionPanel(lessons) {
     const bank = plan.question ? null : suggestedQuestion(lessons);
     return h('section.pj-panel.pj-question',
-      h('div.read-row', h('h2', 'Question of the day'), readButton(() => (plan.question || (bank ? `${bank.q} ${bank.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}` : '')))),
+      h('div.read-row', h('h2', 'Question of the day'), readButton(() => plan.question || (bank ? bank.q : ''))),
       plan.question
         ? h('p.pj-q', plan.question)
         : bank
-          ? [
-            h('div.pj-q', md(bank.q)),
-            bank.code && h('pre.snippet.pj-code', h('code', bank.code)),
-            h('ol.pj-options', { type: 'A' }, bank.options.map((o, i) => h('li', { class: showAnswer && i === bank.answer ? 'right' : '' }, md(o)))),
-            h('button.pj-reveal', { onclick: () => { showAnswer = !showAnswer; draw(); } }, showAnswer ? 'Hide answer' : 'Show answer'),
-          ]
+          ? [h('p.pj-q', bank.q), h('p.pj-from', getLesson(bank.id).title)]
           : h('p.pj-empty', 'Set a question for today.'),
     );
   }
@@ -206,16 +240,16 @@ export async function viewProject(main, classId) {
     const codes = plan.standards.length ? plan.standards : autoStandards(lessons);
     return h('section.pj-panel.pj-standards',
       h('h2', 'MA DLCS standards'),
-      h('ul', codes.map((c) => h('li', h('strong', shortCode(c)), ' ', standardByCode(c).text))),
+      h('ul', codes.map((c) => h('li', { translate: 'no' }, h('strong', shortCode(c)), ' ', standardByCode(c).text))),
     );
   }
 
   function draw() {
     const lessons = lessonsInUse(board);
+    const custom = plan.focus.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 3);
     clear(panels).append(
-      workPanel(lessons),
+      racePanel(board, lessons, custom),
       questionPanel(lessons),
-      h('section.pj-panel.pj-progress', h('h2', 'The trail'), progression(board)),
       h('section.pj-panel.pj-feed-panel', h('h2', 'Recent achievements'), achievements(board)),
       standardsPanel(lessons),
     );
@@ -228,14 +262,27 @@ export async function viewProject(main, classId) {
   const ticker = setInterval(tick, 1000);
   // Light polling: one call a minute keeps the display current without using up the class's quota.
   const poller = setInterval(async () => {
+    if (document.hidden) return;
     const fresh = await attempt(() => app.store.classBoard(classId));
     if (fresh) { board = fresh; draw(); }
   }, 60000);
+
+  // Help requests are checked every few seconds, apart from the slower refresh above.
+  needsHelp = new Set();
+  const helpButton = h('button.btn.small.pj-help-btn', { hidden: true, title: 'See who asked for help', onclick: () => modal((close) => h('div.stack', help.el, h('div.row.end', h('button.btn.primary', { onclick: close }, 'Done')))) });
+  const help = helpCard(classId, { onUpdate: (list) => {
+    helpButton.hidden = list.length === 0;
+    helpButton.textContent = `✋ ${list.length}`;
+    helpButton.setAttribute('aria-label', `${list.length} asked for help. Open the list.`);
+    const next = new Set(list.map((r) => r.student_id));
+    if (next.size !== needsHelp.size || [...next].some((x) => !needsHelp.has(x))) { needsHelp = next; draw(); }
+  } });
 
   const onResize = () => fitTrail(panels);
   window.addEventListener('resize', onResize);
   document.body.classList.add('projecting');
   app.cleanup = () => {
+    help.stop();
     window.removeEventListener('resize', onResize);
     clearInterval(ticker);
     clearInterval(poller);
@@ -252,7 +299,9 @@ export async function viewProject(main, classId) {
     h('header.pj-head',
       h('div', h('h1', cls.name), h('p', new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))),
       h('div.pj-controls',
+        helpButton,
         h('button.btn.small', { onclick: setup }, 'Set up today'),
+        h('button.btn.small', { title: 'Play the help doorbell, to test the sound on this computer', 'aria-label': 'Test the help doorbell', onclick: () => chime('doorbell') }, '🔔'),
         h('button.btn.small', { onclick: fullScreen }, 'Full screen'),
         h('button.btn.small', { onclick: () => go(`/class/${classId}`) }, 'Exit')),
       clock,

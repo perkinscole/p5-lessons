@@ -74,6 +74,19 @@ export function createLocalStore() {
   save();
   const readSession = () => { try { return JSON.parse(localStorage.getItem(SESSION)); } catch (_) { return null; } };
   const writeSession = (s) => { try { if (s) localStorage.setItem(SESSION, JSON.stringify(s)); else localStorage.removeItem(SESSION); } catch (_) { /* private mode */ } };
+  /** Best approved grade per student for one lesson number, scaled to the assignment's points. */
+  const demoSlotGrades = (classId, slot, points) => {
+    const best = new Map();
+    for (const st of db.students.filter((x) => x.class_id === classId)) {
+      for (const w of db.works.filter((x) => x.student_id === st.id && x.status === 'approved' && slot.ids.includes(x.lesson_id))) {
+        const g = db.grades.find((x) => x.work_id === w.id);
+        if (!g) continue;
+        const value = Math.round((g.total / (g.max_total || 1)) * points * 10) / 10;
+        if (!best.has(st.id) || value > best.get(st.id).value) best.set(st.id, { id: st.id, value });
+      }
+    }
+    return [...best.values()];
+  };
   const publicStudent = ({ passcode, ...s }) => clone(s);
   const me = () => {
     const s = readSession();
@@ -86,6 +99,7 @@ export function createLocalStore() {
   const mine = () => db.students.find((x) => x.id === readSession()?.id);
   const withGrade = (w) => ({ ...clone(w), grade: clone(db.grades.find((g) => g.work_id === w.id) || null) });
   const meta = ({ code, assets, ...w }) => w;
+  const demoHolders = (team) => Object.fromEntries(Object.entries(team.holders || {}).filter(([, h]) => h.until > Date.now()).map(([f, h]) => [f, h.id]));
   const teamOf = (sid, lessonId) => (db.teams || []).find((t) => t.lesson_id === lessonId && t.members.includes(sid));
   const mirror = (studentId, lessonId, doc) => {
     let w = db.works.find((x) => x.student_id === studentId && x.lesson_id === lessonId);
@@ -151,6 +165,136 @@ export function createLocalStore() {
       save();
     },
     getClass: async (id) => clone(db.classes.find((c) => c.id === id)),
+    // Lesson ratings, with the same rules as the server.
+    async rateLesson(lessonId, r = {}) {
+      const sid = readSession().id;
+      const st = db.students.find((x) => x.id === sid);
+      const stars = Math.round(Number(r.stars));
+      if (!(stars >= 1 && stars <= 5)) throw new Error('Pick 1 to 5 stars.');
+      if (!db.works.some((w) => w.student_id === sid && w.lesson_id === lessonId)) throw new Error('Start the lesson before you rate it.');
+      const picked = ['instructions', 'where', 'code', 'errors', 'questions', 'nothing'].filter((k) => (r.confusing || []).includes(k));
+      const nothing = picked.includes('nothing');
+      db.ratings = (db.ratings || []).filter((x) => !(x.student_id === sid && x.lesson_id === lessonId));
+      db.ratings.push({ student_id: sid, class_id: st.class_id, lesson_id: lessonId, stars, confusing: nothing ? ['nothing'] : picked, step: !nothing && r.step >= 0 ? Math.round(Number(r.step)) : -1, comment: String(r.comment || '').slice(0, 200), hardest: String(r.hardest || '').slice(0, 200), better: String(r.better || '').slice(0, 200) });
+      save();
+      return true;
+    },
+    async flagStep(lessonId, target, reason, note) {
+      const sid = readSession().id;
+      const st = db.students.find((x) => x.id === sid);
+      db.flags = (db.flags || []).filter((f) => !(f.student_id === sid && f.lesson_id === lessonId && f.target === target && f.reason !== 'help'));
+      if (reason) db.flags.push({ student_id: sid, class_id: st.class_id, lesson_id: lessonId, target, reason, note: String(note || '').slice(0, 200) });
+      save();
+      return true;
+    },
+    myFlags: async (lessonId) => clone((db.flags || []).filter((f) => f.student_id === readSession().id && f.lesson_id === lessonId && f.reason !== 'help').map((f) => ({ target: f.target, reason: f.reason }))),
+    async askHelp(lessonId, step, note) {
+      const sid = readSession().id;
+      const st = db.students.find((x) => x.id === sid);
+      const old = (db.help || []).find((x) => x.student_id === sid);
+      db.help = [...(db.help || []).filter((x) => x.student_id !== sid), { student_id: sid, class_id: st.class_id, lesson_id: lessonId, step: Number(step) || 0, note: String(note || '').slice(0, 140), at: now() }];
+      if (!old || old.lesson_id !== lessonId || old.step !== (Number(step) || 0)) db.flags = [...(db.flags || []), { student_id: sid, class_id: st.class_id, lesson_id: lessonId, target: `step:${Number(step) || 0}`, reason: 'help', note: '' }];
+      save();
+      return true;
+    },
+    async cancelHelp() { db.help = (db.help || []).filter((x) => x.student_id !== readSession().id); save(); return true; },
+    myHelp: async () => ({ open: (db.help || []).some((x) => x.student_id === readSession().id) }),
+    async helpRequests(classId) {
+      return clone((db.help || []).filter((x) => x.class_id === classId).map((x) => {
+        const st = db.students.find((s) => s.id === x.student_id) || {};
+        return { ...x, display_name: st.display_name || '', avatar: st.avatar || null };
+      }));
+    },
+    async markHelped(classId, studentId) { db.help = (db.help || []).filter((x) => !(x.class_id === classId && x.student_id === studentId)); save(); return true; },
+    async lessonRatings(classId) {
+      const ids = new Set(db.students.filter((x) => x.class_id === classId).map((x) => x.id));
+      const by = new Map();
+      const of = (id) => { if (!by.has(id)) by.set(id, { lesson_id: id, started: 0, finished: 0, count: 0, total: 0, stars: [0, 0, 0, 0, 0], confusing: {}, steps: {}, comments: [], hardest: [], better: [], flags: {}, help: {}, quiz: {} }); return by.get(id); };
+      for (const w of db.works.filter((x) => ids.has(x.student_id))) {
+        const t = of(w.lesson_id);
+        t.started++;
+        if (w.status !== 'in_progress') t.finished++;
+        for (const [q, right] of Object.entries(w.quiz_first || {})) { const tally = t.quiz[q] || { tries: 0, missed: 0 }; tally.tries++; if (!right) tally.missed++; t.quiz[q] = tally; }
+      }
+      for (const r of (db.ratings || []).filter((x) => x.class_id === classId)) {
+        const t = of(r.lesson_id);
+        t.count++; t.total += r.stars; t.stars[r.stars - 1]++;
+        (r.confusing || []).forEach((k) => { t.confusing[k] = (t.confusing[k] || 0) + 1; });
+        if (r.step >= 0) t.steps[r.step] = (t.steps[r.step] || 0) + 1;
+        for (const k of ['comment', 'hardest', 'better']) if (r[k]) t[k === 'comment' ? 'comments' : k].push(r[k]);
+      }
+      for (const f of (db.flags || []).filter((x) => x.class_id === classId)) {
+        const t = of(f.lesson_id);
+        if (f.reason === 'help') { const n = f.target.split(':')[1]; t.help[n] = (t.help[n] || 0) + 1; continue; }
+        const tally = t.flags[f.target] || { count: 0, reasons: {}, notes: [] };
+        tally.count++; tally.reasons[f.reason] = (tally.reasons[f.reason] || 0) + 1;
+        if (f.note) tally.notes.push(f.note);
+        t.flags[f.target] = tally;
+      }
+      return clone([...by.values()].map(({ total, ...t }) => ({ ...t, average: t.count ? Math.round((total / t.count) * 10) / 10 : 0 })));
+    },
+    // Trail Quest, with the same rules as the server.
+    async setWorld(id, opts = {}) {
+      const c = db.classes.find((x) => x.id === id && x.teacher_id === readSession()?.id);
+      if (!c) throw new Error('That class was not found.');
+      c.world_mode = opts.mode === 'earned' || opts.mode === 'free' ? opts.mode : '';
+      c.world_mins = Math.max(1, Math.min(15, Math.round(Number(opts.mins) || 5)));
+      save();
+      return { world_mode: c.world_mode, world_mins: c.world_mins };
+    },
+    async worldState() {
+      const sid = readSession().id;
+      const st = db.students.find((s) => s.id === sid);
+      const cls = db.classes.find((c) => c.id === st.class_id);
+      const mode = cls.world_mode || '';
+      const mins = cls.world_mins || 5;
+      const world = db.world || {};
+      const mine = world[sid] || { used: 0, best: 0, total: 0, runs: 0 };
+      const mates = db.students.filter((s) => s.class_id === st.class_id);
+      const earned = db.works.filter((w) => w.student_id === sid && w.status !== 'in_progress').length * mins * 60;
+      const total = mates.reduce((a, s) => a + (world[s.id]?.total || 0), 0);
+      return clone({
+        mode, mins, run_max: 300, seconds_left: mode === 'earned' ? Math.max(0, earned - mine.used) : 0, best: mine.best, total: mine.total, runs: mine.runs,
+        board: mates.filter((s) => world[s.id]?.runs > 0).sort((a, b) => world[b.id].best - world[a.id].best).slice(0, 8).map((s) => ({ id: s.id, display_name: s.display_name, avatar: s.avatar, best: world[s.id].best, seed: world[s.id].ghost_seed || 0 })),
+        chest: { level: Math.floor(total / 2000) + 1, have: total % 2000, goal: 2000 },
+      });
+    },
+    async worldEnter() {
+      const s = await this.worldState();
+      if (!s.mode) throw new Error('Trail Quest is closed right now.');
+      if (s.mode === 'earned' && s.seconds_left < 5) throw new Error('Finish a lesson to earn more time in Trail Quest.');
+      const sid = readSession().id;
+      db.world = db.world || {};
+      db.world[sid] = { used: 0, best: 0, total: 0, runs: 0, ...db.world[sid], allowed: s.mode === 'earned' ? Math.min(s.seconds_left, 300) : 300, free: s.mode === 'free', started: Date.now() };
+      save();
+      return { run_seconds: db.world[sid].allowed };
+    },
+    async worldRun(result = {}) {
+      const row = (db.world || {})[readSession().id];
+      if (!row || !row.started) throw new Error('That run already ended.');
+      const seconds = Math.max(0, Math.min(Math.round(Number(result.seconds) || 0), row.allowed));
+      const coins = Math.max(0, Math.min(Math.round(Number(result.coins) || 0), 600, 40 + seconds * 6));
+      const seed = Math.round(Number(result.seed));
+      const path = String(result.path || '');
+      if ((coins >= row.best || !row.ghost) && seed >= 1 && /^p([0-9a-z]{4}){1,600}$/.test(path)) { row.ghost_seed = seed; row.ghost = path; }
+      Object.assign(row, { used: row.used + (row.free ? 0 : seconds), best: Math.max(row.best, coins), total: row.total + coins, runs: row.runs + 1, started: 0 });
+      save();
+      return this.worldState();
+    },
+    async worldGhosts(seed) {
+      const st = db.students.find((s) => s.id === readSession().id);
+      const world = db.world || {};
+      return clone(db.students.filter((s) => s.class_id === st.class_id && world[s.id]?.ghost && world[s.id].ghost_seed === Number(seed))
+        .sort((a, b) => world[b.id].best - world[a.id].best).slice(0, 5)
+        .map((s) => ({ id: s.id, display_name: s.display_name, avatar: s.avatar, best: world[s.id].best, path: world[s.id].ghost })));
+    },
+    async setMusicOpen(id, open) {
+      const c = db.classes.find((x) => x.id === id && x.teacher_id === readSession()?.id);
+      if (!c) throw new Error('That class was not found.');
+      c.music_open = !!open;
+      save();
+      return c.music_open;
+    },
     listGoogleCourses: async () => [
       { id: 'demo-course', name: 'Period 3: Game Design', section: 'Demo', linked: true },
       { id: 'demo-course-2', name: 'Period 6: Game Design', section: 'Demo', linked: !!(db.links || {})['demo-class-6'] },
@@ -261,9 +405,10 @@ export function createLocalStore() {
 
     classBoard: async (classId) => db.students.filter((s) => s.class_id === classId).sort((a, b) => a.display_name.localeCompare(b.display_name)).map((s) => ({
       id: s.id, display_name: s.display_name, avatar: clone(s.avatar), path: s.path, game_name: s.game_name,
-      works: db.works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
+      works: db.works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, step_at: w.step_at || 0, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
       awards: db.awards.filter((a) => a.student_id === s.id).map((a) => ({ badge_id: a.badge_id, note: a.note, created_at: a.created_at })),
       sprites_shared: db.sprites.filter((sp) => sp.student_id === s.id && sp.published).length,
+      rated: (db.ratings || []).filter((r) => r.student_id === s.id).length,
     })),
 
     async updateProfile(patch) {
@@ -276,23 +421,23 @@ export function createLocalStore() {
       const sid = readSession().id;
       const team = teamOf(sid, lessonId);
       if (!team) return null;
-      if (opts.beat && team.driver_id === sid) { team.driver_until = Date.now() + 180000; save(); }
+      if (opts.beat) { for (const hold of Object.values(team.holders || {})) if (hold.id === sid && hold.until > Date.now()) hold.until = Date.now() + 180000; save(); }
       const lead = db.students.find((s) => s.id === team.members[0]);
       const mine = (db.contributions || []).find((c) => c.team_id === team.id && c.student_id === sid);
-      const view = { id: team.id, lesson_id: lessonId, started: team.started, doc_at: team.doc_at, driver_id: team.driver_until > Date.now() ? team.driver_id : '', lead_path: lead?.path || null, my_note: mine?.note || '', members: team.members.map((id) => ({ id, display_name: db.students.find((s) => s.id === id)?.display_name || '' })) };
+      const view = { id: team.id, lesson_id: lessonId, started: team.started, doc_at: team.doc_at, holders: demoHolders(team), lead_path: lead?.path || null, my_note: mine?.note || '', members: team.members.map((id) => ({ id, display_name: db.students.find((s) => s.id === id)?.display_name || '' })) };
       if (opts.stamp && opts.stamp === team.doc_at) return { ...view, same: true };
       const byMember = team.members.map((id) => db.works.find((w) => w.student_id === id && w.lesson_id === lessonId)).find((w) => w?.code);
       const prev = !byMember && lead && prevByPath?.[lead.path] && db.works.find((w) => w.student_id === lead.id && w.lesson_id === prevByPath[lead.path]);
       const source = byMember || prev;
       return { ...view, doc: source ? clone({ code: source.code, assets: source.assets || {}, files: source.files || {} }) : null };
     },
-    async takeKeyboard(lessonId, base) {
+    async takeKeyboard(lessonId, base, file = 'sketch.js') {
       const sid = readSession().id;
       const team = teamOf(sid, lessonId);
       if (!team) throw new Error('You are not in a group for this lesson.');
-      if (team.driver_until > Date.now() && team.driver_id !== sid) throw new Error('Someone else has the keyboard. Ask them to pass it.');
-      team.driver_id = sid;
-      team.driver_until = Date.now() + 180000;
+      const other = demoHolders(team)[file];
+      if (other && other !== sid) throw new Error('Someone else is editing that file. Pick another file, or ask them to let go.');
+      team.holders = { ...(team.holders || {}), [file]: { id: sid, until: Date.now() + 180000 } };
       if (!team.started) {
         team.started = true;
         if (base) {
@@ -304,9 +449,11 @@ export function createLocalStore() {
       save();
       return this.teamFor(lessonId, null, {});
     },
-    async passKeyboard(lessonId) {
+    async passKeyboard(lessonId, file) {
       const team = teamOf(readSession().id, lessonId);
-      if (team && team.driver_id === readSession().id) { team.driver_id = ''; team.driver_until = 0; save(); }
+      if (!team) return;
+      for (const [name, hold] of Object.entries(team.holders || {})) if (hold.id === readSession().id && (!file || name === file)) delete team.holders[name];
+      save();
     },
     async listTeams(classId) {
       return (db.teams || []).filter((t) => t.class_id === classId).map(teamSummary);
@@ -321,23 +468,66 @@ export function createLocalStore() {
       db.contributions = (db.contributions || []).filter((c) => !dropped.has(c.team_id));
       save();
     },
-    async gradeSyncStatus(classId) {
+    // The demo already lets you sign in as any student from the first screen.
+    async previewStart() { throw new Error('In the demo, sign out and choose a student.'); },
+    async previewReset() { throw new Error('In the demo, sign out and choose a student.'); },
+    // Translating needs Google's translator, which only the real app has.
+    async translate(lang, texts) { return texts.map(() => null); },
+    async reportBug(note, details) {
+      if (!String(note || '').trim()) throw new Error('Say what went wrong first.');
+      db.bugs = db.bugs || [];
+      const who = me();
+      db.bugs.push({ id: uid(), at: new Date().toISOString(), role: who.role, name: who.role === 'student' ? who.student.display_name : 'Teacher', class_name: '', page: details?.page || '', note: String(note).slice(0, 1500), details: details || {}, status: 'open' });
+      save();
+      return true;
+    },
+    async bugReports() { return (db.bugs || []).filter((b) => b.status !== 'done').reverse(); },
+    async closeBug(id) {
+      (db.bugs || []).forEach((b) => { if (b.id === id) b.status = 'done'; });
+      save();
+      return this.bugReports();
+    },
+    // The demo keeps everything in this browser, so there is no Sheet to back up or move.
+    async dataInfo() { return null; },
+    async backupNow() { throw new Error('Backups are only in the real app.'); },
+    async dataSwitch() { throw new Error('Only in the real app.'); },
+    async dataCombine() { throw new Error('Only in the real app.'); },
+    // Demo stand-in for Google Classroom: assignments are remembered here and grades "sent" instantly.
+    async gradeSyncStatus(classId, slots) {
       if (!(db.links || {})[classId]) return { linked: false };
-      const ids = new Set(db.students.filter((s) => s.class_id === classId).map((s) => s.id));
-      const approved = db.works.filter((w) => ids.has(w.student_id) && w.status === 'approved' && db.grades.some((g) => g.work_id === w.id));
       const synced = db.gradeSync || {};
-      return { linked: true, items: [...new Set(approved.map((w) => w.lesson_id))].map((lessonId) => {
-        const here = approved.filter((w) => w.lesson_id === lessonId);
-        const sync = synced[`${classId}/${lessonId}`];
-        return { lesson_id: lessonId, approved: here.length, waiting: sync ? 0 : here.length, synced: !!sync, link: sync?.link || '', due: sync?.due || '' };
+      return { linked: true, items: slots.map((slot) => {
+        const sync = synced[`${classId}/${slot.key}`];
+        const grades = demoSlotGrades(classId, slot, sync ? sync.points : 100);
+        const sent = sync?.sent || {};
+        return { key: slot.key, approved: grades.length, synced: !!sync, waiting: grades.filter((g) => !sync || sent[g.id] !== g.value).length,
+          title: sync?.title || '', points: sync?.points ?? null, link: sync?.link || '', due: sync?.due || '' };
       }) };
     },
-    async pushGrades(classId, lessonId, { due }) {
-      const ids = new Set(db.students.filter((s) => s.class_id === classId).map((s) => s.id));
-      const sent = db.works.filter((w) => ids.has(w.student_id) && w.lesson_id === lessonId && w.status === 'approved').length;
-      db.gradeSync = { ...(db.gradeSync || {}), [`${classId}/${lessonId}`]: { link: 'https://classroom.google.com', due } };
+    async createAssignments(classId, items, { publish } = {}) {
+      const out = { created: 0, skipped: [], failed: [] };
+      db.gradeSync = db.gradeSync || {};
+      for (const it of items) {
+        const k = `${classId}/${it.key}`;
+        if (db.gradeSync[k]) { out.skipped.push(`${it.title}: already in Classroom`); continue; }
+        if (!String(it.title || '').trim()) { out.failed.push(`${it.key}: needs a name`); continue; }
+        db.gradeSync[k] = { title: it.title.trim(), points: Number(it.points) || 100, due: it.due || '', link: 'https://classroom.google.com', state: publish ? 'PUBLISHED' : 'DRAFT', sent: {} };
+        out.created++;
+      }
       save();
-      return { link: 'https://classroom.google.com', sent, skipped: [], failed: [] };
+      return out;
+    },
+    async pushGrades(classId, slots) {
+      const out = { sent: 0, assignments: 0, skipped: [], failed: [] };
+      for (const slot of slots) {
+        const sync = (db.gradeSync || {})[`${classId}/${slot.key}`];
+        if (!sync) continue;
+        const todo = demoSlotGrades(classId, slot, sync.points).filter((g) => sync.sent[g.id] !== g.value);
+        if (todo.length) out.assignments++;
+        for (const g of todo) { sync.sent[g.id] = g.value; out.sent++; }
+      }
+      save();
+      return out;
     },
     async saveWork(lessonId, incoming) {
       const sid = readSession().id;
@@ -348,21 +538,34 @@ export function createLocalStore() {
         const { contribution, ...rest } = incoming;
         patch = rest;
         if (incoming.status === 'submitted' && !String(contribution || '').trim()) throw new Error('Write what each person in your group did before you submit.');
-        if (patch.code !== undefined && !(team.driver_id === sid && team.driver_until > Date.now())) {
-          const { code, assets, files, ...own } = patch;
-          patch = own;
-          lost = true;
-        } else if (patch.code !== undefined) {
+        if (patch.code !== undefined) {
+          // Same rules as the server: your files take your version, new files become yours, the rest stay.
           const was = db.works.find((x) => x.student_id === sid && x.lesson_id === lessonId) || {};
           const files = (d) => ({ 'sketch.js': d.code || '', ...(d.files || {}) });
-          const credit = attribute_(files(was), team.blame || {}, files(patch), team.members.indexOf(sid) + 1);
+          const before = files(was);
+          const mine = files(patch);
+          const holders = demoHolders(team);
+          const out = {};
+          for (const name of new Set([...Object.keys(before), ...Object.keys(mine)])) {
+            if (holders[name] === sid) { if (mine[name] !== undefined) out[name] = mine[name]; continue; }
+            if (before[name] === undefined && !holders[name] && mine[name] !== undefined) {
+              out[name] = mine[name];
+              team.holders = { ...(team.holders || {}), [name]: { id: sid, until: Date.now() + 180000 } };
+              continue;
+            }
+            if (before[name] !== undefined) out[name] = before[name];
+            if (mine[name] !== before[name]) lost = true;
+          }
+          const { 'sketch.js': code, ...rest2 } = out;
+          patch = { ...patch, code: code || '', files: rest2, assets: { ...(was.assets || {}), ...(patch.assets || {}) } };
+          const credit = attribute_(before, team.blame || {}, out, team.members.indexOf(sid) + 1);
           if (credit.added || credit.removed) {
             team.blame = credit.blame;
             team.doc_at = now();
             contributionOf(team, sid, (c) => { c.saves += 1; c.added += credit.added; c.removed += credit.removed; });
             team.members.filter((id) => id !== sid).forEach((id) => mirror(id, lessonId, patch));
           }
-          team.driver_until = Date.now() + 180000;
+          for (const hold of Object.values(team.holders || {})) if (hold.id === sid) hold.until = Date.now() + 180000;
         }
         if (contribution !== undefined) contributionOf(team, sid, (c) => { c.note = contribution; });
       }
@@ -372,7 +575,8 @@ export function createLocalStore() {
         db.works.push(w);
       }
       if (w.status === 'approved') throw new Error('This lesson was approved. Ask your teacher to reopen it.');
-      Object.assign(w, patch, { updated_at: now() });
+      const firstTries = { ...(patch.quiz_first || {}), ...(w.quiz_first || {}) }; // a first try is kept once
+      Object.assign(w, patch, { quiz_first: firstTries, updated_at: now() });
       save();
       return { ...clone(w), team_lost: lost };
     },
@@ -451,6 +655,7 @@ export function createLocalStore() {
     async saveSong(s) {
       db.songs = db.songs || [];
       const sess = me();
+      if (sess.role === 'student' && !db.classes.find((c) => c.id === sess.student.class_id)?.music_open) throw new Error('Your teacher has closed the Music Maker for now.');
       const owner = sess.role === 'student'
         ? { student_id: sess.student.id, class_id: sess.student.class_id, author_name: sess.student.display_name }
         : { teacher_id: sess.teacher.id, author_name: sess.teacher.display_name };

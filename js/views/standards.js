@@ -108,7 +108,7 @@ export async function viewStandards() {
       progress = h('span.small', `${p.approved} approved, ${p.turned} turned in, of ${p.eligible}`);
     } else progress = h('span.muted', isTaught(c) ? 'Practice only' : 'Not taught here');
     return h('tr', { class: isTaught(c) ? '' : 'std-none' },
-      h('td.mono', shortCode(c.code)), h('td', c.text), h('td', refs(c.anchor)), h('td', refs(c.support)), h('td', progress));
+      h('td.mono', shortCode(c.code)), h('td', { translate: 'no' }, c.text), h('td', refs(c.anchor)), h('td', refs(c.support)), h('td', progress));
   };
 
   const byStandard = () => {

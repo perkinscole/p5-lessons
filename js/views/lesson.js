@@ -1,8 +1,11 @@
 // The workspace: lesson steps on the left, code in the middle, the running game on the right.
 import { h, clear, md, toast, attempt, modal, debounce, confirmBox } from '../ui.js';
 import { app, go } from '../main.js';
-import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough } from '../curriculum/engine.js';
+import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
+import { explainError, warnings } from '../game/debug.js';
+import { ratingBox, confusingButton, helpBox } from './feedback.js';
+import { chime, sparkle, pop, confetti, countUp, markCelebrated } from '../celebrate.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
@@ -99,16 +102,22 @@ export async function viewLesson(main, id, previewPath) {
   let me = null;
   let work = null;
   let team = null;
+  let myFlags = new Map(); // steps and questions this student marked as confusing
+  let helpOpen = false;
   let path = previewPath || lesson.path || 'platformer';
   let code;
   let assets = {};
   let startFiles = {};
 
   if (isStudent) {
-    me = await loadMe();
+    let flagList;
+    let helpNow;
+    [me, team, flagList, helpNow] = await Promise.all([loadMe(), app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {}),
+      app.store.myFlags(id).catch(() => []), app.store.myHelp().catch(() => ({ open: false }))]);
+    myFlags = new Map(flagList.map((f) => [f.target, f.reason]));
+    helpOpen = !!helpNow.open;
     path = me.student.path;
     const roadOrder = sequence(path);
-    team = await app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {});
     if (team) {
       // The teacher put this student in a group for this lesson, so it is open to them.
     } else if (isSideTrail(id)) {
@@ -149,8 +158,13 @@ export async function viewLesson(main, id, previewPath) {
   }
 
   const approved = isStudent && work?.status === 'approved';
-  let driving = !!team && team.driver_id === me.student.id;
-  let readOnly = approved || (!!team && !driving);
+  // Group projects: each file has its own keyboard, so group members can work at the same time in
+  // different files. holders says who is editing each file right now.
+  let holders = (team && team.holders) || {};
+  const iHold = (name) => !!team && holders[name] === me.student.id;
+  const canEdit = (name) => !approved && (!team || iHold(name));
+  let driving = !!team && Object.values(holders).includes(me.student.id);
+  let readOnly = !canEdit('sketch.js');
   let applyingRemote = false;
   const preview = !isStudent;
   // The walkthrough: steps with short questions woven in, one screen at a time.
@@ -160,6 +174,14 @@ export async function viewLesson(main, id, previewPath) {
   const answered = new Set(work && work.quiz_total === quizzes.length && quizzes.length ? quizzes : []);
   let quizRight = work?.quiz_right || 0;
   let stepIndex = 0;
+  // The furthest step reached is saved, so the class display can show it and the lesson reopens there.
+  const stepNumberAt = (i) => {
+    if (i >= flow.length) return lesson.steps.length;
+    for (let k = i; k >= 0; k--) if (flow[k].step) return flow[k].n;
+    return 0;
+  };
+  let furthest = Math.min(Number(work?.step_at) || 0, lesson.steps.length);
+  if (furthest > 0) stepIndex = furthest >= lesson.steps.length ? flow.length : Math.max(0, flow.findIndex((x) => x.step && x.n === furthest));
   let stretchDone = work?.stretch_done || 0;
   let dirty = false;
   const stdPanel = standardsPanel(id, preview);
@@ -171,21 +193,33 @@ export async function viewLesson(main, id, previewPath) {
   let errorMark = null;
   const player = createPlayer((ev) => {
     if (ev.type === 'error') {
-      const where = ev.line ? (ev.file && ev.file !== 'sketch.js' ? `${ev.file}, line ${ev.line}` : `Line ${ev.line}`) : null;
-      logLine(h('div.err', where && h('button.linejump', { onclick: () => { openFile(ev.file || MAIN); cm.setCursor(ev.line - 1, 0); cm.focus(); } }, where), ' ', md(ev.message)));
-      if (ev.line) {
+      // Look at the student's own code for a clearer message and the line that's really wrong.
+      const file = ev.file || MAIN;
+      const doc = docFor(file);
+      const better = explainError(ev.raw, doc.getValue(), ev.line);
+      const line = (better && better.line) || ev.line;
+      const where = line ? (file !== MAIN ? `${file}, line ${line}` : `Line ${line}`) : null;
+      const lineText = line && line <= doc.lineCount() ? doc.getLine(line - 1).trim() : '';
+      logLine(h('div.err',
+        h('div', where && h('button.linejump', { onclick: () => { openFile(file); cm.setCursor(line - 1, 0); cm.focus(); } }, where), ' ', md(better ? better.message : ev.message)),
+        lineText && h('pre.err-code', lineText)));
+      if (line && line <= doc.lineCount()) {
         clearErrorMark();
-        const doc = docFor(ev.file || MAIN);
-        doc.addLineClass(ev.line - 1, 'background', 'error-line');
-        errorMark = { doc, line: ev.line - 1 };
+        doc.addLineClass(line - 1, 'background', 'error-line');
+        errorMark = { doc, line: line - 1 };
       }
     } else if (ev.type === 'log') logLine(h('div.log', ev.message));
     else if (ev.type === 'warn') logLine(h('div.warn', ev.message));
     else if (ev.type === 'status') logLine(h('div.muted', ev.message));
   });
+  // The coordinate grid: lines and numbers over the game, so (x, y) is something students can see.
+  let gridOn = false;
+  const gridButton = h('button.btn', { type: 'button', 'aria-pressed': 'false', title: 'Show a grid with x and y numbers over your game',
+    onclick: () => { gridOn = !gridOn; gridButton.setAttribute('aria-pressed', String(gridOn)); gridButton.classList.toggle('on', gridOn); player.setGrid(gridOn); } }, '▦ Grid');
   const run = () => {
     clearErrorMark();
     clear(consoleBox);
+    for (const w of warnings(mainCode())) logLine(h('div.warn', md(w)));
     player.run(mainCode(), assets, extraFiles());
     if (dirty) { saveSoon.cancel(); persist(); } // Pressing Run also saves.
   };
@@ -214,7 +248,10 @@ export async function viewLesson(main, id, previewPath) {
     activeFile = extraDocs.has(name) ? name : MAIN;
     cm.swapDoc(docFor(activeFile));
     cm.setOption('mode', 'javascript');
+    readOnly = !canEdit(activeFile);
+    cm.setOption('readOnly', readOnly);
     drawFileBar();
+    drawTeamBar();
     cm.refresh();
   }
   const projectSize = () => JSON.stringify({ code: mainCode(), assets, files: extraFiles() }).length;
@@ -224,11 +261,14 @@ export async function viewLesson(main, id, previewPath) {
     for (let n = 2; extraDocs.has(name) || name === MAIN; n++) name = `${base}${n}.js`;
     if (extraDocs.size >= 8) { toast('A project can have up to 8 extra code files.', 'error'); return; }
     extraDocs.set(name, window.CodeMirror.Doc(text, 'javascript'));
+    // A new file is yours to edit. Saving right away claims it for the group.
+    if (team) { holders = { ...holders, [name]: me.student.id }; driving = true; }
     openFile(name);
     markDirty();
+    if (team) { saveSoon.cancel(); persist(); }
   }
   async function addUploads(list) {
-    if (readOnly) return;
+    if (approved) return;
     for (const file of list) {
       if (/\.js$/i.test(file.name)) {
         if (file.size > 100000) { toast(`${file.name} is too long to add.`, 'error'); continue; }
@@ -298,8 +338,9 @@ export async function viewLesson(main, id, previewPath) {
     const names = [MAIN, ...extraDocs.keys()];
     clear(fileBar).append(...[
       h('div.file-tabs', { 'aria-label': 'Project files' }, names.map((name) => h('div.file-tab', { class: name === activeFile ? 'on' : '' },
-        h('button', { 'aria-current': name === activeFile ? 'true' : null, onclick: () => openFile(name) }, name),
-        name !== MAIN && !readOnly && h('button.file-x', { 'aria-label': `Remove ${name}`, onclick: async () => {
+        h('button', { 'aria-current': name === activeFile ? 'true' : null, onclick: () => openFile(name) }, name,
+          team && holders[name] && h('span.file-holder', { class: iHold(name) ? 'mine' : '' }, iHold(name) ? ' ✏️ you' : ` 🔒 ${memberName(holders[name])}`)),
+        name !== MAIN && canEdit(name) && h('button.file-x', { 'aria-label': `Remove ${name}`, onclick: async () => {
           if (!(await confirmBox(`Remove ${name}?`, 'Its code will be deleted from this project.', 'Remove', true))) return;
           extraDocs.delete(name);
           openFile(MAIN);
@@ -307,7 +348,7 @@ export async function viewLesson(main, id, previewPath) {
           run();
         } }, '×')))),
       Object.keys(assets).length > 0 && h('div.file-assets', Object.keys(assets).map((name) => h('button.file-asset', { title: `SPRITES.${name}`, 'aria-label': `Image ${name}`, onclick: openPicker }, h('img', { src: assets[name], alt: '' }), name))),
-      !readOnly && h('div.file-actions',
+      !approved && h('div.file-actions',
         h('button.btn.small', { onclick: newFileDialog }, '+ Code file'),
         h('button.btn.small', { onclick: () => fileInput.click() }, '+ Images or files')),
       fileInput,
@@ -319,9 +360,9 @@ export async function viewLesson(main, id, previewPath) {
     const src = mainCode();
     const c = checkSummary(lesson, allCode());
     try {
-      work = await app.store.saveWork(id, { ...codePatch(src), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() });
+      work = await app.store.saveWork(id, { ...codePatch(src), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, step_at: furthest, ...quizPatch() });
       dirty = false;
-      if (work.team_lost) { driving = false; applyRole(); pollTeam(); }
+      if (work.team_lost) pollTeam(); // Someone else changed the project: catch up.
       status.textContent = 'All saved';
       status.classList.remove('bad');
     } catch (e) {
@@ -331,8 +372,12 @@ export async function viewLesson(main, id, previewPath) {
       saveSoon(); // Try again, so a busy moment can't lose a student's work.
     }
   };
-  function quizPatch() { return { quiz_right: quizRight, quiz_total: answered.size === quizzes.length ? quizzes.length : 0 }; }
-  const saveSoon = debounce(persist, app.store.saveDelay || 1500);
+  // The first try on each of the lesson's own questions, for the teacher's feedback report.
+  const quizFirst = { ...(work?.quiz_first || {}) };
+  const ownIndex = (q) => quizzes.indexOf(q) - (warmUp ? 1 : 0);
+  function quizPatch() { return { quiz_right: quizRight, quiz_total: answered.size === quizzes.length ? quizzes.length : 0, quiz_first: quizFirst }; }
+  // Groups save more often, so partners see each other's work sooner.
+  const saveSoon = debounce(persist, team ? Math.min(10000, app.store.saveDelay || 1500) : (app.store.saveDelay || 1500));
   const markDirty = () => {
     if (preview || approved || applyingRemote) return;
     dirty = true;
@@ -373,8 +418,11 @@ export async function viewLesson(main, id, previewPath) {
     drawNav();
     const buttons = h('div.quiz-options', q.options.map((text, i) => h('button.quiz-option', {
       onclick: (e) => {
+        if (qi >= 0 && quizFirst[qi] === undefined) { quizFirst[qi] = i === q.answer; markDirty(); }
         if (i === q.answer) {
           e.currentTarget.classList.add('right');
+          chime('right');
+          sparkle(e.currentTarget);
           if (firstTry && !answered.has(q)) quizRight++;
           answered.add(q);
           clear(feedback).append(h('p.ok', '✓ ', md(q.why)));
@@ -383,18 +431,22 @@ export async function viewLesson(main, id, previewPath) {
           markDirty();
         } else {
           firstTry = false;
+          chime('wrong');
           e.currentTarget.classList.add('wrong');
           e.currentTarget.disabled = true;
           clear(feedback).append(h('p.warn', 'Not quite. Try another one.'));
         }
       },
     }, md(text))));
+    const qi = ownIndex(q);
     return h('div.stack',
       h('p.eyebrow', 'Quick check'),
       q.review && h('p.eyebrow', 'From an earlier lesson'),
       h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
       q.code && h('pre.snippet', h('code', q.code)),
-      buttons, feedback, nav);
+      buttons, feedback,
+      isStudent && qi >= 0 && confusingButton(id, `quiz:${qi}`, myFlags),
+      nav);
   };
 
   const finishPane = () => {
@@ -414,7 +466,44 @@ export async function viewLesson(main, id, previewPath) {
     );
   };
 
+  // Where this step's code goes, as a line number in the student's own code.
+  const PLACE_TEXT = {
+    after: (n) => `New line after line ${n}`,
+    before: (n) => `New line before line ${n}`,
+    replace: (n) => `Change line ${n}`,
+    top: () => 'At the very top, line 1',
+    end: (n) => `At the very bottom, after line ${n}`,
+  };
+  let placeMarks = [];
+  const clearPlace = () => { placeMarks.forEach((m) => m()); placeMarks = []; };
+  const stepAt = (s) => s.at || (s.edits && s.edits[0] && s.edits[0].at);
+  const placeOf = (s) => (s && !s.reveal && stepAt(s) && !(s.check && stepPasses(s, allCode())) ? placeFor(mainCode(), stepAt(s)) : null);
+  const placeBox = h('div.step-place');
+  function showPlace(place) {
+    clearPlace();
+    openFile(MAIN);
+    const line = place.line - 1;
+    mainDoc.addLineClass(line, 'background', 'place-line');
+    const marker = h('div.place-marker', place.how === 'replace' ? '▲ change this line' : '▼ your new line goes here');
+    const above = place.how === 'before' || place.how === 'top';
+    const widget = cm.addLineWidget(line, marker, { above });
+    placeMarks.push(() => mainDoc.removeLineClass(line, 'background', 'place-line'), () => widget.clear());
+    const ch = above ? 0 : mainDoc.getLine(line).length;
+    cm.setCursor({ line, ch });
+    cm.scrollIntoView({ line, ch }, 80);
+    cm.focus();
+  }
+  function drawPlace() {
+    clear(placeBox);
+    const item = flow[stepIndex];
+    const place = item && item.step ? placeOf(item.step) : null;
+    if (!place) return;
+    placeBox.append(h('span.place-text', '📍 ', PLACE_TEXT[place.how](place.line)), canEdit(MAIN) && h('button.btn.small', { onclick: () => showPlace(place) }, 'Show me'));
+  }
+
   const drawStep = () => {
+    clearPlace();
+    if (stepNumberAt(stepIndex) > furthest) { furthest = stepNumberAt(stepIndex); markDirty(); }
     drawDots();
     clear(stepBox);
     stopSpeaking();
@@ -433,7 +522,7 @@ export async function viewLesson(main, id, previewPath) {
     const lastSkeleton = s.skeleton && s.skeleton[s.skeleton.length - 1].code.trim().split('\n')[0];
     const skeletonArea = s.skeleton && h('div.stack.tight',
       h('pre.snippet', h('code', s.skeleton.map((e) => e.code).join('\n\n'))),
-      !readOnly && h('button.btn.primary', {
+      canEdit(MAIN) && h('button.btn.primary', {
         disabled: mainCode().includes(lastSkeleton),
         onclick: (e) => {
           try {
@@ -450,9 +539,10 @@ export async function viewLesson(main, id, previewPath) {
     stepBox.append(...[
       h('h2', s.title),
       h('div.step-do', h('div.read-row', md(brief), readButton(() => brief))),
+      placeBox,
       skeletonArea || '',
       revealArea || '',
-      s.provides && !readOnly && h('button.btn.primary', { disabled: extraDocs.has(s.provides.name), onclick: () => addProvided(s.provides) }, extraDocs.has(s.provides.name) ? `${s.provides.name} added ✓` : 'Add the finished file'),
+      s.provides && !approved && h('button.btn.primary', { disabled: extraDocs.has(s.provides.name), onclick: () => addProvided(s.provides) }, extraDocs.has(s.provides.name) ? `${s.provides.name} added ✓` : 'Add the finished file'),
       s.provides && h('details.hint', h('summary', 'Peek inside'), h('pre.snippet', h('code', s.provides.code))),
       s.action === 'sprites' && h('button.btn.primary', { onclick: openPicker }, 'Open Sprites'),
       s.action === 'sounds' && h('button.btn.primary', { onclick: openSounds }, 'Open Sounds'),
@@ -462,11 +552,13 @@ export async function viewLesson(main, id, previewPath) {
       s.hint && !passing && h('details.hint', h('summary', 'Hint'), md(s.hint)),
       more && h('details.hint', h('summary', 'Why?'), md(more), readButton(() => more, 'Read the explanation aloud')),
       s.check && h('p.step-check', { class: passing ? 'ok' : 'wait' }, passing ? '✓ Done' : 'Not done yet'),
+      isStudent && confusingButton(id, `step:${flow[stepIndex].n}`, myFlags),
       h('div.row.step-nav',
         stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
         h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); run(); } }, 'Next'),
       ),
     ].filter(Boolean));
+    drawPlace();
   };
 
   // Actions ---------------------------------------------------------------------------------------
@@ -479,8 +571,10 @@ export async function viewLesson(main, id, previewPath) {
   const openSounds = () => openSoundPicker({
     onInsert: readOnly ? null : (line) => { cm.replaceSelection(`${line}\n`); cm.focus(); markDirty(); },
   });
+  // The teacher opens and closes the Music Maker for the class. A step that teaches it always can.
+  const musicAllowed = () => !isStudent || !!app.session?.class?.music_open;
   const openMusic = () => openMusicMaker({
-    onAdd: readOnly ? null : (fileName, code, variable) => {
+    onAdd: approved ? null : (fileName, code, variable) => {
       if (extraDocs.has(fileName)) extraDocs.get(fileName).setValue(code);
       else extraDocs.set(fileName, window.CodeMirror.Doc(code, 'javascript'));
       drawFileBar();
@@ -490,38 +584,43 @@ export async function viewLesson(main, id, previewPath) {
     },
   });
 
-  // Group projects: one shared project, one person typing at a time.
-  let turnStarted = 0;
+  // Group projects: one shared project, and one person editing each file at a time.
+  function memberName(sid) { return team?.members.find((m) => m.id === sid)?.display_name || 'A teammate'; }
   function drawTeamBar() {
     if (!team) return;
-    const holder = team.members.find((m) => m.id === team.driver_id);
+    const who = holders[activeFile];
+    const busy = Object.entries(holders).map(([file, sid]) => `${sid === me.student.id ? 'You' : memberName(sid)}: ${file}`);
     clear(teamBar).append(...[
       h('span', h('strong', 'Group: '), team.members.map((m) => m.display_name).join(', ')),
-      h('span.team-turn', driving ? 'You have the keyboard.' : holder ? `${holder.display_name} has the keyboard.` : 'The keyboard is free.'),
-      !approved && driving && h('button.btn.small', { type: 'button', onclick: passTurn }, 'Pass the keyboard'),
-      !approved && !driving && !holder && h('button.btn.small.primary', { type: 'button', onclick: takeTurn }, 'Take the keyboard'),
+      h('span.team-turn', iHold(activeFile) ? `You're editing ${activeFile}.` : who ? `${memberName(who)} is editing ${activeFile}. Pick another file, or make a new one.` : `Nobody is editing ${activeFile}.`),
+      !approved && iHold(activeFile) && h('button.btn.small', { type: 'button', onclick: () => passTurn(activeFile) }, `Let go of ${activeFile}`),
+      !approved && !who && h('button.btn.small.primary', { type: 'button', onclick: () => takeTurn(activeFile) }, `Edit ${activeFile}`),
+      busy.length > 0 && h('span.muted.small', busy.join(' · ')),
     ].filter(Boolean));
   }
   function applyRole() {
-    readOnly = approved || !driving;
+    driving = !!team && Object.values(holders).includes(me.student.id);
+    readOnly = !canEdit(activeFile);
     cm.setOption('readOnly', readOnly);
     drawTeamBar();
     drawFileBar();
     drawStep();
     drawHead();
   }
+  /** Bring in teammates' changes, leaving the files you are editing alone. */
   function applyRemote(doc) {
     applyingRemote = true;
-    if (doc.code !== mainDoc.getValue()) mainDoc.setValue(doc.code || '');
+    if (!iHold(MAIN) && doc.code !== mainDoc.getValue()) mainDoc.setValue(doc.code || '');
     const incoming = doc.files || {};
     for (const name of [...extraDocs.keys()]) {
-      if (incoming[name] === undefined) { if (activeFile === name) openFile(MAIN); extraDocs.delete(name); }
+      if (incoming[name] === undefined && !iHold(name)) { if (activeFile === name) openFile(MAIN); extraDocs.delete(name); }
     }
     for (const [name, text] of Object.entries(incoming)) {
+      if (iHold(name)) continue;
       if (!extraDocs.has(name)) extraDocs.set(name, window.CodeMirror.Doc(text, 'javascript'));
       else if (extraDocs.get(name).getValue() !== text) extraDocs.get(name).setValue(text);
     }
-    assets = doc.assets || {};
+    assets = { ...(doc.assets || {}), ...assets };
     drawFileBar();
     applyingRemote = false;
   }
@@ -529,36 +628,29 @@ export async function viewLesson(main, id, previewPath) {
     let fresh;
     try { fresh = await app.store.teamFor(id, null, { stamp: team.doc_at, beat: driving }); } catch (_) { return; }
     if (!fresh) return;
-    const was = driving;
     const { doc, same, ...view } = fresh;
     team = { ...team, ...view };
-    driving = team.driver_id === me.student.id;
-    if (!driving && doc) applyRemote(doc);
-    if (was !== driving) applyRole();
-    else drawTeamBar();
-    if (driving && turnStarted && Date.now() - turnStarted > 600000) {
-      turnStarted = 0;
-      toast('You have been typing for 10 minutes. Time to swap?');
-    }
+    holders = view.holders || {};
+    if (doc) applyRemote(doc);
+    applyRole();
   }
-  async function takeTurn() {
+  async function takeTurn(file) {
     const base = team.started ? null : { code: mainCode(), assets, files: extraFiles() };
-    const fresh = await attempt(() => app.store.takeKeyboard(id, base));
+    const fresh = await attempt(() => app.store.takeKeyboard(id, base, file));
     if (!fresh) { pollTeam(); return; }
     const { doc, ...view } = fresh;
     team = { ...team, ...view };
+    holders = view.holders || {};
     if (doc) applyRemote(doc);
-    driving = true;
-    turnStarted = Date.now();
     applyRole();
     cm.focus();
   }
-  async function passTurn() {
+  async function passTurn(file) {
     saveSoon.cancel();
     if (dirty) await persist();
-    if (await attempt(async () => { await app.store.passKeyboard(id); return true; })) {
-      driving = false;
-      team = { ...team, driver_id: '' };
+    if (await attempt(async () => { await app.store.passKeyboard(id, file); return true; })) {
+      const { [file]: _gone, ...rest } = holders;
+      holders = rest;
       applyRole();
     }
   }
@@ -584,7 +676,7 @@ export async function viewLesson(main, id, previewPath) {
     if (team && !contribution.value.trim()) { toast('Write what each person in your group did first.', 'error'); return; }
     saveSoon.cancel();
     const before = statsFor({ ...me.row, path, works: me.row.works });
-    const saved = await attempt(() => app.store.submitWork(id, { ...codePatch(mainCode()), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, ...quizPatch() }));
+    const saved = await attempt(() => app.store.submitWork(id, { ...codePatch(mainCode()), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, step_at: lesson.steps.length, ...quizPatch() }));
     if (!saved) return;
     work = saved;
     dirty = false;
@@ -595,13 +687,24 @@ export async function viewLesson(main, id, previewPath) {
   function celebrate(before, after) {
     const newBadges = after.badges.filter((b) => !before.badges.includes(b));
     const rankedUp = after.rankIndex > before.rankIndex;
+    const firstSubmit = after.done.size > before.done.size; // Resubmitting doesn't earn more play time.
     const nextId = currentLesson(path, me.done);
+    const gained = h('h2', '+0 XP');
+    countUp(gained, 0, after.xp - before.xp, (n) => `+${n} XP`);
+    chime('submit');
+    confetti();
+    if (rankedUp) chime('rank', 0.9);
+    newBadges.slice(0, 3).forEach((b, i) => chime('badge', (rankedUp ? 1.9 : 0.9) + i * 0.5));
+    markCelebrated(me.student.id, after);
     modal((close) => h('div.stack.celebrate',
       h('p.eyebrow', 'Lesson submitted'),
-      h('h2', `+${after.xp - before.xp} XP`),
+      gained,
       rankedUp && h('p.rankup', `You are now a ${after.rank.name}!`),
       newBadges.length > 0 && h('div.stack', h('h3', 'New badge!'), h('div.badges', newBadges.map((b) => badgeChip(b)))),
+      ratingBox(id),
+      app.session?.class?.world_mode === 'earned' && firstSubmit && h('p.quest-earned', `🗺️ +${app.session.class.world_mins || 5} minutes in Trail Quest`),
       h('div.row.end',
+        app.session?.class?.world_mode && h('a.btn', { href: '#/quest', onclick: close }, 'Play Trail Quest'),
         h('a.btn', { href: '#/map', onclick: close }, 'See the map'),
         nextId
           ? h('a.btn.primary', { href: `#/${!path && me.done.has('t6') ? 'road' : `lesson/${nextId}`}`, onclick: close }, id === 'c6' ? 'Go Beyond the Summit' : 'Next lesson')
@@ -621,13 +724,14 @@ export async function viewLesson(main, id, previewPath) {
       ),
       h('div.row.lesson-actions',
         status,
-        isStudent && !readOnly && h('button.btn', { onclick: cleanCopy }, 'Get a clean copy'),
+        isStudent && canEdit(MAIN) && h('button.btn', { onclick: cleanCopy }, 'Get a clean copy'),
         h('button.btn', { onclick: openPicker }, 'Sprites'),
         h('button.btn', { onclick: openSounds }, 'Sounds'),
-        h('button.btn', { onclick: openMusic }, 'Music'),
-        isStudent && !readOnly && h('button.btn', { onclick: toggleShare }, work?.shared ? 'In the Arcade ✓' : 'Share to Arcade'),
+        musicAllowed() && h('button.btn', { onclick: openMusic }, 'Music'),
+        isStudent && !approved && h('button.btn', { onclick: toggleShare }, work?.shared ? 'In the Arcade ✓' : 'Share to Arcade'),
         preview && h('select.path-pick', { 'aria-label': 'Road to preview', onchange: (e) => go(`/lesson/${id}/${e.target.value}`) }, Object.values(PATHS).map((p) => h('option', { value: p.id, selected: p.id === path }, p.road))),
         preview && h('button.btn', { onclick: () => { openFile(MAIN); cm.setValue(buildSolution(id, path)); for (const [n, t] of Object.entries(filesThrough(id, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript')); drawFileBar(); run(); toast('Showing the answer key.'); } }, 'Show answer key'),
+        gridButton,
         h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run'),
       ),
     );
@@ -636,8 +740,18 @@ export async function viewLesson(main, id, previewPath) {
   drawHead();
   drawStep();
 
+  // Steps that were already done when the lesson opened stay quiet. Finishing one chimes once.
+  const cheered = new Set(lesson.steps.map((s, i) => (s.check && stepPasses(s, allCode()) ? i : -1)));
   const onChange = debounce(() => {
     drawDots();
+    drawPlace();
+    const fresh = lesson.steps.map((s, i) => i).filter((i) => lesson.steps[i].check && !cheered.has(i) && stepPasses(lesson.steps[i], allCode()));
+    fresh.forEach((i) => cheered.add(i));
+    if (fresh.length && !applyingRemote) {
+      chime('step');
+      const badge = stepBox.querySelector('.step-check');
+      if (badge && flow[stepIndex] && fresh.includes(flow[stepIndex].n)) setTimeout(() => { pop(badge); sparkle(badge); }, 0);
+    }
     const item = flow[stepIndex];
     const el = stepBox.querySelector('.step-check');
     if (item?.step?.check && el) {
@@ -646,8 +760,9 @@ export async function viewLesson(main, id, previewPath) {
       el.textContent = ok ? '✓ Done' : 'Not done yet';
     }
   }, 350);
-  cm.on('change', () => { markDirty(); onChange(); });
+  cm.on('change', () => { clearPlace(); markDirty(); onChange(); });
 
+  const stuck = isStudent && !approved ? helpBox(id, () => Math.min(stepNumberAt(stepIndex), lesson.steps.length - 1), helpOpen) : null;
   const feedback = work?.grade?.feedback || (work?.status === 'returned');
   const page = h('div.workspace',
     head,
@@ -659,6 +774,7 @@ export async function viewLesson(main, id, previewPath) {
         stdPanel,
         dots,
         stepBox,
+        stuck && stuck.el,
       ),
       h('section.code-pane', {
         'aria-label': 'Code editor',
@@ -681,8 +797,9 @@ export async function viewLesson(main, id, previewPath) {
   const beforeUnload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
   window.addEventListener('beforeunload', beforeUnload);
   drawTeamBar();
-  const teamTimer = team ? setInterval(pollTeam, 20000) : null;
+  const teamTimer = team ? setInterval(() => { if (!document.hidden) pollTeam(); }, 15000) : null;
   app.cleanup = async () => {
+    if (stuck) stuck.stop();
     clearInterval(teamTimer);
     window.removeEventListener('beforeunload', beforeUnload);
     document.body.classList.remove('in-workspace');

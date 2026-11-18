@@ -69,7 +69,7 @@ let p5Text = null;
 const loadP5 = () => {
   // On Apps Script, the build puts p5 into the page, with its script tags already made safe.
   const packed = document.getElementById('p5-src');
-  if (packed) return Promise.resolve(packed.textContent);
+  if (packed) return Promise.resolve(packed.dataset.encoding === 'base64' ? fromBase64(packed.textContent) : packed.textContent);
   if (!p5Text) {
     p5Text = fetch(new URL('../vendor/p5.min.js', import.meta.url))
       .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
@@ -78,6 +78,8 @@ const loadP5 = () => {
   }
   return p5Text;
 };
+/** The build stores p5 as base64, so Apps Script can't rewrite it. */
+const fromBase64 = (t) => new TextDecoder().decode(Uint8Array.from(atob(t.replace(/\s+/g, '')), (c) => c.charCodeAt(0)));
 // ml5 is large, so it is fetched only when a game actually uses it.
 let ml5Text = null;
 let ml5Loader = () => fetch(new URL('../vendor/ml5.min.js', import.meta.url)).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); });
@@ -91,6 +93,71 @@ export const usesMl5 = (code) => /\bml5\s*\./.test(code);
 
 /** Keep script text from ending its own script tag early. */
 const safeInline = (t) => t.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
+
+// A coordinate grid students can switch on over a 2D game: lines every 50, numbers every 100, and
+// the mouse position. The lesson page turns it on with a message. It sits above the canvas and
+// never touches the student's drawing.
+const GRID_OVERLAY = `
+(function () {
+  var on = false, layer = null, tip = null, k = 1, box = null;
+  function hide() { if (layer) layer.style.display = 'none'; if (tip) tip.style.display = 'none'; box = null; }
+  function draw() {
+    var c = document.querySelector('canvas');
+    var sketch = window.p5 && p5.instance;
+    if (!on || !c || !sketch || (sketch._renderer && sketch._renderer.isP3D)) { hide(); return; }
+    if (!layer) {
+      layer = document.createElement('canvas');
+      layer.style.cssText = 'position:fixed;pointer-events:none;z-index:5';
+      tip = document.createElement('div');
+      tip.style.cssText = 'position:fixed;pointer-events:none;z-index:6;font:bold 13px monospace;background:#14141f;color:#fff;padding:2px 6px;border-radius:3px;display:none';
+      document.body.appendChild(layer);
+      document.body.appendChild(tip);
+    }
+    var r = c.getBoundingClientRect();
+    var w = sketch.width, h = sketch.height;
+    box = r;
+    k = r.width / w;
+    layer.style.display = 'block';
+    layer.style.left = r.left + 'px';
+    layer.style.top = r.top + 'px';
+    layer.style.width = r.width + 'px';
+    layer.style.height = r.height + 'px';
+    layer.width = Math.round(r.width);
+    layer.height = Math.round(r.height);
+    var g = layer.getContext('2d');
+    g.font = 'bold 11px monospace';
+    g.lineJoin = 'round';
+    function label(text, x, y) { g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(text, x, y); g.fillStyle = '#fff'; g.fillText(text, x, y); }
+    for (var x = 0; x <= w; x += 50) {
+      g.fillStyle = x % 100 ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.6)';
+      g.fillRect(Math.round(x * k), 0, 1, layer.height);
+      g.fillStyle = x % 100 ? 'rgba(0,0,0,.2)' : 'rgba(0,0,0,.45)';
+      g.fillRect(Math.round(x * k) + 1, 0, 1, layer.height);
+    }
+    for (var y = 0; y <= h; y += 50) {
+      g.fillStyle = y % 100 ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.6)';
+      g.fillRect(0, Math.round(y * k), layer.width, 1);
+      g.fillStyle = y % 100 ? 'rgba(0,0,0,.2)' : 'rgba(0,0,0,.45)';
+      g.fillRect(0, Math.round(y * k) + 1, layer.width, 1);
+    }
+    label('x', 4, 12);
+    for (var a = 100; a < w; a += 100) label(String(a), a * k + 3, 12);
+    for (var b = 100; b < h; b += 100) label(String(b), 3, b * k - 3);
+    label('y', 4, layer.height - 5);
+  }
+  window.addEventListener('message', function (e) { if (e.data && typeof e.data.ptGrid === 'boolean') { on = e.data.ptGrid; draw(); } });
+  window.addEventListener('mousemove', function (e) {
+    if (!on || !box || !tip) return;
+    var x = Math.round((e.clientX - box.left) / k), y = Math.round((e.clientY - box.top) / k);
+    var inside = e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom;
+    tip.style.display = inside ? 'block' : 'none';
+    tip.textContent = 'x: ' + x + ', y: ' + y;
+    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 120) + 'px';
+    tip.style.top = Math.max(e.clientY - 26, 0) + 'px';
+  });
+  setInterval(draw, 400);
+})();
+`;
 
 // A locked-down frame is not allowed to open the camera. So createCapture(VIDEO) is replaced with
 // a canvas, and the app (outside the frame) opens the camera and passes in plain image frames.
@@ -139,14 +206,17 @@ window.SPRITES = new Proxy(${JSON.stringify(assets || {})}, { get(t, k) {
   return ${JSON.stringify(PLACEHOLDER)};
 } });
 (function () {
-  let start = performance.now(); let count = 0;
-  setInterval(function () { start = performance.now(); }, 250);
+  // Time how long the current task has been looping. A microtask clears the mark once the task
+  // returns, so slow or throttled timers can't make a working game look stuck.
+  let start = 0; let count = 0; let armed = false;
   window.__lp = function () {
+    if (!armed) { armed = true; start = performance.now(); Promise.resolve().then(function () { armed = false; }); }
     if (++count % 2048 === 0 && performance.now() - start > 2500) {
       throw new Error('LOOP_TOO_LONG');
     }
   };
 })();
+${GRID_OVERLAY}
 window.addEventListener('error', function (e) {
   parent.postMessage({ pt: 'error', message: e.message, line: e.lineno }, '*');
 });
@@ -281,6 +351,8 @@ export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
   // A teacher can silence a whole set of games from Display, even while one is playing.
   const stopWatching = onSettings((s) => { if (frame && frame.contentWindow) frame.contentWindow.postMessage({ ptMute: !s.gameSound }, '*'); });
   let runToken = 0;
+  let gridOn = false;
+  const sendGrid = () => { if (frame && frame.contentWindow) frame.contentWindow.postMessage({ ptGrid: gridOn }, '*'); };
   const stop = () => {
     runToken++;
     stopCamera();
@@ -311,9 +383,11 @@ export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
       frame.setAttribute('title', 'Game canvas');
       frame.srcdoc = doc.html;
       el.appendChild(frame);
-      frame.addEventListener('load', () => { try { frame.focus(); } catch (_) { /* cross-origin frames may refuse */ } });
+      frame.addEventListener('load', () => { sendGrid(); try { frame.focus(); } catch (_) { /* cross-origin frames may refuse */ } });
     },
     stop,
+    /** Show or hide the coordinate grid over a 2D game. It stays on across runs. */
+    setGrid(on) { gridOn = !!on; sendGrid(); },
     focus() { if (frame) frame.focus(); },
     destroy() { stop(); stopWatching(); window.removeEventListener('message', listener); },
   };

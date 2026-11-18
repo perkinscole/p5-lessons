@@ -2,7 +2,7 @@
 // so changing a rule here updates every student. Grades are deliberately NOT an input:
 // everything here is visible to classmates, and grades must stay private.
 
-export const XP = { submit: 50, submitUnchecked: 25, approved: 50, stretch: 10, award: 25 };
+export const XP = { submit: 50, submitUnchecked: 25, approved: 50, stretch: 10, award: 25, rating: 10 };
 
 export const RANKS = [
   { name: 'Spark', xp: 0 },
@@ -76,6 +76,8 @@ export function statsFor(s) {
   }
   const awards = s.awards || [];
   xp += awards.length * XP.award;
+  // Telling the teacher what you thought of a lesson earns a little, whatever you said.
+  xp += (s.rated || 0) * XP.rating;
   const record = { done, path: s.path, stretch, spritesShared: s.sprites_shared || 0, shared: works.filter((w) => w.shared).length };
   const earned = BADGES.filter((b) => b.earned(record)).map((b) => b.id);
   const awarded = awards.map((a) => a.badge_id);
