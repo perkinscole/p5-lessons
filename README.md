@@ -105,6 +105,10 @@ The **Display** button lets each person choose light, dark, or high contrast, an
 
 In a lesson, students can add up to 8 extra code files and upload images, using the buttons above the editor or by dragging them in. Images are shrunk to fit the class Sheet and load with `loadImage(SPRITES.name)`. Sound files aren't supported yet.
 
+## Sounds and celebrations
+
+Finishing a step plays a short chime and the "Done" mark sparkles. A right answer on a check question chimes too. Submitting a lesson plays a fanfare with confetti while the XP counts up, and new badges and ranks pop in. A badge you give a student, or a rank they reach when you approve work, pops up with its own sound the next time they open Home. Equipping gear on the character page chimes as well. **Display → Play sounds** turns all of it off for a student, and animations are skipped for anyone whose device is set to reduce motion.
+
 ## Lesson ratings
 
 After submitting a lesson, students can give it 1 to 5 stars, tap what was confusing (the instructions, where the code goes, the code itself, error messages, the check questions, or nothing), choose which step, and add a short comment. A class's **Feedback** tab adds these up per lesson: the average, the spread of stars, the most common confusion, the step named most, and the comments. Ratings are shown without names and never affect grades or XP. The Ratings tab of the Sheet does hold which student gave each rating, so a student can change theirs.

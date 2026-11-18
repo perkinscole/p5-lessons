@@ -86,6 +86,10 @@ Constraints that follow from this:
 - The sandbox can't open a camera. `createCapture` is replaced with a canvas, and the parent page sends in image frames. Other people's games use `askCamera` to ask the viewer first.
 - `protectLoops` adds a stop check to loops so an infinite loop can't freeze the tab.
 
+### Celebrations
+
+`js/celebrate.js` holds every chime and reward animation (`chime`, `sparkle`, `confetti`, `pop`, `popBadge`, `celebrateNew`). Use it for any new "you did it" moment rather than playing sounds directly, so the Display sound setting and reduced-motion are respected in one place. Don't give a pop-up card a class that an existing component uses (`badge` restyled it once).
+
 ### Trail Quest
 
 `js/game/quest.js` holds the rules and the world generator with no drawing, so `tests/quest.test.mjs` can check that every world is fair (everything reachable, only chests behind cracked rocks). `js/views/quest.js` draws and runs it on a plain canvas in the app's own page, not the sandbox, since it is our code. `powersFor` maps character slots to powers; a new slot power goes there and in `POWERS`.

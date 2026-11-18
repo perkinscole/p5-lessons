@@ -5,6 +5,7 @@ import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, ru
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
 import { ratingBox } from './feedback.js';
+import { chime, sparkle, pop, confetti, countUp, markCelebrated } from '../celebrate.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
@@ -409,6 +410,8 @@ export async function viewLesson(main, id, previewPath) {
       onclick: (e) => {
         if (i === q.answer) {
           e.currentTarget.classList.add('right');
+          chime('right');
+          sparkle(e.currentTarget);
           if (firstTry && !answered.has(q)) quizRight++;
           answered.add(q);
           clear(feedback).append(h('p.ok', '✓ ', md(q.why)));
@@ -417,6 +420,7 @@ export async function viewLesson(main, id, previewPath) {
           markDirty();
         } else {
           firstTry = false;
+          chime('wrong');
           e.currentTarget.classList.add('wrong');
           e.currentTarget.disabled = true;
           clear(feedback).append(h('p.warn', 'Not quite. Try another one.'));
@@ -670,9 +674,16 @@ export async function viewLesson(main, id, previewPath) {
     const rankedUp = after.rankIndex > before.rankIndex;
     const firstSubmit = after.done.size > before.done.size; // Resubmitting doesn't earn more play time.
     const nextId = currentLesson(path, me.done);
+    const gained = h('h2', '+0 XP');
+    countUp(gained, 0, after.xp - before.xp, (n) => `+${n} XP`);
+    chime('submit');
+    confetti();
+    if (rankedUp) chime('rank', 0.9);
+    newBadges.slice(0, 3).forEach((b, i) => chime('badge', (rankedUp ? 1.9 : 0.9) + i * 0.5));
+    markCelebrated(me.student.id, after);
     modal((close) => h('div.stack.celebrate',
       h('p.eyebrow', 'Lesson submitted'),
-      h('h2', `+${after.xp - before.xp} XP`),
+      gained,
       rankedUp && h('p.rankup', `You are now a ${after.rank.name}!`),
       newBadges.length > 0 && h('div.stack', h('h3', 'New badge!'), h('div.badges', newBadges.map((b) => badgeChip(b)))),
       ratingBox(id),
@@ -714,9 +725,18 @@ export async function viewLesson(main, id, previewPath) {
   drawHead();
   drawStep();
 
+  // Steps that were already done when the lesson opened stay quiet. Finishing one chimes once.
+  const cheered = new Set(lesson.steps.map((s, i) => (s.check && stepPasses(s, allCode()) ? i : -1)));
   const onChange = debounce(() => {
     drawDots();
     drawPlace();
+    const fresh = lesson.steps.map((s, i) => i).filter((i) => lesson.steps[i].check && !cheered.has(i) && stepPasses(lesson.steps[i], allCode()));
+    fresh.forEach((i) => cheered.add(i));
+    if (fresh.length && !applyingRemote) {
+      chime('step');
+      const badge = stepBox.querySelector('.step-check');
+      if (badge && flow[stepIndex] && fresh.includes(flow[stepIndex].n)) setTimeout(() => { pop(badge); sparkle(badge); }, 0);
+    }
     const item = flow[stepIndex];
     const el = stepBox.querySelector('.step-check');
     if (item?.step?.check && el) {

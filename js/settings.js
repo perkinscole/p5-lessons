@@ -86,7 +86,7 @@ export function openSettings() {
     toggle('Wrap long lines of code', 'wrap'),
     choice('Reading speed', 'readRate', [[0.75, 'Slow'], [1, 'Normal'], [1.25, 'Fast']]),
     toggle('Read each step aloud automatically', 'autoRead'),
-    toggle('Play sound in games', 'gameSound'),
+    toggle('Play sounds (games, chimes, and rewards)', 'gameSound'),
     h('div.row.end',
       h('button.btn', { type: 'button', onclick: () => speak('This is how read aloud sounds.') }, 'Test read aloud'),
       h('button.btn.primary', { type: 'button', onclick: close }, 'Done')),

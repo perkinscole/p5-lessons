@@ -6,6 +6,7 @@ import { PATHS, PATH_IDS, currentLesson, coreSequence, isBeyond, stageOf, needsP
 import { statsFor, RANKS, BADGES, TEACHER_BADGES, badgeById, isDone } from '../game/rules.js';
 import { SLOTS, avatarURL, defaultAvatar, isUnlocked, unlockLabel, unlockables, rarityOf, RARITY_NAMES, titleOf, auraColor } from '../game/avatar.js';
 import { installSynth } from '../game/synth.js';
+import { chime, sparkle, pop, celebrateNew } from '../celebrate.js';
 
 // Sound effects for the character maker. The Display setting "Play sound" turns them off.
 const sfxSynth = installSynth({}, {});
@@ -53,6 +54,8 @@ export function badgeChip(id, note) {
 export async function viewHome() {
   const me = await loadMe();
   const { student, works, stats, done, row, cls } = me;
+  // Badges a teacher gave, or a rank reached through approvals, pop up here the next time Home opens.
+  celebrateNew(student.id, stats, Object.fromEntries((row.awards || []).filter((a) => a.note).map((a) => [a.badge_id, a.note])));
   const nextId = currentLesson(student.path, done);
   const mustChoose = needsPathChoice(done, student.path);
   const next = nextId && getLesson(nextId);
@@ -235,7 +238,7 @@ export async function viewCharacter() {
             title: open ? '' : `Unlocks at ${unlockLabel(lock, badgeName)}`,
             onclick: () => {
               if (!open) { sfx('hit'); toast(`🔒 Unlock this with ${howToUnlock(lock)}.`); return; }
-              av[slot] = i; fresh.delete(`${slot}:${i}`); sfx('select'); updatePreview(); drawPanes();
+              av[slot] = i; fresh.delete(`${slot}:${i}`); chime('equip'); updatePreview(); drawPanes(); pop(stage);
             },
           }, open ? '' : '🔒'));
         });
@@ -249,7 +252,7 @@ export async function viewCharacter() {
             'aria-label': `${item.name}${rarity === 'common' ? '' : `, ${RARITY_NAMES[rarity]}`}${open ? '' : ', locked'}`,
             onclick: () => {
               if (!open) { sfx('hit'); toast(`🔒 ${item.name}: ${howToUnlock(item.unlock)}.`); return; }
-              av[slot] = id; fresh.delete(`${slot}:${id}`); sfx(slot === 'aura' && id !== 'none' ? 'magic' : 'select'); updatePreview(); drawPanes();
+              av[slot] = id; fresh.delete(`${slot}:${id}`); if (slot === 'aura' && id !== 'none') sfx('magic'); else chime('equip'); updatePreview(); drawPanes(); pop(stage); if (isNew) sparkle(stage, 16);
             },
           }, h('span', item.name),
           rarity !== 'common' && h('small.rarity', RARITY_NAMES[rarity]),
