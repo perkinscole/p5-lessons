@@ -109,9 +109,15 @@ In a lesson, students can add up to 8 extra code files and upload images, using 
 
 Finishing a step plays a short chime and the "Done" mark sparkles. A right answer on a check question chimes too. Submitting a lesson plays a fanfare with confetti while the XP counts up, and new badges and ranks pop in. A badge you give a student, or a rank they reach when you approve work, pops up with its own sound the next time they open Home. Equipping gear on the character page chimes as well. **Display → Play sounds** turns all of it off for a student, and animations are skipped for anyone whose device is set to reduce motion.
 
-## Lesson ratings
+## Feedback and help
 
-After submitting a lesson, students can give it 1 to 5 stars, tap what was confusing (the instructions, where the code goes, the code itself, error messages, the check questions, or nothing), choose which step, and add a short comment. A class's **Feedback** tab adds these up per lesson: the average, the spread of stars, the most common confusion, the step named most, and the comments. Ratings are shown without names and never affect grades or XP. The Ratings tab of the Sheet does hold which student gave each rating, so a student can change theirs.
+**"I'm stuck."** Every lesson has a **✋ I'm stuck: ask for help** button. A student can add a short note, and their request appears within a few seconds on the class page and the class display, with a doorbell: their name, the exact step, and the note. Press **✓ Helped** to clear it, or the student can press **I figured it out**. The 🔔 button on the display tests the doorbell on that computer.
+
+**Confusing?** Under every step and check question, a student can tap **🤔 Confusing?** and pick a reason: instructions unclear, code didn't work, too hard, too easy, or other, with an optional note.
+
+**Rating.** After submitting a lesson, students give it 1 to 5 stars and can say what was hardest and what would make it better. Rating earns 10 XP whatever they say.
+
+**The Feedback tab** on a class adds this up per lesson: the rating, how many started and finished, the steps most often marked confusing or needing help (with reasons and notes), and check questions that 30% or more missed on the first try. **Copy report for Claude** and **Download .md** produce a report that names each lesson's source file and numbers steps the way students see them, so you can paste it to Claude and ask it to improve the lessons. Feedback is shown without names. Notes students typed are included as written, so read the report before sharing it. Feedback never affects grades.
 
 ## Trail Quest
 

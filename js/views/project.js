@@ -139,7 +139,7 @@ function racePanel(board, lessons, focus) {
           h('div.pj-racers', here.map(personChip)));
       })),
     others.length > 0 && h('div.pj-others', h('strong', 'On other lessons:'),
-      others.map((s) => h('span.pj-other', h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 2), alt: '' }), `${s.display_name} · ${where(s)}`))),
+      others.map((s) => h('span.pj-other', { class: needsHelp.has(s.id) ? 'needs-help' : '' }, needsHelp.has(s.id) && '✋ ', h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 2), alt: '' }), `${s.display_name} · ${where(s)}`))),
   );
 }
 

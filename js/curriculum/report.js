@@ -82,7 +82,7 @@ export function buildReport(entries, info, only) {
   const head = [
     '# Pixel Trail lesson feedback', '',
     `${info.className} · ${info.date} · ${info.students} student${info.students === 1 ? '' : 's'} · student names removed`, '',
-    'Please use this to improve the lessons in the Pixel Trail repository (p5-lessons). Lessons are JavaScript data in `js/curriculum/` (path given for each lesson). Steps are numbered the way students see them (Step 1 = the first step). The one-line instruction a student sees for a step comes from the step\'s `say` text, or from `js/curriculum/briefs.js` when it is set by hand. Check questions are in `js/curriculum/checks.js`. "Missed" counts first tries only. Read `CLAUDE.md` first: lessons build their own answer keys, and tests enforce word limits.',
+    'Please use this to improve the lessons in the Pixel Trail repository (p5-lessons). Lessons are JavaScript data in `js/curriculum/` (path given for each lesson). Steps are numbered the way students see them (Step 1 = the first step). The one-line instruction a student sees for a step comes from the step\'s `say` text, or from `js/curriculum/briefs.js` when it is set by hand. Check questions are in `js/curriculum/checks.js`, numbered here in the order they are written there (each has an `after` value that says which step it follows). "Missed" counts first tries only. Read `CLAUDE.md` first: lessons build their own answer keys, and tests enforce word limits.',
   ];
   return `${[...head, ...list.map((e) => `\n${lessonSection(e)}`)].join('\n')}\n`;
 }

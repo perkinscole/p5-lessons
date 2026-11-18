@@ -241,6 +241,7 @@ button.btn.on { background: var(--sun); color: #2b2350; }
 .help-note { display: block; font-style: italic; }
 .help-card.big h2 { font-size: 3vh; }
 .help-card.big .help-list { font-size: 2.2vh; }
+.pj-other.needs-help { border-color: #c43f29; background: #ffd9d1; color: #2b2350; font-weight: 700; }
 .pj-person.needs-help { position: relative; outline: 3px solid #c43f29; background: #ffd9d1; border-radius: 4px; }
 .pj-hand { position: absolute; top: -1.6vh; right: -1vh; font-size: 2.4vh; animation: fx-wiggle 1s ease-in-out infinite; }
 .fb-list { margin: 4px 0 0; padding-left: 18px; }

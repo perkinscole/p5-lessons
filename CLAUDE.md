@@ -90,6 +90,10 @@ Constraints that follow from this:
 
 `js/celebrate.js` holds every chime and reward animation (`chime`, `sparkle`, `confetti`, `pop`, `popBadge`, `celebrateNew`). Use it for any new "you did it" moment rather than playing sounds directly, so the Display sound setting and reduced-motion are respected in one place. Don't give a pop-up card a class that an existing component uses (`badge` restyled it once).
 
+### Feedback and help
+
+`js/views/feedback.js` has the student controls (`confusingButton`, `helpBox`, `ratingBox`) and the teacher's Feedback tab and live `helpCard`. `js/curriculum/report.js` builds the Markdown report with no DOM, so it is tested. On the server, `Flags` holds one row per student, lesson, and target (`step:3` or `quiz:1`, both counted from 0), plus an append-only row with reason `help` each time a student asks for help on a new step; `Help` holds at most one open request per student. `helpRequests` and `myHelp` are polled, so `appsscript.js` lists them in `LIVE`: never cached, and never clearing the cache. First tries on check questions are kept once in the `quiz_first` column (`firstTries_`). Flags and first tries are stored by step and question position, so inserting a step or question in the middle of a live lesson shifts what earlier feedback points at; add to the end or accept the shift.
+
 ### Trail Quest
 
 `js/game/quest.js` holds the rules and the world generator with no drawing, so `tests/quest.test.mjs` can check that every world is fair (everything reachable, only chests behind cracked rocks). `js/views/quest.js` draws and runs it on a plain canvas in the app's own page, not the sandbox, since it is our code. `powersFor` maps character slots to powers; a new slot power goes there and in `POWERS`.
