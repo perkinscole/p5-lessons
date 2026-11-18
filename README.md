@@ -82,6 +82,15 @@ Work through [PILOT.md](PILOT.md), a step-by-step checklist for the first deploy
 - **Protect the Sheet.** It holds every student's work and grades, so don't share it with students. They never need access to it, because the app reads it on their behalf.
 - **Use first name and last initial.** Classmates see these names on the journey map. They never see emails.
 
+## Your data and backups
+
+Everything lives in one Google Sheet. On **Your classes**, the teacher who set up the app sees **Your data and backups**: which Sheet is in use, how many classes and students are in it, and links to backups.
+
+- A backup copy is made in your Google Drive each day you open the app, named "Pixel Trail Backup" with the date. **Back up now** makes one on the spot. Delete old ones whenever you like.
+- Deploying a new version never touches data.
+- If classes or students ever look missing, **do not make them again**. Open the card and check which Sheet the app is using. **Use this Sheet** points the app at a different one, and **Bring in its data** combines another Sheet into the current one: it shows what it would add first, backs up, removes nothing, and each student keeps the best of every lesson.
+- If students see "Busy… saving your work" for more than a few seconds at a time, the app is near Google's limit of about 30 requests at once. Their work is kept and sent again by itself. Check **Executions** in the Apps Script editor for failures and long runs.
+
 ## How it protects students
 
 - Students sign in with their school Google account, so there are no passwords to manage. Anyone not on a roster sees a "not on a class list" page and no data.

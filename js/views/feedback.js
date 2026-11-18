@@ -97,6 +97,7 @@ export function helpBox(lessonId, getStep, startOpen) {
     clearInterval(timer);
     // While waiting, check now and then whether the teacher has marked it helped.
     timer = waiting ? setInterval(async () => {
+      if (document.hidden) return;
       try { const now = await app.store.myHelp(); if (!now.open) { waiting = false; watch(); draw(); toast('Your teacher marked you as helped.'); } } catch (_) { /* try again next time */ }
     }, 20000) : null;
   };
@@ -156,8 +157,11 @@ export function helpCard(classId, { onUpdate } = {}) {
     if (onUpdate) onUpdate(list);
   }
   check();
-  const timer = setInterval(check, 6000);
-  return { el, stop: () => clearInterval(timer), check };
+  // Every 15 seconds, and never from a tab nobody is looking at: each check is a request on the class's shared limit.
+  const timer = setInterval(() => { if (!document.hidden) check(); }, 15000);
+  const onShow = () => { if (!document.hidden) check(); };
+  document.addEventListener('visibilitychange', onShow);
+  return { el, stop: () => { clearInterval(timer); document.removeEventListener('visibilitychange', onShow); }, check };
 }
 
 async function copyText(text) {

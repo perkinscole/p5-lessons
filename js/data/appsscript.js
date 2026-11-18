@@ -1,4 +1,5 @@
 import { setMl5Loader } from '../sandbox.js';
+import { createQueue } from './queue.js';
 // Data store for the real app, which runs on Google Apps Script. Same interface as local.js.
 // Everything goes through the server's single api() function, which decides who may do what.
 
@@ -16,37 +17,16 @@ function send(method, args) {
   });
 }
 
-// Every trip to Apps Script costs about a second, whatever it carries. So calls made at the same
-// moment travel together as one batch, and recent answers to read-only calls are reused.
-const MAX_BATCH = 12;
-let queue = [];
-function flush() {
-  const jobs = queue;
-  queue = [];
-  for (let i = 0; i < jobs.length; i += MAX_BATCH) {
-    const group = jobs.slice(i, i + MAX_BATCH);
-    if (group.length === 1) {
-      const [j] = group;
-      send(j.method, j.args).then(j.resolve, j.reject);
-      continue;
-    }
-    send('batch', [group.map((j) => [j.method, j.args])]).then(
-      (results) => group.forEach((j, k) => (results[k].ok ? j.resolve(results[k].data) : j.reject(new Error(results[k].error)))),
-      (e) => group.forEach((j) => j.reject(e)),
-    );
-  }
-}
-function call(method, ...args) {
-  return new Promise((resolve, reject) => {
-    if (!queue.length) setTimeout(flush, 0);
-    queue.push({ method, args, resolve, reject });
-  });
-}
+// Every trip to Apps Script costs about a second, whatever it carries, and the whole class shares
+// one account's limit. queue.js sends one trip at a time and retries quietly when Google is busy.
+const { call, direct } = createQueue(send, {
+  onBusy: (on) => window.dispatchEvent(new CustomEvent('app-busy', { detail: on })),
+});
 
 // Reads that are safe to reuse for a few seconds. Anything else might change data, so it clears them.
 const READS = new Set(['session', 'listClasses', 'getClass', 'listStudents', 'classBoard', 'myWorks', 'classWork', 'getClassPlan',
   'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'getDigest', 'arcade', 'listSprites', 'mySprites', 'listSongs', 'mySongs',
-  'listTeams', 'gradeSyncStatus', 'worldState', 'worldGhosts', 'lessonRatings']);
+  'listTeams', 'gradeSyncStatus', 'worldState', 'worldGhosts', 'lessonRatings', 'dataInfo']);
 const FRESH_MS = 15000;
 const cache = new Map();
 let generation = 0;
@@ -75,20 +55,38 @@ function cachedCall(method, ...args) {
 const METHODS = [
   'listClasses', 'createClass', 'deleteClass', 'getClass', 'listStudents', 'addStudents', 'removeStudent', 'setStudentPath',
   'classBoard', 'updateProfile', 'myWorks', 'saveWork', 'submitWork', 'setShared', 'classWork', 'getWorkFull', 'saveGrade',
-  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'createAssignments', 'setMusicOpen', 'setWorld', 'worldState', 'worldEnter', 'worldRun', 'worldGhosts', 'rateLesson', 'lessonRatings', 'flagStep', 'myFlags', 'askHelp', 'cancelHelp', 'myHelp', 'helpRequests', 'markHelped', 'saveSprite', 'deleteSprite',
+  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'createAssignments', 'setMusicOpen', 'setWorld', 'worldState', 'worldEnter', 'worldRun', 'worldGhosts', 'rateLesson', 'lessonRatings', 'flagStep', 'myFlags', 'askHelp', 'cancelHelp', 'myHelp', 'helpRequests', 'markHelped', 'saveSprite', 'deleteSprite', 'dataInfo', 'backupNow', 'dataSwitch', 'dataCombine',
 ];
+
+// ml5 is about 4 MB and only changes when the app is redeployed, so each device keeps its own copy.
+const ML5_KEY = `ml5-${typeof BUILD_ID === 'undefined' ? 'dev' : BUILD_ID}`;
+const idb = (mode, work) => new Promise((resolve, reject) => {
+  const open = indexedDB.open('pixel-trail', 1);
+  open.onupgradeneeded = () => open.result.createObjectStore('files');
+  open.onerror = () => reject(open.error);
+  open.onsuccess = () => {
+    const tx = open.result.transaction('files', mode);
+    const req = work(tx.objectStore('files'));
+    tx.oncomplete = () => resolve(req.result);
+    tx.onerror = () => reject(tx.error);
+  };
+});
 
 /** ml5 is stored in pieces, because Apps Script files can't comfortably hold it whole. */
 async function loadMl5Pieces() {
-  // Pieces travel separately, since a batch of them would be one very large answer, but at the same time.
+  try {
+    const kept = await idb('readonly', (files) => files.get(ML5_KEY));
+    if (typeof kept === 'string' && kept.length > 1000000) return kept;
+  } catch (_) { /* No storage here: download it. */ }
+  // One piece at a time, in line with everything else, so a class starting together doesn't flood the server.
   let text = '';
-  for (let start = 0; ; start += 5) {
-    const parts = await Promise.all([0, 1, 2, 3, 4].map((k) => send('libraryPart', [start + k])));
-    for (const part of parts) {
-      if (!part) return text;
-      text += part;
-    }
+  for (let k = 0; ; k++) {
+    const part = await direct('libraryPart', [k]);
+    if (!part) break;
+    text += part;
   }
+  try { await idb('readwrite', (files) => { files.clear(); return files.put(text, ML5_KEY); }); } catch (_) { /* It still works, just not kept. */ }
+  return text;
 }
 
 export function createAppsScriptStore() {

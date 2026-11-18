@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 // Packs the app into the only kinds of file Apps Script accepts: .gs and .html.
 // Run: npm run build. The result in dist/ is what goes into the Apps Script project.
 import { build } from 'esbuild';
@@ -22,7 +23,8 @@ const cm = await minifyClassic(['codemirror', 'javascript', 'matchbrackets', 'cl
 const app = await build({
   entryPoints: [fileURLToPath(path('js/main.js'))],
   bundle: true, minify: true, format: 'iife', write: false, target: 'es2020', legalComments: 'none',
-  define: { 'import.meta.url': '""' },
+  // BUILD_ID names this copy of ml5, so each device downloads it once and again only when it changes.
+  define: { 'import.meta.url': '""', BUILD_ID: JSON.stringify(createHash('sha1').update(read('vendor/ml5.min.js')).digest('hex').slice(0, 12)) },
   logOverride: { 'empty-import-meta': 'silent' },
 });
 const css = await build({ stdin: { contents: read('vendor/codemirror/codemirror.css') + read('css/app.css'), loader: 'css' }, minify: true, write: false });

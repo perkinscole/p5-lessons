@@ -468,6 +468,11 @@ export function createLocalStore() {
       db.contributions = (db.contributions || []).filter((c) => !dropped.has(c.team_id));
       save();
     },
+    // The demo keeps everything in this browser, so there is no Sheet to back up or move.
+    async dataInfo() { return null; },
+    async backupNow() { throw new Error('Backups are only in the real app.'); },
+    async dataSwitch() { throw new Error('Only in the real app.'); },
+    async dataCombine() { throw new Error('Only in the real app.'); },
     // Demo stand-in for Google Classroom: assignments are remembered here and grades "sent" instantly.
     async gradeSyncStatus(classId, slots) {
       if (!(db.links || {})[classId]) return { linked: false };

@@ -9,7 +9,9 @@ const CELL_LIMIT = 50000;
 class FakeRange {
   constructor(sheet, row, col, rows, cols) { Object.assign(this, { sheet, row, col, rows, cols }); }
   getValues() {
+    if (this.sheet.book.fail.reads) throw new Error('Service Spreadsheets failed while accessing document');
     this.sheet.reads++;
+    this.sheet.book.cells += this.rows * this.cols;
     return Array.from({ length: this.rows }, (_, r) => Array.from({ length: this.cols }, (_, c) => this.sheet.grid[this.row - 1 + r]?.[this.col - 1 + c] ?? ''));
   }
   setValues(values) {
@@ -17,10 +19,28 @@ class FakeRange {
     return this;
   }
   setNumberFormat() { this.sheet.plain = true; return this; }
+  /** Like Sheets' own search: finds matching cells without handing the values to the script. */
+  createTextFinder(text) {
+    const range = this;
+    const finder = {
+      matchEntireCell: () => finder,
+      matchCase: () => finder,
+      findAll: () => {
+        if (range.sheet.book.fail.reads) throw new Error('Service Spreadsheets failed while accessing document');
+        const out = [];
+        for (let r = 0; r < range.rows; r++) for (let c = 0; c < range.cols; c++) {
+          if (String(range.sheet.grid[range.row - 1 + r]?.[range.col - 1 + c] ?? '') === String(text)) out.push({ getRow: () => range.row + r });
+        }
+        return out;
+      },
+      findNext: () => finder.findAll()[0] || null,
+    };
+    return finder;
+  }
 }
 
 class FakeSheet {
-  constructor(name) { this.name = name; this.grid = []; this.reads = 0; this.plain = false; }
+  constructor(name, book) { this.name = name; this.book = book; this.grid = []; this.reads = 0; this.plain = false; }
   setCell(row, col, v) {
     if (typeof v === 'string' && v.length > CELL_LIMIT) throw new Error(`Cell over ${CELL_LIMIT} characters in ${this.name}`);
     if (typeof v === 'string' && v.startsWith('=')) throw new Error(`Would become a formula in ${this.name}: ${v.slice(0, 30)}`);
@@ -73,29 +93,59 @@ function fakeClassroom(data) {
 
 /** Create a server. `server.as(email)` returns a function that calls api() as that person. */
 export function createServer({ owner = 'teacher@school.test', bound = true, codeFile = '../gas/Code.gs', htmlDir = null, classroom = null } = {}) {
-  const sheets = new Map();
-  const spreadsheet = {
-    getId: () => 'fake-sheet',
-    getSheetByName: (n) => sheets.get(n) || null,
-    insertSheet: (n) => { const s = new FakeSheet(n); sheets.set(n, s); return s; },
+  // Every spreadsheet that exists in this pretend Drive, by id.
+  const books = new Map();
+  const fail = { open: false, reads: false, busyLock: false };
+  const makeBook = (id, name) => {
+    const tabs = new Map();
+    const book = {
+      tabs, fail, cells: 0,
+      getId: () => id,
+      getName: () => name,
+      getUrl: () => `https://docs.google.com/spreadsheets/d/${id}/edit`,
+      getSheetByName: (n) => tabs.get(n) || null,
+      insertSheet: (n) => { const s = new FakeSheet(n, book); tabs.set(n, s); return s; },
+      copy: (newName) => {
+        const twin = makeBook(`fake-copy-${String(books.size).padStart(4, '0')}-abcdefghij`, newName);
+        for (const [n, sh] of tabs) twin.insertSheet(n).grid = sh.grid.map((r) => r.slice());
+        return twin;
+      },
+    };
+    books.set(id, book);
+    return book;
   };
+  const spreadsheet = makeBook('fake-sheet-000000000000000', 'Pixel Trail Data');
+  const sheets = spreadsheet.tabs;
+  const cacheStore = new Map();
   let activeEmail = '';
   const mail = [];
   const triggers = [];
   const props = new Map();
   let created = 0;
+  let opens = 0;
   const sandbox = {
     console: { error() {}, log() {}, warn() {} },
-    Session: { getActiveUser: () => ({ getEmail: () => activeEmail }), getEffectiveUser: () => ({ getEmail: () => owner }) },
+    Session: { getActiveUser: () => ({ getEmail: () => activeEmail }), getEffectiveUser: () => ({ getEmail: () => owner }), getScriptTimeZone: () => 'America/New_York' },
     SpreadsheetApp: {
       getActiveSpreadsheet: () => (bound ? spreadsheet : null),
-      openById: () => spreadsheet,
-      create: () => { created++; return spreadsheet; },
+      openById: (id) => {
+        opens++;
+        if (fail.open) throw new Error('Service Spreadsheets failed while accessing document with id ' + id);
+        if (!books.has(id)) throw new Error('Document ' + id + ' is missing (perhaps it was deleted?)');
+        return books.get(id);
+      },
+      create: (name) => { created++; return created === 1 && !bound ? spreadsheet : makeBook(`fake-new-${created}-abcdefghijklmnop`, name); },
       flush() {},
     },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props.get(k) ?? null, setProperty: (k, v) => props.set(k, v) }) },
-    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-    Utilities: { getUuid: () => randomUUID() },
+    LockService: { getScriptLock: () => ({ waitLock() { if (fail.busyLock) throw new Error('Lock timeout: another process was holding the lock for too long.'); }, releaseLock() {} }) },
+    Utilities: { getUuid: () => randomUUID(), sleep() {}, formatDate: (d) => d.toISOString().slice(0, 10) },
+    // Like the real cache: text only, under 100 KB a value, gone after its time.
+    CacheService: { getScriptCache: () => ({
+      get: (k) => { const hit = cacheStore.get(k); return hit && hit.until > Date.now() ? hit.value : null; },
+      put: (k, v, seconds = 600) => { if (String(v).length > 100000) throw new Error('Argument too large: value'); cacheStore.set(k, { value: String(v), until: Date.now() + seconds * 1000 }); },
+      remove: (k) => { cacheStore.delete(k); },
+    }) },
     Classroom: fakeClassroom(classroom || {}),
     MailApp: { sendEmail: (to, subject, body) => mail.push({ to, subject, body }) },
     ScriptApp: {
@@ -120,7 +170,8 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
 
   const raw = (email, method, args = []) => {
     activeEmail = email;
-    sandbox.spreadsheet_reset?.();
+    // Each real request is a fresh run, so nothing found in an earlier one is remembered.
+    vm.runInContext('spreadsheet_ = null', sandbox);
     return JSON.parse(sandbox.api(method, JSON.stringify(args)));
   };
   return {
@@ -129,6 +180,16 @@ export function createServer({ owner = 'teacher@school.test', bound = true, code
     triggers,
     run: (email, fn, ...args) => { activeEmail = email; return sandbox[fn](...args); },
     createdCount: () => created,
+    books,
+    props,
+    /** Another spreadsheet in the same Drive. */
+    newBook: (name) => makeBook(`fake-other-${String(books.size).padStart(3, '0')}-abcdefghijklmn`, name),
+    fail,
+    /** The spreadsheet the app is using right now. */
+    current: () => books.get(props.get('DATA_SHEET_ID')),
+    /** Cells handed to the script by getValues since the last call to this. */
+    cellsRead: () => { let n = 0; for (const b of books.values()) { n += b.cells; b.cells = 0; } return n; },
+    clearCache: () => cacheStore.clear(),
     raw,
     as: (email) => (method, ...args) => {
       const r = raw(email, method, args);

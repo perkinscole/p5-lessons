@@ -262,6 +262,7 @@ export async function viewProject(main, classId) {
   const ticker = setInterval(tick, 1000);
   // Light polling: one call a minute keeps the display current without using up the class's quota.
   const poller = setInterval(async () => {
+    if (document.hidden) return;
     const fresh = await attempt(() => app.store.classBoard(classId));
     if (fresh) { board = fresh; draw(); }
   }, 60000);

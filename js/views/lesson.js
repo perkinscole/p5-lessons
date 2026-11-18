@@ -797,7 +797,7 @@ export async function viewLesson(main, id, previewPath) {
   const beforeUnload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
   window.addEventListener('beforeunload', beforeUnload);
   drawTeamBar();
-  const teamTimer = team ? setInterval(pollTeam, 15000) : null;
+  const teamTimer = team ? setInterval(() => { if (!document.hidden) pollTeam(); }, 15000) : null;
   app.cleanup = async () => {
     if (stuck) stuck.stop();
     clearInterval(teamTimer);

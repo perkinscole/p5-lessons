@@ -109,6 +109,18 @@ export async function refreshSession() {
 
 window.addEventListener('hashchange', render);
 
+// While the server is busy and requests are being retried, say so quietly instead of showing an error.
+let busyNote = null;
+window.addEventListener('app-busy', (e) => {
+  if (e.detail && !busyNote) {
+    busyNote = h('div.toast.busy-note', 'Busy… saving your work. Keep going.');
+    document.getElementById('toasts').append(busyNote);
+  } else if (!e.detail && busyNote) {
+    busyNote.remove();
+    busyNote = null;
+  }
+});
+
 // Handle in-app links here, so they always stay inside the frame Apps Script serves the app in.
 document.addEventListener('click', (e) => {
   const a = e.target.closest?.('a[href^="#"]');

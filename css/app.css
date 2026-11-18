@@ -697,6 +697,10 @@ body.projecting .page { max-width: none; padding: 0; }
 #toasts { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; z-index: 60; width: min(480px, calc(100vw - 32px)); }
 .toast { background: var(--ink); color: var(--paper); padding: 8px 14px; border: 2px solid var(--line); box-shadow: var(--shadow); text-align: center; }
 .toast.error { background: var(--bad); color: #fff; }
+.toast.busy-note { background: var(--card); color: var(--ink); }
+.data-card summary { cursor: pointer; }
+.data-card > .stack { margin-top: 10px; }
+.data-card input { flex: 1; min-width: 180px; }
 
 @media (max-width: 1050px) {
   .workspace { height: auto; }

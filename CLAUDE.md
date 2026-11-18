@@ -40,7 +40,7 @@ Plain ES modules with no framework. `index.html` runs them directly in demo mode
 
 ### Two data stores, one interface
 
-`js/main.js` uses `js/data/appsscript.js` when `window.google.script` exists, and `js/data/local.js` otherwise. Any new data operation must be added to both, and to the `METHODS` list in `appsscript.js`. Each trip to Apps Script costs about a second, so `appsscript.js` sends calls made at the same moment as one `batch` and reuses read-only answers for 15 seconds. A new read-only method goes in `READS`; any other call clears that cache. Views should start all their calls together with `Promise.all`.
+`js/main.js` uses `js/data/appsscript.js` when `window.google.script` exists, and `js/data/local.js` otherwise. Any new data operation must be added to both, and to the `METHODS` list in `appsscript.js`. Each trip to Apps Script costs about a second, so `appsscript.js` sends calls made at the same moment as one `batch` (through `queue.js`) and reuses read-only answers for 15 seconds. A new read-only method goes in `READS`; any other call clears that cache. Views should start all their calls together with `Promise.all`.
 
 `gas/Code.gs` is the real server:
 
@@ -51,6 +51,19 @@ Plain ES modules with no framework. `index.html` runs them directly in demo mode
 - A whole class shares the deploying teacher's quota, so students autosave every 30 seconds (`saveDelay`).
 
 `tests/fake-gas.mjs` imitates Google's services and `tests/server.test.mjs` attacks the access rules. It is a model. The app has not yet run on real Apps Script.
+
+### Reliability under a full class
+
+Every student's request counts against the deploying teacher's account, which allows about 30 at the same moment. A whole class once overloaded a sibling app this way, and that app then mistook "could not open the Sheet" for "no Sheet" and started an empty one. These rules prevent both, and `tests/server.test.mjs` ("reliability:") and `tests/queue.test.mjs` enforce them:
+
+- `db_()` only creates or adopts a Sheet when `DATA_SHEET_ID` has never been set. After that it opens that id, with retries, or throws `BUSY_`. Never add a fallback that creates storage on an error. `rememberSheet_` keeps every id used in `DATA_SHEET_HISTORY`.
+- Reads throw on failure. Don't catch a read and continue with a default that is later saved. `parseList_` is only for notes in script properties.
+- An error starting with `BUSY:` means the request did not run, so `js/data/queue.js` retries it with backoff. Only use it before anything has been written. The queue sends one trip at a time per browser; `direct` is for large answers that shouldn't share a batch.
+- A student action must not read a whole tab. `findRows_` finds rows with Sheets' own search, and `myWorkList_` / `myWorkRow_` read just one student's lessons. Whole-tab reads (`rows_`, `metaWorks_`) are for teacher pages and class-wide views.
+- `classBoard_` is shared through `CacheService` for 20 seconds. Teacher writes replace it (anything not in `TEACHER_READS`), as do the student routes in `BOARD_WRITES` and a first save of a lesson. Routine autosaves don't, so `step_at` can lag by 20 seconds.
+- Nothing slow (Classroom, mail, `backup_`) runs inside `withLock_`.
+- Anything on a timer that calls the server must skip while `document.hidden` and use the slowest interval that works.
+- `dataInfo`, `backupNow`, `dataSwitch`, and `dataCombine` are owner-only (`dataOwner_`). `combinePlan_` only adds or improves, matches students by email, and is safe to run twice.
 
 ### Lessons are data that build their own answer key
 

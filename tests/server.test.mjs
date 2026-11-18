@@ -842,3 +842,198 @@ test('"I\'m stuck": one open request per student, seen and cleared only by their
   assert.deepEqual(ari('myFlags', 't1'), [], 'a help request is not a "confusing" flag');
   void zed;
 });
+
+// Reliability: an error must never look like "no data", and a class must stay under Google's limits.
+// See the reliability notes in CLAUDE.md.
+function classOf(n = 3) {
+  const server = createServer({ owner: OWNER, bound: false });
+  const teacher = server.as(OWNER);
+  const cls = teacher('createClass', 'Period 1');
+  const kids = Array.from({ length: n }, (_, i) => `kid${i}@school.test`);
+  teacher('addStudents', cls.id, kids.map((k, i) => `Kid ${i}, ${k}`));
+  return { server, teacher, cls, kids };
+}
+
+test('reliability: failing to open the Sheet says busy and never makes a new one', () => {
+  const { server, teacher, cls, kids } = classOf();
+  server.as(kids[0])('saveWork', 't1', { code: 'mine', assets: {} });
+  const id = server.props.get('DATA_SHEET_ID');
+  const books = server.books.size;
+  server.fail.open = true;
+  for (const [who, method, args] of [[OWNER, 'listClasses', []], [OWNER, 'session', []], [kids[0], 'session', []], [kids[0], 'myWorks', []], [kids[0], 'saveWork', ['t1', { code: 'x', assets: {} }]], [kids[1], 'classBoard', [cls.id]]]) {
+    const r = server.raw(who, method, args);
+    assert.equal(r.ok, false, method);
+    assert.match(r.error, /^BUSY:/, method);
+  }
+  assert.equal(server.props.get('DATA_SHEET_ID'), id);
+  assert.equal(server.books.size, books);
+  assert.equal(server.createdCount(), 1);
+  server.fail.open = false;
+  assert.equal(teacher('listClasses').length, 1);
+  assert.equal(teacher('listStudents', cls.id).length, 3);
+  assert.equal(server.as(kids[0])('myWorks')[0].code, 'mine');
+});
+
+test('reliability: a deleted or unreachable Sheet is an error, not a fresh start', () => {
+  const { server } = classOf();
+  server.props.set('DATA_SHEET_ID', 'gone-000000000000000000000');
+  assert.match(server.raw(OWNER, 'listClasses').error, /^BUSY:/);
+  assert.equal(server.createdCount(), 1);
+  assert.equal(server.props.get('DATA_SHEET_ID'), 'gone-000000000000000000000');
+});
+
+test('reliability: a bound script remembers its Sheet and keeps a history', () => {
+  const server = createServer({ owner: OWNER });
+  server.as(OWNER)('listClasses');
+  assert.equal(server.createdCount(), 0);
+  assert.equal(server.props.get('DATA_SHEET_ID'), 'fake-sheet-000000000000000');
+  assert.equal(JSON.parse(server.props.get('DATA_SHEET_HISTORY')).length, 1);
+});
+
+test('reliability: a failed read never saves a blank over real work', () => {
+  const { server, kids } = classOf();
+  const kid = server.as(kids[0]);
+  kid('saveWork', 't1', { code: 'real work', assets: {}, step_at: 4 });
+  kid('updateProfile', { game_name: 'Sky Dash' });
+  const before = JSON.stringify([...server.current().tabs].map(([n, t]) => [n, t.grid]));
+  server.fail.reads = true;
+  for (const [method, args] of [['saveWork', ['t1', { code: '', assets: {} }]], ['submitWork', ['t1', { code: '', assets: {} }]], ['updateProfile', [{ game_name: '' }]], ['rateLesson', ['t1', { stars: 1 }]], ['askHelp', ['t1', 0, '']]]) {
+    assert.equal(server.raw(kids[0], method, args).ok, false, method);
+  }
+  server.fail.reads = false;
+  assert.equal(JSON.stringify([...server.current().tabs].map(([n, t]) => [n, t.grid])), before);
+  assert.equal(kid('myWorks')[0].code, 'real work');
+});
+
+test('reliability: a save that cannot get its turn says busy and changes nothing', () => {
+  const { server, kids } = classOf();
+  const kid = server.as(kids[0]);
+  kid('saveWork', 't1', { code: 'first', assets: {} });
+  server.fail.busyLock = true;
+  assert.match(server.raw(kids[0], 'saveWork', ['t1', { code: 'second', assets: {} }]).error, /^BUSY:/);
+  server.fail.busyLock = false;
+  assert.equal(kid('myWorks')[0].code, 'first');
+});
+
+test('reliability: one student action reads a few rows, however many students there are', () => {
+  const { server, teacher, cls, kids } = classOf(2);
+  teacher('addStudents', cls.id, Array.from({ length: 300 }, (_, i) => `Filler ${i}, filler${i}@school.test`));
+  for (let i = 0; i < 300; i += 7) for (const lesson of ['t1', 't2', 't3']) server.as(`filler${i}@school.test`)('saveWork', lesson, { code: 'x', assets: {} });
+  const kid = server.as(kids[1]);
+  kid('saveWork', 't1', { code: 'a', assets: {} });
+  kid('saveWork', 't2', { code: 'a', assets: {} });
+  for (const [method, args, most] of [['session', [], 100], ['saveWork', ['t2', { code: 'b', assets: {}, step_at: 2 }], 200], ['submitWork', ['t1', { code: 'b', assets: {} }], 200], ['myWorks', [], 200], ['myHelp', [], 100]]) {
+    server.cellsRead();
+    kid(method, ...args);
+    const cells = server.cellsRead();
+    assert.ok(cells < most, `${method} read ${cells} cells`);
+  }
+});
+
+test('reliability: the class board is built once and shared, and changes still show', () => {
+  const { server, cls, kids } = classOf();
+  server.as(kids[0])('classBoard', cls.id);
+  server.cellsRead();
+  const board = server.as(kids[1])('classBoard', cls.id);
+  assert.ok(server.cellsRead() < 60, 'the second student got the shared copy');
+  assert.equal(board.length, 3);
+  // A student who is not in the class still can't have it.
+  const other = server.as(OWNER)('createClass', 'Period 2');
+  assert.equal(server.raw(kids[0], 'classBoard', [other.id]).ok, false);
+  // Changes that show on the board replace the shared copy at once.
+  server.as(kids[0])('updateProfile', { game_name: 'Sky Dash' });
+  assert.equal(server.as(kids[1])('classBoard', cls.id).find((s) => s.game_name === 'Sky Dash').display_name, 'Kid 0');
+  server.as(kids[2])('saveWork', 't1', { code: 'x', assets: {} });
+  assert.equal(server.as(kids[1])('classBoard', cls.id).filter((s) => s.works.length).length, 1);
+  server.as(OWNER)('removeStudent', server.as(OWNER)('listStudents', cls.id)[0].id);
+  assert.equal(server.as(kids[1])('classBoard', cls.id).length, 2);
+});
+
+test('reliability: the owner gets a daily backup and can make one', () => {
+  const { server, teacher } = classOf();
+  teacher('session');
+  teacher('session');
+  let info = teacher('dataInfo');
+  assert.equal(info.backups.length, 1, 'one backup a day, not one a visit');
+  assert.equal(info.students, 3);
+  assert.equal(info.classes, 1);
+  info = teacher('backupNow');
+  assert.equal(info.backups.length, 2);
+  const copy = server.books.get(info.backups[0].id);
+  assert.equal(copy.getSheetByName('Students').getLastRow(), 4);
+  // A backup that fails must never stop the teacher getting in.
+  server.props.delete('LAST_BACKUP');
+  server.current().copy = () => { throw new Error('Drive is full'); };
+  assert.equal(teacher('session').role, 'teacher');
+});
+
+test('reliability: only the owner can see, move, or combine the data', () => {
+  const { server, teacher, cls, kids } = classOf();
+  server.current().getSheetByName('Teachers').appendRow(['co@school.test', 'Co Teacher', 'now']);
+  const link = server.current().getUrl();
+  for (const who of [kids[0], 'co@school.test', 'stranger@school.test']) {
+    for (const [method, args] of [['dataInfo', []], ['backupNow', []], ['dataSwitch', [link]], ['dataCombine', [link, true]]]) {
+      assert.equal(server.raw(who, method, args).ok, false, `${who} ${method}`);
+    }
+  }
+  assert.equal(teacher('dataInfo').classes, 1);
+  assert.equal(teacher('session').teacher.owner, true);
+  assert.equal(server.as('co@school.test')('session').teacher.owner, false);
+  assert.ok(cls.id);
+});
+
+test('reliability: switching checks the Sheet, and combining brings students back with the best of both', () => {
+  const { server, teacher, cls, kids } = classOf();
+  const old = server.current();
+  const a = server.as(kids[0]);
+  a('submitWork', 't1', { code: 'old t1 submitted', assets: {} });
+  a('saveWork', 't2', { code: 'old t2', assets: {} });
+  server.as(kids[1])('saveWork', 't1', { code: 'only in old', assets: {} });
+  teacher('giveAward', teacher('listStudents', cls.id).find((s) => s.username === kids[0]).id, 'helper', 'well done');
+
+  // Not Pixel Trail data: refused, and nothing changes.
+  const junk = server.newBook('Budget');
+  assert.match(server.raw(OWNER, 'dataSwitch', [junk.getUrl()]).error, /not Pixel Trail data/);
+  assert.match(server.raw(OWNER, 'dataSwitch', ['hello']).error, /Paste the link/);
+  assert.equal(server.current(), old);
+
+  // The incident: the app ends up on an empty Sheet, and one student carries on there.
+  const fresh = server.newBook('Pixel Trail Data');
+  server.props.set('DATA_SHEET_ID', fresh.getId());
+  server.clearCache();
+  const again = teacher('createClass', 'Period 1');
+  teacher('addStudents', again.id, [`Kid 0, ${kids[0]}`]);
+  a('saveWork', 't1', { code: 'new t1 in progress', assets: {} });
+  a('saveWork', 't3', { code: 'new t3', assets: {} });
+  assert.equal(teacher('listStudents', again.id).length, 1);
+
+  const plan = teacher('dataCombine', old.getUrl(), false);
+  assert.deepEqual([plan.preview, plan.classes, plan.students, plan.same_students, plan.lessons, plan.better_lessons], [true, 0, 2, 1, 2, 1]);
+  assert.equal(teacher('listStudents', again.id).length, 1, 'a preview changes nothing');
+  const backups = teacher('dataInfo').backups.length;
+  teacher('dataCombine', old.getUrl(), true);
+  assert.equal(teacher('dataInfo').backups.length, backups + 1, 'backed up first');
+
+  assert.equal(teacher('listClasses').length, 1, 'the class made again by hand is the same class');
+  assert.equal(teacher('listStudents', again.id).length, 3);
+  const mine = Object.fromEntries(a('myWorks').map((w) => [w.lesson_id, w]));
+  assert.equal(mine.t1.code, 'old t1 submitted');
+  assert.equal(mine.t1.status, 'submitted');
+  assert.equal(mine.t2.code, 'old t2');
+  assert.equal(mine.t3.code, 'new t3');
+  assert.equal(server.as(kids[1])('myWorks')[0].code, 'only in old');
+  assert.equal(teacher('classBoard', again.id).find((s) => s.display_name === 'Kid 0').awards.length, 1);
+
+  // Twice changes nothing.
+  const grid = JSON.stringify([...server.current().tabs].map(([n, t]) => [n, t.grid]));
+  const second = teacher('dataCombine', old.getUrl(), true);
+  assert.deepEqual([second.classes, second.students, second.lessons, second.better_lessons], [0, 0, 0, 0]);
+  assert.equal(JSON.stringify([...server.current().tabs].map(([n, t]) => [n, t.grid])), grid);
+  // And the old Sheet was only read.
+  assert.equal(old.getSheetByName('Students').getLastRow(), 4);
+
+  // Switching back to the old Sheet works, and is remembered in the history.
+  assert.equal(teacher('dataSwitch', old.getUrl()).id, old.getId());
+  assert.equal(server.current(), old);
+  assert.ok(teacher('dataInfo').history.length >= 2);
+});

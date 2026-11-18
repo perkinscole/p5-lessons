@@ -15,7 +15,9 @@ import { feedbackTab, helpCard } from './feedback.js';
 import { badgeChip } from './student.js';
 
 export async function viewTeacherHome() {
-  const [classes, alerts] = await Promise.all([app.store.listClasses(), app.store.alertSummary ? app.store.alertSummary() : {}]);
+  const [classes, alerts, data] = await Promise.all([app.store.listClasses(), app.store.alertSummary ? app.store.alertSummary() : {},
+    // Only the teacher who set the app up gets an answer here.
+    app.store.dataInfo().catch(() => null)]);
   const name = h('input', { required: true, maxlength: 80, placeholder: 'Period 3: Game Design', 'aria-label': 'New class name' });
   return h('div.stack',
     h('div.row.between', h('h1', 'Your classes'), app.store.hasClassroom && h('button.btn', { onclick: () => openImport(render) }, 'Import from Google Classroom')),
@@ -29,6 +31,7 @@ export async function viewTeacherHome() {
         if (c) go(`/class/${c.id}`);
       },
     }, name, h('button.btn.primary', { type: 'submit' }, 'Create class')),
+    data && dataCard(data),
     h('section.card.stack',
       h('h2', 'How a class works'),
       h('ol.howto',
@@ -41,6 +44,42 @@ export async function viewTeacherHome() {
       ),
     ),
   );
+}
+
+/** Where the app keeps its data, with backups and the tools to get it back. Only the owner sees it. */
+function dataCard(first) {
+  const body = h('div.stack');
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : (word.endsWith('s') ? 'es' : 's')}`;
+  const draw = (d) => {
+    const switchLink = h('input', { placeholder: 'Paste a Google Sheet link', 'aria-label': 'Link to the Sheet to use' });
+    const combineLink = h('input', { placeholder: 'Paste a Google Sheet link', 'aria-label': 'Link to the Sheet to bring in' });
+    clear(body).append(
+      h('p', 'Everything is stored in ', h('a', { href: d.url, target: '_blank', rel: 'noopener' }, d.name), `: ${plural(d.classes, 'class')}, ${plural(d.students, 'student')}.`),
+      h('div.row',
+        h('button.btn.small', { onclick: async () => { const next = await attempt(() => app.store.backupNow()); if (next) { toast('Backup saved to your Google Drive.'); draw(next); } } }, 'Back up now'),
+        h('span.muted', d.backups.length ? 'Backups: ' : 'A backup is made each day you open the app.'),
+        d.backups.slice(0, 5).map((b) => h('a', { href: b.url, target: '_blank', rel: 'noopener' }, b.day))),
+      h('details', h('summary', 'Classes or students look missing?'),
+        h('div.stack',
+          h('p.muted', 'Do not make them again. First check the Sheet above is the right one. If your data is in a different Sheet, use it or bring it in here.'),
+          d.history.length > 1 && h('p.muted', 'Sheets this app has used: ', d.history.map((x, i) => [i ? ', ' : '', h('a', { href: `https://docs.google.com/spreadsheets/d/${x.id}/edit`, target: '_blank', rel: 'noopener' }, new Date(x.at).toLocaleDateString())])),
+          h('form.row', { onsubmit: async (e) => {
+            e.preventDefault();
+            if (!await confirmBox('Use this Sheet instead?', 'The app will read and save there from now on. Nothing is copied or deleted.', 'Use it')) return;
+            const next = await attempt(() => app.store.dataSwitch(switchLink.value));
+            if (next) { toast('Now using that Sheet.'); location.reload(); }
+          } }, switchLink, h('button.btn.small', { type: 'submit' }, 'Use this Sheet')),
+          h('form.row', { onsubmit: async (e) => {
+            e.preventDefault();
+            const plan = await attempt(() => app.store.dataCombine(combineLink.value, false));
+            if (!plan) return;
+            const adds = `It adds ${plural(plan.classes, 'class')}, ${plural(plan.students, 'student')}, and ${plural(plan.lessons, 'lesson')}. ${plural(plan.same_students, 'student')} in both keep the best of each lesson (${plan.better_lessons} improved). Nothing is removed, and a backup is made first.`;
+            if (!await confirmBox(`Bring in "${plan.name}"?`, adds, 'Bring it in')) return;
+            if (await attempt(() => app.store.dataCombine(combineLink.value, true))) { toast('Combined.'); location.reload(); }
+          } }, combineLink, h('button.btn.small', { type: 'submit' }, 'Bring in its data')))));
+  };
+  draw(first);
+  return h('details.card.data-card', h('summary', h('strong', 'Your data and backups')), body);
 }
 
 function rosterTab(cls, students, board, reload) {

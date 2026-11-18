@@ -81,6 +81,8 @@ function include_(name) {
 
 function api(method, argsJson) {
   try {
+    // Find the data before anything takes the save lock, so "busy" stops here and changes nothing.
+    db_();
     const me = whoAmI_();
     const routes = me.role === 'teacher' ? TEACHER_ROUTES : me.role === 'student' ? STUDENT_ROUTES : {};
     if (method === 'batch') return reply_(runBatch_(me, routes, JSON.parse(argsJson || '[]')[0]));
@@ -95,8 +97,19 @@ function route_(me, routes, method, args) {
   if (method === 'session') return sessionFor_(me);
   if (!Object.prototype.hasOwnProperty.call(routes, method)) throw new Error('You do not have access to that.');
   if (!Array.isArray(args)) throw new Error('Bad request.');
-  return routes[method](me, ...args);
+  try {
+    return routes[method](me, ...args);
+  } finally {
+    // The class board is shared from the cache for a few seconds. These changes make it out of date.
+    if (me.role === 'teacher' && !TEACHER_READS.has(method)) boardEpoch_(true);
+    else if (me.role === 'student' && BOARD_WRITES.has(method)) boardDirty_(me.student.class_id);
+  }
 }
+
+const TEACHER_READS = new Set(['listClasses', 'getClass', 'listStudents', 'classBoard', 'classWork', 'getWorkFull', 'getClassPlan', 'classroomWork',
+  'classAlerts', 'alertSummary', 'getPace', 'getDigest', 'arcade', 'listSprites', 'listSongs', 'listTeams', 'gradeSyncStatus', 'lessonRatings',
+  'helpRequests', 'markHelped', 'listGoogleCourses', 'dataInfo', 'libraryPart']);
+const BOARD_WRITES = new Set(['updateProfile', 'submitWork', 'setShared', 'saveSprite', 'deleteSprite', 'rateLesson']);
 
 /** Several calls in one trip, since each trip costs about a second. Each still goes through route_. */
 function runBatch_(me, routes, calls) {
@@ -126,13 +139,17 @@ function whoAmI_() {
     withLock_(() => { if (!rows_('Teachers').some((t) => t.email === email)) insert_('Teachers', teacher); });
   }
   if (teacher) return { role: 'teacher', email, teacher };
-  const student = rows_('Students').find((s) => s.email === email);
-  if (student) return { role: 'student', email, student };
+  const at = findRows_('Students', 'email', email)[0];
+  if (at) return { role: 'student', email, student: readRow_('Students', at) };
   return { role: null, email };
 }
 
 function sessionFor_(me) {
-  if (me.role === 'teacher') return { role: 'teacher', teacher: { id: me.email, display_name: me.teacher.display_name } };
+  if (me.role === 'teacher') {
+    const owner = me.email === ownerEmail_();
+    if (owner) maybeBackup_();
+    return { role: 'teacher', teacher: { id: me.email, display_name: me.teacher.display_name, owner } };
+  }
   if (me.role === 'student') {
     return { role: 'student', student: publicStudent_(me.student), class: rows_('Classes').find((c) => c.id === me.student.class_id) };
   }
@@ -143,20 +160,70 @@ function sessionFor_(me) {
 
 let spreadsheet_ = null;
 
-/** Uses the Sheet this script is attached to, or else creates one and remembers it. */
+const BUSY_ = 'BUSY: Pixel Trail is very busy right now. Your work is safe. Trying again...';
+
+/**
+ * The Sheet that holds everything. Its id is remembered the first time, and after that the app only
+ * ever opens that one. Failing to open it means "busy, try again". It never means "make a new one":
+ * a new, empty Sheet would make every class look like it had vanished.
+ */
 function db_() {
   if (spreadsheet_) return spreadsheet_;
-  spreadsheet_ = SpreadsheetApp.getActiveSpreadsheet();
-  if (spreadsheet_) return spreadsheet_;
   const props = PropertiesService.getScriptProperties();
-  const id = props.getProperty('DATA_SHEET_ID');
+  let id = props.getProperty('DATA_SHEET_ID');
   if (id) {
-    spreadsheet_ = SpreadsheetApp.openById(id);
-  } else {
-    spreadsheet_ = SpreadsheetApp.create('Pixel Trail Data');
-    props.setProperty('DATA_SHEET_ID', spreadsheet_.getId());
+    spreadsheet_ = openSheet_(id);
+    return spreadsheet_;
   }
-  return spreadsheet_;
+  // No id has ever been saved: this is the very first run. The lock stops two first visitors each making one.
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (_) { throw new Error(BUSY_); }
+  try {
+    id = props.getProperty('DATA_SHEET_ID');
+    if (id) {
+      spreadsheet_ = openSheet_(id);
+      return spreadsheet_;
+    }
+    const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.create('Pixel Trail Data');
+    rememberSheet_(ss.getId());
+    spreadsheet_ = ss;
+    return ss;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Open a Sheet by id, trying a few times. Google's services fail for a moment now and then. */
+function openSheet_(id) {
+  for (let i = 0; i < 4; i++) {
+    try {
+      const ss = SpreadsheetApp.openById(id);
+      if (ss) return ss;
+    } catch (e) {
+      console.warn(`OPEN_RETRY ${i + 1}: ${e && e.message}`);
+    }
+    Utilities.sleep(300 * (i + 1));
+  }
+  throw new Error(BUSY_);
+}
+
+/** Point the app at a Sheet, and keep a list of every Sheet it has ever used so none can be lost. */
+function rememberSheet_(id) {
+  const props = PropertiesService.getScriptProperties();
+  const history = parseList_(props.getProperty('DATA_SHEET_HISTORY'));
+  history.push({ id, at: now_() });
+  props.setProperty('DATA_SHEET_HISTORY', JSON.stringify(history.slice(-20)));
+  props.setProperty('DATA_SHEET_ID', id);
+}
+
+/** Lists kept in script properties are notes about the data, never the data, so a bad one reads as empty. */
+function parseList_(text) {
+  try {
+    const v = JSON.parse(text || '[]');
+    return Array.isArray(v) ? v : [];
+  } catch (_) {
+    return [];
+  }
 }
 
 function sheet_(name) {
@@ -222,6 +289,29 @@ function readRow_(name, rowNumber) {
   return o;
 }
 
+/** Row numbers where a column holds exactly this value, found by Sheets without reading the tab. */
+function findRows_(name, field, value) {
+  const sh = sheet_(name);
+  const last = sh.getLastRow();
+  if (last < 2) return [];
+  return sh.getRange(2, SCHEMA[name].indexOf(field) + 1, last - 1, 1).createTextFinder(encode_(field, value))
+    .matchEntireCell(true).matchCase(true).findAll().map((cell) => cell.getRow());
+}
+
+/** One student's lessons: which rows they are in, with each lesson and status. Reads only that stretch of two columns. */
+function myWorkList_(studentId) {
+  const found = findRows_('Works', 'student_id', studentId).sort((a, b) => a - b);
+  if (!found.length) return [];
+  const first = found[0];
+  const vals = sheet_('Works').getRange(first, 3, found[found.length - 1] - first + 1, 2).getValues();
+  return found.map((r) => ({ _row: r, lesson_id: decode_('lesson_id', vals[r - first][0]), status: decode_('status', vals[r - first][1]) }));
+}
+/** One student's saved lesson, whole, or null when they haven't started it. */
+function myWorkRow_(studentId, lessonId) {
+  const hit = myWorkList_(studentId).find((w) => w.lesson_id === lessonId);
+  return hit ? readRow_('Works', hit._row) : null;
+}
+
 /** Delete bottom-up so earlier row numbers stay valid. */
 function deleteRows_(name, predicate, cols) {
   const sh = sheet_(name);
@@ -248,7 +338,7 @@ function withLock_(fn) {
     lock.waitLock(20000);
   } catch (_) {
     console.warn('LOCK_TIMEOUT: waited 20 s for a turn to save');
-    throw new Error('The class is saving a lot right now. Trying again soon.');
+    throw new Error(BUSY_);
   }
   // Shows in Apps Script's Executions log, so a pilot can see saves queuing up before they fail.
   const waited = Date.now() - asked;
@@ -317,8 +407,35 @@ const gradeFor_ = (workId, grades) => {
   return rest;
 };
 
+// A whole class opens its board at the same moment, so it is built once and shared for a few seconds.
+const BOARD_SECONDS = 20;
+function boardEpoch_(bump) {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (bump) cache.put('board_epoch', uuid_(), 21600);
+    return cache.get('board_epoch') || '0';
+  } catch (_) {
+    return null;
+  }
+}
+function boardDirty_(classId) {
+  try { CacheService.getScriptCache().remove(`board:${classId}`); } catch (_) { /* The cache is only a shortcut. */ }
+}
 function classBoard_(me, classId) {
   canViewClass_(me, classId);
+  const epoch = boardEpoch_(false);
+  try {
+    const hit = epoch !== null && CacheService.getScriptCache().get(`board:${classId}`);
+    if (hit && hit.startsWith(`${epoch}|`)) return JSON.parse(hit.slice(epoch.length + 1));
+  } catch (_) { /* Build it fresh. */ }
+  const board = buildBoard_(classId);
+  try {
+    const text = `${epoch}|${JSON.stringify(board)}`;
+    if (epoch !== null && text.length < 90000) CacheService.getScriptCache().put(`board:${classId}`, text, BOARD_SECONDS);
+  } catch (_) { /* Too big or the cache is down: everyone just gets a fresh one. */ }
+  return board;
+}
+function buildBoard_(classId) {
   const students = rows_('Students').filter((s) => s.class_id === classId).sort((a, b) => a.display_name.localeCompare(b.display_name));
   const works = metaWorks_();
   const awards = rows_('Awards');
@@ -446,7 +563,7 @@ function rateLesson_(me, lessonId, rating) {
     comment: text_(r.comment, 200), updated_at: now_(), hardest: text_(r.hardest, 200), better: text_(r.better, 200),
   };
   withLock_(() => {
-    if (!metaWorks_().some((w) => w.student_id === me.student.id && w.lesson_id === lesson)) throw new Error('Start the lesson before you rate it.');
+    if (!myWorkList_(me.student.id).some((w) => w.lesson_id === lesson)) throw new Error('Start the lesson before you rate it.');
     const old = rows_('Ratings').find((x) => x.student_id === me.student.id && x.lesson_id === lesson);
     if (old) update_('Ratings', { ...row, _row: old._row });
     else insert_('Ratings', row);
@@ -581,7 +698,7 @@ const worldMode_ = (cls) => (cls && (cls.world_mode === 'earned' || cls.world_mo
 const worldMins_ = (cls) => Math.max(1, Math.min(15, Number(cls && cls.world_mins) || 5));
 
 function worldEarned_(student, cls) {
-  const done = metaWorks_().filter((w) => w.student_id === student.id && w.status !== 'in_progress').length;
+  const done = myWorkList_(student.id).filter((w) => w.status !== 'in_progress').length;
   return done * worldMins_(cls) * 60;
 }
 
@@ -1086,6 +1203,10 @@ function cleanPlan_(p) {
 }
 
 const TEACHER_ROUTES = {
+  dataInfo: dataInfo_,
+  backupNow: backupNow_,
+  dataSwitch: dataSwitch_,
+  dataCombine: dataCombine_,
   listGoogleCourses: (me) => {
     ownerOnly_(me);
     const linked = new Set(rows_('Links').map((l) => l.course_id));
@@ -1523,7 +1644,9 @@ function saveMyWork_(me, lessonId, patch, extra) {
   const docText = JSON.stringify({ code: String(patch.code === undefined ? '' : patch.code), assets: patch.assets || {}, files: cleanFiles_(patch.files) });
   if (docText.length > MAX_WORK_CHARS) throw new Error('This project is too big to save. Try removing an image.');
   return withLock_(() => {
-    const existing = metaWorks_().find((w) => w.student_id === me.student.id && w.lesson_id === lessonId);
+    const existing = myWorkRow_(me.student.id, lessonId);
+    // A first save puts a new lesson on the class board.
+    if (!existing) boardDirty_(me.student.class_id);
     if (existing && existing.status === 'approved') throw new Error('This lesson was approved. Ask your teacher to reopen it.');
     let written = docText;
     let lostTurn = false;
@@ -1580,6 +1703,261 @@ function saveMyWork_(me, lessonId, patch, extra) {
   });
 }
 
+// Backups and recovery ---------------------------------------------------------------------------
+// Only the teacher who deployed the app can see where its data lives, copy it, or move it.
+
+const BACKUP_EVERY_DAYS = 1;
+const RANK_ = { in_progress: 1, submitted: 2, approved: 3 };
+
+function dataOwner_(me) {
+  if (me.role !== 'teacher' || me.email !== ownerEmail_()) throw new Error('Only the teacher who set up this app can manage its data.');
+}
+
+/** Copy the whole Sheet into the teacher's Drive. Never while holding the save lock: a copy is slow. */
+function backup_(ss) {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('LAST_BACKUP', String(Date.now()));
+  const day = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const copy = ss.copy(`Pixel Trail Backup ${day}`);
+  const list = parseList_(props.getProperty('BACKUPS'));
+  list.push({ id: copy.getId(), url: copy.getUrl(), day });
+  props.setProperty('BACKUPS', JSON.stringify(list.slice(-8)));
+  return list.slice(-8);
+}
+
+/** At most one backup a day, made when the owner opens the app. A backup must never break the app. */
+function maybeBackup_() {
+  try {
+    const last = Number(PropertiesService.getScriptProperties().getProperty('LAST_BACKUP') || 0);
+    if (Date.now() - last < (BACKUP_EVERY_DAYS - 0.3) * 864e5) return;
+    backup_(db_());
+  } catch (e) {
+    console.warn(`BACKUP_FAILED: ${e && e.message}`);
+  }
+}
+
+const countRows_ = (ss, name) => { const sh = ss.getSheetByName(name); return sh ? Math.max(0, sh.getLastRow() - 1) : 0; };
+
+function dataInfo_(me) {
+  dataOwner_(me);
+  const ss = db_();
+  const props = PropertiesService.getScriptProperties();
+  return {
+    id: ss.getId(), name: ss.getName(), url: ss.getUrl(),
+    classes: countRows_(ss, 'Classes'), students: countRows_(ss, 'Students'), works: countRows_(ss, 'Works'),
+    backups: parseList_(props.getProperty('BACKUPS')).reverse(),
+    history: parseList_(props.getProperty('DATA_SHEET_HISTORY')).reverse(),
+  };
+}
+
+function backupNow_(me) {
+  dataOwner_(me);
+  backup_(db_());
+  return dataInfo_(me);
+}
+
+/** Open a Sheet the teacher pasted a link to, and check it really is Pixel Trail data. */
+function otherSheet_(link) {
+  const text = String(link || '').trim();
+  const m = text.match(/\/d\/([\w-]{20,})/) || text.match(/^([\w-]{20,})$/);
+  if (!m) throw new Error('Paste the link to a Google Sheet.');
+  let ss;
+  try { ss = SpreadsheetApp.openById(m[1]); } catch (e) { throw new Error('That Sheet could not be opened. Check the link, and that it is in your Drive.'); }
+  for (const name of ['Classes', 'Students']) {
+    const sh = ss.getSheetByName(name);
+    const head = sh && sh.getLastRow() >= 1 ? sh.getRange(1, 1, 1, 3).getValues()[0].map(String) : [];
+    if (SCHEMA[name].slice(0, 3).some((f, i) => head[i] !== f)) throw new Error('That Sheet is not Pixel Trail data: it has no ' + name + ' tab.');
+  }
+  return ss;
+}
+
+/** Use a different Sheet from now on. Nothing is copied or deleted: the old one stays where it is. */
+function dataSwitch_(me, link) {
+  dataOwner_(me);
+  const ss = otherSheet_(link);
+  withLock_(() => rememberSheet_(ss.getId()));
+  spreadsheet_ = ss;
+  boardEpoch_(true);
+  return dataInfo_(me);
+}
+
+/** A tab as plain rows of cell text, exactly as stored, read by position like everything else here. */
+function rawRows_(ss, name) {
+  const sh = ss.getSheetByName(name);
+  const last = sh ? sh.getLastRow() : 0;
+  if (last < 2) return [];
+  return sh.getRange(2, 1, last - 1, SCHEMA[name].length).getValues().map((r) => r.map((c) => String(c)));
+}
+
+/**
+ * Work out what bringing another Sheet in would add or improve. Nothing here removes anything.
+ * A student is the same person when their email matches; they keep the best of each lesson.
+ */
+function combinePlan_(src, countersToo) {
+  const here = db_();
+  const at = (name, f) => SCHEMA[name].indexOf(f);
+  const plan = { add: {}, set: [], counts: { classes: 0, students: 0, same_students: 0, lessons: 0, better_lessons: 0, other: 0 } };
+  const add = (name, row, what) => { (plan.add[name] = plan.add[name] || []).push(row); plan.counts[what || 'other']++; };
+  const cur = {};
+  const from = {};
+  Object.keys(SCHEMA).forEach((n) => { cur[n] = rawRows_(here, n); from[n] = rawRows_(src, n); });
+  const withCell = (row, i, v) => { const out = row.slice(); out[i] = v; return out; };
+
+  const teachers = new Set(cur.Teachers.map((t) => t[0]));
+  from.Teachers.forEach((t) => { if (!teachers.has(t[0])) { teachers.add(t[0]); add('Teachers', t); } });
+
+  // Classes: the same id, or else the same teacher and name (a class that was made again by hand).
+  const classTo = new Map();
+  const classIds = new Set(cur.Classes.map((c) => c[0]));
+  from.Classes.forEach((c) => {
+    const twin = cur.Classes.find((x) => x[1] === c[1] && x[2] === c[2]);
+    if (classIds.has(c[0])) classTo.set(c[0], c[0]);
+    else if (twin) classTo.set(c[0], twin[0]);
+    else { classTo.set(c[0], c[0]); classIds.add(c[0]); add('Classes', c, 'classes'); }
+  });
+  const toClass = (id) => classTo.get(id) || id;
+
+  const latest = (works, sid) => works.reduce((m, w) => (w[1] === sid && w[at('Works', 'updated_at')] > m ? w[at('Works', 'updated_at')] : m), '');
+  const studentTo = new Map();
+  const byEmail = new Map(cur.Students.map((x, i) => [x[2], { row: i + 2, vals: x }]));
+  from.Students.forEach((st) => {
+    const twin = byEmail.get(st[2]);
+    if (!twin) {
+      if (teachers.has(st[2])) return;
+      studentTo.set(st[0], st[0]);
+      add('Students', withCell(st, 1, toClass(st[1])), 'students');
+      return;
+    }
+    studentTo.set(st[0], twin.vals[0]);
+    plan.counts.same_students++;
+    // They stay in the class they used most recently.
+    const there = toClass(st[1]);
+    if (there !== twin.vals[1] && latest(from.Works, st[0]) > latest(cur.Works, twin.vals[0])) plan.set.push({ name: 'Students', row: twin.row, vals: withCell(twin.vals, 1, there) });
+  });
+  const known = (id) => studentTo.has(id);
+  const toStudent = (id) => studentTo.get(id);
+
+  // Lessons: add the ones only the other Sheet has, and keep the better of the ones in both.
+  const workTo = new Map();
+  const works = new Map(cur.Works.map((w, i) => [`${w[1]}|${w[2]}`, { row: i + 2, vals: w }]));
+  const better = (a, b) => {
+    const ra = RANK_[a[3]] || 0;
+    const rb = RANK_[b[3]] || 0;
+    return ra !== rb ? ra > rb : a[at('Works', 'updated_at')] > b[at('Works', 'updated_at')];
+  };
+  from.Works.forEach((w) => {
+    if (!known(w[1])) return;
+    const sid = toStudent(w[1]);
+    const twin = works.get(`${sid}|${w[2]}`);
+    if (!twin) {
+      workTo.set(w[0], w[0]);
+      const row = withCell(w, 1, sid);
+      works.set(`${sid}|${w[2]}`, { row: 0, vals: row });
+      add('Works', row, 'lessons');
+      return;
+    }
+    workTo.set(w[0], twin.vals[0]);
+    if (twin.row && better(w, twin.vals)) {
+      twin.vals = withCell(withCell(w, 0, twin.vals[0]), 1, sid);
+      plan.set.push({ name: 'Works', row: twin.row, vals: twin.vals });
+      plan.counts.better_lessons++;
+    }
+  });
+
+  const grades = new Map(cur.Grades.map((g, i) => [g[0], { row: i + 2, vals: g }]));
+  from.Grades.forEach((g) => {
+    if (!workTo.has(g[0])) return;
+    const row = withCell(g, 0, workTo.get(g[0]));
+    const twin = grades.get(row[0]);
+    if (!twin) { grades.set(row[0], { row: 0, vals: row }); add('Grades', row); }
+    else if (twin.row && g[at('Grades', 'graded_at')] > twin.vals[at('Grades', 'graded_at')]) plan.set.push({ name: 'Grades', row: twin.row, vals: row });
+  });
+
+  // Everything else a student owns: add whatever isn't here yet.
+  const addMissing = (name, key, fix) => {
+    const have = new Set(cur[name].map(key));
+    from[name].forEach((r) => {
+      const row = fix(r);
+      if (!row || have.has(key(row))) return;
+      have.add(key(row));
+      add(name, row);
+    });
+  };
+  const owned = (name, key) => {
+    const s = at(name, 'student_id');
+    const c = at(name, 'class_id');
+    addMissing(name, key, (r) => (known(r[s]) ? (c < 0 ? withCell(r, s, toStudent(r[s])) : withCell(withCell(r, s, toStudent(r[s])), c, toClass(r[c]))) : null));
+  };
+  owned('Awards', (r) => `${r[1]}|${r[2]}|${r[3]}`);
+  owned('Ratings', (r) => `${r[0]}|${r[2]}`);
+  owned('Flags', (r) => `${r[0]}|${r[2]}|${r[3]}|${r[4]}|${r[6]}`);
+  owned('Sprites', (r) => r[0]);
+  addMissing('Songs', (r) => r[0], (r) => (r[2] && !known(r[2]) ? null : withCell(withCell(r, 1, toClass(r[1])), 2, r[2] ? toStudent(r[2]) : '')));
+  ['GradeSync', 'Daily', 'Links', 'Pace'].forEach((name) => addMissing(name, (r) => (name === 'GradeSync' ? `${r[0]}|${r[1]}` : r[0]), (r) => withCell(r, 0, toClass(r[0]))));
+
+  // Trail Quest: the best run from either. Time and coins are separate histories, so they are added once only.
+  const worlds = new Map(cur.World.map((w, i) => [w[0], { row: i + 2, vals: w }]));
+  const n = (v) => Number(v) || 0;
+  from.World.forEach((w) => {
+    if (!known(w[0])) return;
+    const row = withCell(withCell(w, 0, toStudent(w[0])), 1, toClass(w[1]));
+    const twin = worlds.get(row[0]);
+    if (!twin) { worlds.set(row[0], { row: 0, vals: row }); add('World', row); return; }
+    if (!twin.row) return;
+    let out = twin.vals.slice();
+    const best = at('World', 'best_coins');
+    if (n(w[best]) > n(out[best])) ['best_coins', 'ghost_seed', 'ghost'].forEach((f) => { out[at('World', f)] = w[at('World', f)]; });
+    if (countersToo) ['seconds_used', 'total_coins', 'runs'].forEach((f) => { out[at('World', f)] = String(n(out[at('World', f)]) + n(w[at('World', f)])); });
+    if (out.join('\u0001') !== twin.vals.join('\u0001')) plan.set.push({ name: 'World', row: twin.row, vals: out });
+  });
+
+  // Groups: only ones whose members aren't already in a group for that lesson here.
+  const members = (t) => parseList_(decText_(t[at('Teams', 'members')]));
+  const teamIds = new Set(cur.Teams.map((t) => t[0]));
+  const grouped = new Set(cur.Teams.flatMap((t) => members(t).map((m) => `${t[2]}|${m}`)));
+  const teamsAdded = new Set();
+  from.Teams.forEach((t) => {
+    const mine = members(t).filter(known).map(toStudent);
+    if (!mine.length || teamIds.has(t[0]) || mine.some((m) => grouped.has(`${t[2]}|${m}`))) return;
+    mine.forEach((m) => grouped.add(`${t[2]}|${m}`));
+    teamsAdded.add(t[0]);
+    add('Teams', withCell(withCell(withCell(t, 1, toClass(t[1])), at('Teams', 'members'), JSON.stringify(mine)), at('Teams', 'holders'), ''));
+  });
+  addMissing('Contributions', (r) => `${r[0]}|${r[2]}`, (r) => (teamsAdded.has(r[0]) && known(r[2]) ? withCell(r, 2, toStudent(r[2])) : null));
+  return plan;
+}
+
+/**
+ * Bring everything from another Sheet into this one. Without `go` it only reports what would happen.
+ * It backs up first, never removes anything, and running it twice changes nothing the second time.
+ */
+function dataCombine_(me, link, go) {
+  dataOwner_(me);
+  const src = otherSheet_(link);
+  const here = db_();
+  if (src.getId() === here.getId()) throw new Error('That is the Sheet the app is already using.');
+  const props = PropertiesService.getScriptProperties();
+  const done = parseList_(props.getProperty('COMBINED'));
+  const key = `${src.getId()}>${here.getId()}`;
+  const first = !done.includes(key);
+  if (go !== true) return { preview: true, name: src.getName(), ...combinePlan_(src, first).counts };
+  backup_(here);
+  const counts = withLock_(() => {
+    const plan = combinePlan_(src, first);
+    Object.keys(plan.add).forEach((name) => {
+      const sh = sheet_(name);
+      const rows = plan.add[name];
+      sh.getRange(sh.getLastRow() + 1, 1, rows.length, SCHEMA[name].length).setValues(rows);
+    });
+    plan.set.forEach((x) => sheet_(x.name).getRange(x.row, 1, 1, SCHEMA[x.name].length).setValues([x.vals]));
+    if (first) props.setProperty('COMBINED', JSON.stringify(done.concat(key).slice(-30)));
+    return plan.counts;
+  });
+  boardEpoch_(true);
+  return { preview: false, name: src.getName(), ...counts };
+}
+
+
 const STUDENT_ROUTES = {
   rateLesson: rateLesson_,
   flagStep: flagStep_,
@@ -1622,14 +2000,14 @@ const STUDENT_ROUTES = {
   passKeyboard: passKeyboard_,
   myWorks: (me) => {
     const grades = rows_('Grades');
-    return metaWorks_().filter((w) => w.student_id === me.student.id).map((w) => ({ ...fullWork_(w), grade: gradeFor_(w.id, grades) }));
+    return myWorkList_(me.student.id).map((w) => fullWork_(w)).map((w) => ({ ...w, grade: gradeFor_(w.id, grades) }));
   },
   saveWork: (me, lessonId, patch) => saveMyWork_(me, lessonId, patch),
   submitWork: (me, lessonId, patch) => saveMyWork_(me, lessonId, patch, { status: 'submitted', submitted_at: now_() }),
   setShared: (me, lessonId, shared) => withLock_(() => {
-    const meta = metaWorks_().find((w) => w.student_id === me.student.id && w.lesson_id === lessonId);
-    if (!meta) throw new Error('Save your lesson first.');
-    update_('Works', { ...readRow_('Works', meta._row), shared: !!shared });
+    const row = myWorkRow_(me.student.id, lessonId);
+    if (!row) throw new Error('Save your lesson first.');
+    update_('Works', { ...row, shared: !!shared });
   }),
 };
 
