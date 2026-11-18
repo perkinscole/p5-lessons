@@ -113,6 +113,10 @@ Screens are written in English only. `js/translate.js` watches the page and swap
 
 `js/views/bugs.js` has the report form and the teacher's list; `buildBugReport` in `report.js` makes the Markdown. `noteError` keeps the page's last five errors to send along. Reports are capped per person per day on the server.
 
+### Student view
+
+A teacher's **Student view** runs student routes as a pretend student (`previewStudent_`, `asStudent_` in `Code.gs`). That student's email and class id are `preview:<teacher email>`, which no Google account can be, and the class row's `teacher_email` is the same value rather than the teacher's, so every teacher page that lists classes by owner skips it. Keep it that way: don't list classes or students without filtering by owner. In the browser, `store.setPreview(true)` makes `appsscript.js` send every call through `asStudent`, and `app.session.preview` is set; the character page uses it to show every item unlocked.
+
 ### Trail Quest
 
 `js/game/quest.js` holds the rules and the world generator with no drawing, so `tests/quest.test.mjs` can check that every world is fair (everything reachable, only chests behind cracked rocks). `js/views/quest.js` draws and runs it on a plain canvas in the app's own page, not the sandbox, since it is our code. `powersFor` maps character slots to powers; a new slot power goes there and in `POWERS`.

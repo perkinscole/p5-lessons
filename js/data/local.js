@@ -468,6 +468,9 @@ export function createLocalStore() {
       db.contributions = (db.contributions || []).filter((c) => !dropped.has(c.team_id));
       save();
     },
+    // The demo already lets you sign in as any student from the first screen.
+    async previewStart() { throw new Error('In the demo, sign out and choose a student.'); },
+    async previewReset() { throw new Error('In the demo, sign out and choose a student.'); },
     // Translating needs Google's translator, which only the real app has.
     async translate(lang, texts) { return texts.map(() => null); },
     async reportBug(note, details) {

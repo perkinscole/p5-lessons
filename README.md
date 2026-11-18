@@ -82,6 +82,10 @@ Work through [PILOT.md](PILOT.md), a step-by-step checklist for the first deploy
 - **Protect the Sheet.** It holds every student's work and grades, so don't share it with students. They never need access to it, because the app reads it on their behalf.
 - **Use first name and last initial.** Classmates see these names on the journey map. They never see emails.
 
+## Student view
+
+Press **👀 Student view** in the top bar to use the app as a student would: Home, lessons, the journey map, sprites, sounds, Trail Quest, and the character builder. You become a pretend student of your own who is in no class, so nothing you do appears on a roster, a class board, the gradebook, or the Arcade. On the Character page everything is unlocked so you can try every item; real students still earn them. **Start over** wipes the pretend student's work, and **Back to teacher** returns you.
+
 ## Your data and backups
 
 Everything lives in one Google Sheet. On **Your classes**, the teacher who set up the app sees **Your data and backups**: which Sheet is in use, how many classes and students are in it, and links to backups.

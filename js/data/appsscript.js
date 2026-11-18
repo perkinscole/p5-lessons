@@ -32,14 +32,24 @@ const cache = new Map();
 let generation = 0;
 // Checked every few seconds, so they skip the cache both ways: never reused, and never clearing it.
 const LIVE = new Set(['helpRequests', 'myHelp', 'translate']);
+// Student view: a teacher's calls are run on the server as their pretend student.
+let preview = false;
+const PREVIEW_OWN = new Set(['previewStart', 'previewReset', 'translate']);
 function cachedCall(method, ...args) {
-  if (LIVE.has(method)) return call(method, ...args);
-  if (!READS.has(method)) {
+  if (preview && !PREVIEW_OWN.has(method)) return cachedFor('asStudent', [method, args], method, `student ${method}`);
+  return cachedFor(method, args, method, method);
+}
+/** `kind` decides how it is cached; `sent` and `sentArgs` are what travels. */
+function cachedFor(sent, sentArgs, kind, label) {
+  const method = sent;
+  const args = sentArgs;
+  if (LIVE.has(kind)) return call(method, ...args);
+  if (!READS.has(kind)) {
     generation++;
     cache.clear();
     return call(method, ...args).finally(() => { generation++; cache.clear(); });
   }
-  const key = `${method} ${JSON.stringify(args)}`;
+  const key = `${label} ${JSON.stringify(args)}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < FRESH_MS) return hit.promise;
   const born = generation;
@@ -55,7 +65,7 @@ function cachedCall(method, ...args) {
 const METHODS = [
   'listClasses', 'createClass', 'deleteClass', 'getClass', 'listStudents', 'addStudents', 'removeStudent', 'setStudentPath',
   'classBoard', 'updateProfile', 'myWorks', 'saveWork', 'submitWork', 'setShared', 'classWork', 'getWorkFull', 'saveGrade',
-  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'createAssignments', 'setMusicOpen', 'setWorld', 'worldState', 'worldEnter', 'worldRun', 'worldGhosts', 'rateLesson', 'lessonRatings', 'flagStep', 'myFlags', 'askHelp', 'cancelHelp', 'myHelp', 'helpRequests', 'markHelped', 'saveSprite', 'deleteSprite', 'dataInfo', 'backupNow', 'dataSwitch', 'dataCombine', 'translate', 'reportBug', 'bugReports', 'closeBug',
+  'getClassPlan', 'saveClassPlan', 'listGoogleCourses', 'importCourses', 'classroomWork', 'classAlerts', 'alertSummary', 'getPace', 'savePace', 'getDigest', 'setDigest', 'giveAward', 'arcade', 'teacherUnshare', 'listSprites', 'mySprites', 'listSongs', 'mySongs', 'saveSong', 'deleteSong', 'teamFor', 'takeKeyboard', 'passKeyboard', 'listTeams', 'saveTeams', 'gradeSyncStatus', 'pushGrades', 'createAssignments', 'setMusicOpen', 'setWorld', 'worldState', 'worldEnter', 'worldRun', 'worldGhosts', 'rateLesson', 'lessonRatings', 'flagStep', 'myFlags', 'askHelp', 'cancelHelp', 'myHelp', 'helpRequests', 'markHelped', 'saveSprite', 'deleteSprite', 'dataInfo', 'backupNow', 'dataSwitch', 'dataCombine', 'translate', 'reportBug', 'bugReports', 'closeBug', 'previewStart', 'previewReset',
 ];
 
 // ml5 is about 4 MB and only changes when the app is redeployed, so each device keeps its own copy.
@@ -98,7 +108,10 @@ export function createAppsScriptStore() {
     // A whole class shares one script's quota, so students autosave far less often than in the demo.
     saveDelay: 30000,
     lastEmail: '',
+    /** Turn student view on or off. While it is on, the session is the pretend student's. */
+    setPreview(on) { preview = !!on; generation++; cache.clear(); },
     async session() {
+      if (preview) return cachedCall('previewStart');
       const s = await cachedCall('session');
       if (!s || !s.role) {
         store.lastEmail = s?.email || '';

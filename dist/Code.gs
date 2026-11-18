@@ -112,7 +112,7 @@ function route_(me, routes, method, args) {
 
 const TEACHER_READS = new Set(['listClasses', 'getClass', 'listStudents', 'classBoard', 'classWork', 'getWorkFull', 'getClassPlan', 'classroomWork',
   'classAlerts', 'alertSummary', 'getPace', 'getDigest', 'arcade', 'listSprites', 'listSongs', 'listTeams', 'gradeSyncStatus', 'lessonRatings',
-  'helpRequests', 'markHelped', 'listGoogleCourses', 'dataInfo', 'libraryPart', 'translate', 'reportBug', 'bugReports', 'closeBug']);
+  'helpRequests', 'markHelped', 'listGoogleCourses', 'dataInfo', 'libraryPart', 'translate', 'reportBug', 'bugReports', 'closeBug', 'previewStart', 'asStudent']);
 const BOARD_WRITES = new Set(['updateProfile', 'submitWork', 'setShared', 'saveSprite', 'deleteSprite', 'rateLesson']);
 
 /** Several calls in one trip, since each trip costs about a second. Each still goes through route_. */
@@ -1207,6 +1207,9 @@ function cleanPlan_(p) {
 }
 
 const TEACHER_ROUTES = {
+  previewStart: previewStart_,
+  asStudent: asStudent_,
+  previewReset: previewReset_,
   translate: translate_,
   reportBug: reportBug_,
   bugReports: bugReports_,
@@ -2071,6 +2074,52 @@ function closeBug_(me, id) {
   return bugReports_(me);
 }
 
+
+// Student view -------------------------------------------------------------------------------------
+// A teacher can use the app as a pretend student of their own. That student lives in a class of one
+// that belongs to nobody, so it never shows up on a roster, a board, a gradebook, or in an email.
+
+const previewKey_ = (me) => `preview:${me.email}`;
+
+function previewStudent_(me) {
+  if (me.role !== 'teacher') throw new Error('You do not have access to that.');
+  const key = previewKey_(me);
+  const at = findRows_('Students', 'email', key)[0];
+  if (at) return readRow_('Students', at);
+  return withLock_(() => {
+    const again = findRows_('Students', 'email', key)[0];
+    if (again) return readRow_('Students', again);
+    // Not owned by the teacher on purpose: teacher pages list classes by owner, so they skip this one.
+    insert_('Classes', { id: key, teacher_email: key, name: 'Student view', created_at: now_(), music_open: true, world_mode: 'free', world_mins: 5 });
+    const student = { id: uuid_(), class_id: key, email: key, display_name: 'You (student view)', avatar: null, path: null, game_name: null, created_at: now_(), google_id: '' };
+    insert_('Students', student);
+    return readRow_('Students', findRows_('Students', 'email', key)[0]);
+  });
+}
+const previewMe_ = (me) => { const student = previewStudent_(me); return { role: 'student', email: student.email, student }; };
+
+function previewStart_(me) {
+  return { ...sessionFor_(previewMe_(me)), preview: true };
+}
+
+/** Run one student action as the teacher's pretend student. Only what a student could do. */
+function asStudent_(me, method, args) {
+  const name = String(method);
+  if (name === 'batch' || !Object.prototype.hasOwnProperty.call(STUDENT_ROUTES, name)) throw new Error('You do not have access to that.');
+  return route_(previewMe_(me), STUDENT_ROUTES, name, Array.isArray(args) ? args : []);
+}
+
+/** Wipe the pretend student's work so the teacher can start again from lesson 1. */
+function previewReset_(me) {
+  const student = previewStudent_(me);
+  withLock_(() => {
+    const workIds = new Set(rows_('Works', WORK_META).filter((w) => w.student_id === student.id).map((w) => w.id));
+    deleteRows_('Grades', (g) => workIds.has(g.work_id));
+    ['Works', 'Awards', 'Ratings', 'Flags', 'Help', 'World'].forEach((name) => deleteRows_(name, (r) => r.student_id === student.id, SCHEMA[name].slice(0, 4)));
+    update_('Students', { ...student, path: null, game_name: null });
+  });
+  return previewStart_(me);
+}
 
 const STUDENT_ROUTES = {
   translate: translate_,

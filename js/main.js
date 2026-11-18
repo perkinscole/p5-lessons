@@ -41,7 +41,8 @@ function topbar() {
   const link = (href, label) => h('a.nav', { href: `#${href}`, 'aria-current': (href === '/' ? hash === '/' : hash.startsWith(href)) ? 'page' : null }, label);
   const links = s.role === 'student'
     ? [link('/', 'Home'), link('/map', 'Journey'), link('/character', 'Character'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds'), link('/arcade', 'Arcade'), s.class?.world_mode && link('/quest', 'Quest')]
-    : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds')];
+    : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds'),
+      store.setPreview && h('button.btn.small', { onclick: () => studentView(true), title: 'Use the app as a student would' }, '👀 Student view')];
   const who = s.role === 'student'
     ? [h('img.mini-av', { src: avatarURL(s.student.avatar || defaultAvatar(s.student.id), 2), alt: '' }), s.student.display_name]
     : [s.teacher.display_name];
@@ -50,6 +51,21 @@ function topbar() {
     h('nav.navs', { 'aria-label': 'Main' }, links),
     h('div.who', h('button.btn.small', { onclick: openSettings }, 'Display'), h('button.btn.small', { onclick: openBugReport, title: 'Report a problem', 'aria-label': 'Report a problem' }, '🐞'), h('span.who-name', { translate: 'no' }, who), store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
   );
+}
+
+/** Teachers can step into a pretend student of their own, and back out. */
+async function studentView(on) {
+  store.setPreview(on);
+  const s = await attempt(() => store.session());
+  if (!s) { store.setPreview(false); return; }
+  app.session = s;
+  if (location.hash.slice(1) && location.hash.slice(1) !== '/') go('/'); else render();
+}
+function previewBanner() {
+  return h('aside.demo-banner.preview-banner', { 'aria-label': 'Student view' },
+    h('span', '👀 Student view: this is what a student sees. Nothing here reaches your classes. On Character, everything is unlocked so you can try it.'),
+    h('button.btn.small', { onclick: async () => { if (await attempt(() => store.previewReset())) { await studentView(true); toast('Started over as a new student.'); } } }, 'Start over'),
+    h('button.btn.small', { onclick: () => studentView(false) }, 'Back to teacher'));
 }
 
 async function signOut() {
@@ -82,7 +98,7 @@ export async function render() {
   if (!view) { go('/'); return; }
 
   const main = h('main.page', h('p.muted', 'Loading...'));
-  clear(root).append(store.mode === 'local' ? demoBanner() : '', topbar(), main);
+  clear(root).append(store.mode === 'local' ? demoBanner() : '', app.session.preview ? previewBanner() : '', topbar(), main);
   try {
     const content = await view(main, ...match.slice(1));
     if (token !== renderToken) return;

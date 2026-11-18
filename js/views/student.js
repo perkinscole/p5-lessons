@@ -12,6 +12,9 @@ import { chime, sparkle, pop, celebrateNew } from '../celebrate.js';
 const sfxSynth = installSynth({}, {});
 const sfx = (name) => { if (getSettings().gameSound) { try { sfxSynth.playSound(name); } catch (_) { /* no audio here */ } } };
 
+// In a teacher's student view everything is open, so they can see the whole character builder.
+const isOpen = (unlock, stats) => !!app.session?.preview || isUnlocked(unlock, stats);
+
 // Which unlocked items this student has already seen, so new ones can be celebrated once.
 // Kept in this browser only; if storage is blocked, there is simply no celebration.
 const seenKey = (id) => `pixeltrail.seen.${id}`;
@@ -147,7 +150,7 @@ export async function viewCharacter() {
   const av = { ...defaultAvatar(student.id), ...(student.avatar || {}) };
   const badgeName = (id) => badgeById(id)?.name || id;
   const all = unlockables();
-  const owned = all.filter((u) => isUnlocked(u.unlock, stats));
+  const owned = all.filter((u) => isOpen(u.unlock, stats));
 
   // New since last visit: celebrated once, then tagged NEW until tried.
   const seen = readSeen(student.id);
@@ -188,8 +191,8 @@ export async function viewCharacter() {
     onclick: () => {
       for (const [slot, def] of Object.entries(SLOTS)) {
         if (slot === 'title') continue;
-        const open = def.swatches ? def.swatches.map((_, i) => i).filter((i) => isUnlocked(def.locks && def.locks[i], stats))
-          : Object.entries(def.items).filter(([, it]) => isUnlocked(it.unlock, stats)).map(([id]) => id);
+        const open = def.swatches ? def.swatches.map((_, i) => i).filter((i) => isOpen(def.locks && def.locks[i], stats))
+          : Object.entries(def.items).filter(([, it]) => isOpen(it.unlock, stats)).map(([id]) => id);
         av[slot] = open[Math.floor(Math.random() * open.length)];
       }
       sfx('magic');
@@ -204,7 +207,7 @@ export async function viewCharacter() {
       h('div.xpfill', { style: `width:${Math.round((owned.length / all.length) * 100)}%` })));
 
   // What to aim for next: the closest XP unlocks, and badges that open the most gear.
-  const xpNext = all.filter((u) => u.unlock.xp !== undefined && !isUnlocked(u.unlock, stats)).sort((a, b) => a.unlock.xp - b.unlock.xp).slice(0, 3);
+  const xpNext = all.filter((u) => u.unlock.xp !== undefined && !isOpen(u.unlock, stats)).sort((a, b) => a.unlock.xp - b.unlock.xp).slice(0, 3);
   const byBadge = new Map();
   for (const u of all) if (u.unlock.badge && !stats.badges.includes(u.unlock.badge)) byBadge.set(u.unlock.badge, [...(byBadge.get(u.unlock.badge) || []), u]);
   const badgeNext = [...byBadge.entries()].filter(([id]) => badgeById(id)).sort((a, b) => b[1].length - a[1].length).slice(0, 3);
@@ -230,7 +233,7 @@ export async function viewCharacter() {
         (def.order || def.swatches.map((_, i) => i)).forEach((i) => {
           const color = def.swatches[i];
           const lock = def.locks && def.locks[i];
-          const open = isUnlocked(lock, stats);
+          const open = isOpen(lock, stats);
           const isNew = fresh.has(`${slot}:${i}`);
           box.append(h('button.swatch', {
             style: `background:${color}`, class: `${open ? '' : 'locked'} ${isNew ? 'new' : ''}`, 'aria-pressed': av[slot] === i ? 'true' : 'false',
@@ -244,7 +247,7 @@ export async function viewCharacter() {
         });
       } else {
         Object.entries(def.items).forEach(([id, item]) => {
-          const open = isUnlocked(item.unlock, stats);
+          const open = isOpen(item.unlock, stats);
           const rarity = rarityOf(item.unlock);
           const isNew = fresh.has(`${slot}:${id}`);
           box.append(h('button.item', {

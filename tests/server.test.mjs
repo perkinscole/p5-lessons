@@ -1094,3 +1094,35 @@ test('problem reports: anyone signed in can send one, and the right teacher sees
   for (let i = 0; i < 4; i++) a('reportBug', `again ${i}`, {});
   assert.match(server.raw(kids[0], 'reportBug', ['one more', {}]).error, /few reports today/);
 });
+
+test('student view: a teacher can be a pretend student that no class ever sees', () => {
+  const { server, teacher, cls, kids } = classOf();
+  const s = teacher('previewStart');
+  assert.equal(s.role, 'student');
+  assert.equal(s.preview, true);
+  assert.equal(s.class.world_mode, 'free');
+  assert.equal(teacher('previewStart').student.id, s.student.id, 'the same pretend student each time');
+  // They can do what a student does...
+  teacher('asStudent', 'saveWork', ['t1', { code: 'teacher trying it', assets: {} }]);
+  teacher('asStudent', 'updateProfile', [{ avatar: { hat: 'crown' } }]);
+  assert.equal(teacher('asStudent', 'myWorks', [])[0].code, 'teacher trying it');
+  assert.equal(teacher('asStudent', 'classBoard', [s.student.class_id]).length, 1);
+  // ...and nothing a student can't.
+  for (const [m, a] of [['listClasses', []], ['dataInfo', []], ['batch', [[['myWorks', []]]]], ['asStudent', ['myWorks', []]], ['classBoard', [cls.id]]]) {
+    assert.equal(server.raw(OWNER, 'asStudent', [m, a]).ok, false, m);
+  }
+  // Students can't use it, and it never shows in the teacher's classes, rosters, or boards.
+  assert.equal(server.raw(kids[0], 'previewStart', []).ok, false);
+  assert.equal(server.raw(kids[0], 'asStudent', ['myWorks', []]).ok, false);
+  assert.deepEqual(teacher('listClasses').map((c) => c.name), ['Period 1']);
+  assert.equal(teacher('listStudents', cls.id).length, 3);
+  assert.equal(teacher('classBoard', cls.id).length, 3);
+  assert.equal(teacher('classWork', cls.id).length, 0);
+  assert.equal(server.raw(kids[0], 'classBoard', [s.student.class_id]).ok, false);
+  assert.equal(server.raw(OWNER, 'getClass', [s.student.class_id]).ok, false);
+  // Its sign-in name is not an email address, so no Google account can ever be it.
+  assert.doesNotMatch(s.student.username, /^[^:]+@/);
+  // Starting over clears its work.
+  assert.equal(teacher('previewReset').student.id, s.student.id);
+  assert.equal(teacher('asStudent', 'myWorks', []).length, 0);
+});
