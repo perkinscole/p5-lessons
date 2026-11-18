@@ -4,7 +4,7 @@ import { app, go } from '../main.js';
 import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
-import { ratingBox } from './feedback.js';
+import { ratingBox, confusingButton, helpBox } from './feedback.js';
 import { chime, sparkle, pop, confetti, countUp, markCelebrated } from '../celebrate.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
@@ -102,13 +102,20 @@ export async function viewLesson(main, id, previewPath) {
   let me = null;
   let work = null;
   let team = null;
+  let myFlags = new Map(); // steps and questions this student marked as confusing
+  let helpOpen = false;
   let path = previewPath || lesson.path || 'platformer';
   let code;
   let assets = {};
   let startFiles = {};
 
   if (isStudent) {
-    [me, team] = await Promise.all([loadMe(), app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {})]);
+    let flagList;
+    let helpNow;
+    [me, team, flagList, helpNow] = await Promise.all([loadMe(), app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {}),
+      app.store.myFlags(id).catch(() => []), app.store.myHelp().catch(() => ({ open: false }))]);
+    myFlags = new Map(flagList.map((f) => [f.target, f.reason]));
+    helpOpen = !!helpNow.open;
     path = me.student.path;
     const roadOrder = sequence(path);
     if (team) {
@@ -365,7 +372,10 @@ export async function viewLesson(main, id, previewPath) {
       saveSoon(); // Try again, so a busy moment can't lose a student's work.
     }
   };
-  function quizPatch() { return { quiz_right: quizRight, quiz_total: answered.size === quizzes.length ? quizzes.length : 0 }; }
+  // The first try on each of the lesson's own questions, for the teacher's feedback report.
+  const quizFirst = { ...(work?.quiz_first || {}) };
+  const ownIndex = (q) => quizzes.indexOf(q) - (warmUp ? 1 : 0);
+  function quizPatch() { return { quiz_right: quizRight, quiz_total: answered.size === quizzes.length ? quizzes.length : 0, quiz_first: quizFirst }; }
   // Groups save more often, so partners see each other's work sooner.
   const saveSoon = debounce(persist, team ? Math.min(10000, app.store.saveDelay || 1500) : (app.store.saveDelay || 1500));
   const markDirty = () => {
@@ -408,6 +418,7 @@ export async function viewLesson(main, id, previewPath) {
     drawNav();
     const buttons = h('div.quiz-options', q.options.map((text, i) => h('button.quiz-option', {
       onclick: (e) => {
+        if (qi >= 0 && quizFirst[qi] === undefined) { quizFirst[qi] = i === q.answer; markDirty(); }
         if (i === q.answer) {
           e.currentTarget.classList.add('right');
           chime('right');
@@ -427,12 +438,15 @@ export async function viewLesson(main, id, previewPath) {
         }
       },
     }, md(text))));
+    const qi = ownIndex(q);
     return h('div.stack',
       h('p.eyebrow', 'Quick check'),
       q.review && h('p.eyebrow', 'From an earlier lesson'),
       h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
       q.code && h('pre.snippet', h('code', q.code)),
-      buttons, feedback, nav);
+      buttons, feedback,
+      isStudent && qi >= 0 && confusingButton(id, `quiz:${qi}`, myFlags),
+      nav);
   };
 
   const finishPane = () => {
@@ -538,6 +552,7 @@ export async function viewLesson(main, id, previewPath) {
       s.hint && !passing && h('details.hint', h('summary', 'Hint'), md(s.hint)),
       more && h('details.hint', h('summary', 'Why?'), md(more), readButton(() => more, 'Read the explanation aloud')),
       s.check && h('p.step-check', { class: passing ? 'ok' : 'wait' }, passing ? '✓ Done' : 'Not done yet'),
+      isStudent && confusingButton(id, `step:${flow[stepIndex].n}`, myFlags),
       h('div.row.step-nav',
         stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
         h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); run(); } }, 'Next'),
@@ -747,6 +762,7 @@ export async function viewLesson(main, id, previewPath) {
   }, 350);
   cm.on('change', () => { clearPlace(); markDirty(); onChange(); });
 
+  const stuck = isStudent && !approved ? helpBox(id, () => Math.min(stepNumberAt(stepIndex), lesson.steps.length - 1), helpOpen) : null;
   const feedback = work?.grade?.feedback || (work?.status === 'returned');
   const page = h('div.workspace',
     head,
@@ -758,6 +774,7 @@ export async function viewLesson(main, id, previewPath) {
         stdPanel,
         dots,
         stepBox,
+        stuck && stuck.el,
       ),
       h('section.code-pane', {
         'aria-label': 'Code editor',
@@ -782,6 +799,7 @@ export async function viewLesson(main, id, previewPath) {
   drawTeamBar();
   const teamTimer = team ? setInterval(pollTeam, 15000) : null;
   app.cleanup = async () => {
+    if (stuck) stuck.stop();
     clearInterval(teamTimer);
     window.removeEventListener('beforeunload', beforeUnload);
     document.body.classList.remove('in-workspace');

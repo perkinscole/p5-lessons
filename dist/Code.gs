@@ -13,7 +13,7 @@ const MAX_SPRITE_CHARS = CELL_CHUNK * SPRITE_CELLS;
 const chunkCols_ = (n) => Array.from({ length: n }, (_, i) => `data${i + 1}`);
 // Fields added after classes started using the app go at the end of the row, after the code
 // columns, so rows already in a teacher's Sheet keep their columns. metaWorks_ reads them too.
-const WORK_TAIL = ['step_at'];
+const WORK_TAIL = ['step_at', 'quiz_first'];
 const WORK_META = ['id', 'student_id', 'lesson_id', 'status', 'stretch_done', 'reflection', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'auto_ok', 'shared', 'submitted_at', 'updated_at'];
 const SONG_COLS = ['id', 'class_id', 'student_id', 'teacher_email', 'author_name', 'name', 'data', 'published', 'created_at'];
 const SPRITE_META = ['id', 'class_id', 'student_id', 'teacher_email', 'author_name', 'name', 'frames', 'w', 'h', 'published', 'created_at'];
@@ -24,7 +24,11 @@ const SCHEMA = {
   // world_mode: Trail Quest is '' (closed), 'earned' (minutes from lessons), or 'free' (open to all).
   Classes: ['id', 'teacher_email', 'name', 'created_at', 'music_open', 'world_mode', 'world_mins'],
   // What a student thought of a lesson. The teacher sees these added up, without names.
-  Ratings: ['student_id', 'class_id', 'lesson_id', 'stars', 'confusing', 'step', 'comment', 'updated_at'],
+  Ratings: ['student_id', 'class_id', 'lesson_id', 'stars', 'confusing', 'step', 'comment', 'updated_at', 'hardest', 'better'],
+  // A student marking one step or check question as confusing, and each time they asked for help.
+  Flags: ['student_id', 'class_id', 'lesson_id', 'target', 'reason', 'note', 'at'],
+  // Open "I'm stuck" requests: at most one per student, cleared when the teacher has helped.
+  Help: ['student_id', 'class_id', 'lesson_id', 'step', 'note', 'at'],
   // One row per student who has played Trail Quest. Coins come from play, never from grades.
   World: ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at',
     // A student's best run, replayed for classmates as a ghost: the world it was in, and the path walked.
@@ -47,7 +51,7 @@ const SCHEMA = {
 };
 const NUMBERS = new Set(['stars', 'step', 'ghost_seed', 'world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
 const BOOLEANS = new Set(['run_free', 'auto_ok', 'shared', 'published', 'started', 'music_open']);
-const OBJECTS = new Set(['confusing', 'holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
+const OBJECTS = new Set(['quiz_first', 'confusing', 'holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
 const ML5_PARTS = 5; // Set by the build: how many ML5_n files it made.
 
@@ -319,12 +323,15 @@ function classBoard_(me, classId) {
   const works = metaWorks_();
   const awards = rows_('Awards');
   const sprites = rows_('Sprites', SPRITE_META);
+  const ratings = rows_('Ratings', ['student_id']);
   // Progress only: never code, grades, feedback, reflections, or emails.
   return students.map((s) => ({
     id: s.id, display_name: s.display_name, avatar: s.avatar, path: s.path, game_name: s.game_name,
     works: works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, step_at: w.step_at, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
     awards: awards.filter((a) => a.student_id === s.id).map((a) => ({ badge_id: a.badge_id, note: a.note, created_at: a.created_at })),
     sprites_shared: sprites.filter((sp) => sp.student_id === s.id && sp.published).length,
+    // How many lessons they rated (not what they said): rating earns a little XP.
+    rated: ratings.filter((r) => r.student_id === s.id).length,
   }));
 }
 
@@ -436,7 +443,7 @@ function rateLesson_(me, lessonId, rating) {
     student_id: me.student.id, class_id: me.student.class_id, lesson_id: lesson, stars,
     confusing: picked.includes('nothing') ? ['nothing'] : picked,
     step: step >= 0 && step <= 40 && !picked.includes('nothing') ? step : -1,
-    comment: text_(r.comment, 200), updated_at: now_(),
+    comment: text_(r.comment, 200), updated_at: now_(), hardest: text_(r.hardest, 200), better: text_(r.better, 200),
   };
   withLock_(() => {
     if (!metaWorks_().some((w) => w.student_id === me.student.id && w.lesson_id === lesson)) throw new Error('Start the lesson before you rate it.');
@@ -447,20 +454,116 @@ function rateLesson_(me, lessonId, rating) {
   return true;
 }
 
+const FLAG_REASONS_ = ['unclear', 'broken', 'hard', 'easy', 'other'];
+const HELP_TTL_MS = 3600000;
+const flagTarget_ = (t) => (/^(step|quiz):\d{1,2}$/.test(String(t)) ? String(t) : null);
+
+/** Mark one step or check question as confusing, with a reason. An empty reason takes the mark back. */
+function flagStep_(me, lessonId, target, reason, note) {
+  const lesson = String(lessonId);
+  const where = flagTarget_(target);
+  if (!/^[a-z]\d{1,2}$/.test(lesson) || !where) throw new Error('Unknown lesson or step.');
+  if (reason && !FLAG_REASONS_.includes(reason)) throw new Error('Pick one of the reasons.');
+  withLock_(() => {
+    const mine = (f) => f.student_id === me.student.id && f.lesson_id === lesson && f.target === where && f.reason !== 'help';
+    const old = rows_('Flags').find(mine);
+    if (!reason) { if (old) deleteRows_('Flags', mine, SCHEMA.Flags); return; }
+    const row = { student_id: me.student.id, class_id: me.student.class_id, lesson_id: lesson, target: where, reason, note: text_(note, 200), at: now_() };
+    if (old) update_('Flags', { ...row, _row: old._row });
+    else insert_('Flags', row);
+  });
+  return true;
+}
+
+const myFlags_ = (me, lessonId) => rows_('Flags').filter((f) => f.student_id === me.student.id && f.lesson_id === String(lessonId) && f.reason !== 'help')
+  .map((f) => ({ target: f.target, reason: f.reason }));
+
+// "I'm stuck" ---------------------------------------------------------------------------------------
+const helpOpen_ = (h) => Date.now() - new Date(h.at).getTime() < HELP_TTL_MS;
+
+function askHelp_(me, lessonId, step, note) {
+  const lesson = String(lessonId);
+  if (!/^[a-z]\d{1,2}$/.test(lesson)) throw new Error('Unknown lesson.');
+  const n = Math.max(0, Math.min(40, Math.round(Number(step)) || 0));
+  withLock_(() => {
+    const row = { student_id: me.student.id, class_id: me.student.class_id, lesson_id: lesson, step: n, note: text_(note, 140), at: now_() };
+    const old = rows_('Help').find((h) => h.student_id === me.student.id);
+    if (old) update_('Help', { ...row, _row: old._row });
+    else insert_('Help', row);
+    // Counted for the feedback report: which steps students needed help with.
+    if (!old || !helpOpen_(old) || old.lesson_id !== lesson || old.step !== n) {
+      insert_('Flags', { student_id: me.student.id, class_id: me.student.class_id, lesson_id: lesson, target: `step:${n}`, reason: 'help', note: '', at: now_() });
+    }
+  });
+  return true;
+}
+
+function cancelHelp_(me) {
+  withLock_(() => deleteRows_('Help', (h) => h.student_id === me.student.id, SCHEMA.Help));
+  return true;
+}
+
+const myHelp_ = (me) => ({ open: rows_('Help').some((h) => h.student_id === me.student.id && helpOpen_(h)) });
+
+function helpRequests_(me, classId) {
+  ownedClass_(me, classId);
+  const students = new Map(rows_('Students').filter((x) => x.class_id === classId).map((x) => [x.id, x]));
+  return rows_('Help').filter((h) => h.class_id === classId && helpOpen_(h) && students.has(h.student_id))
+    .sort((a, b) => a.at.localeCompare(b.at))
+    .map((h) => ({ student_id: h.student_id, display_name: students.get(h.student_id).display_name, avatar: students.get(h.student_id).avatar, lesson_id: h.lesson_id, step: h.step, note: h.note, at: h.at }));
+}
+
+function markHelped_(me, classId, studentId) {
+  ownedClass_(me, classId);
+  withLock_(() => deleteRows_('Help', (h) => h.class_id === classId && h.student_id === String(studentId), SCHEMA.Help));
+  return true;
+}
+
+/** Everything a class said about each lesson, added up. No names, ids, or emails leave here. */
 function lessonRatings_(me, classId) {
   ownedClass_(me, classId);
+  const ids = new Set(rows_('Students').filter((x) => x.class_id === classId).map((x) => x.id));
   const byLesson = new Map();
+  const of = (lessonId) => {
+    if (!byLesson.has(lessonId)) {
+      byLesson.set(lessonId, { lesson_id: lessonId, started: 0, finished: 0, count: 0, total: 0, stars: [0, 0, 0, 0, 0], confusing: {}, steps: {},
+        comments: [], hardest: [], better: [], flags: {}, help: {}, quiz: {} });
+    }
+    return byLesson.get(lessonId);
+  };
+  metaWorks_().filter((w) => ids.has(w.student_id)).forEach((w) => {
+    const t = of(w.lesson_id);
+    t.started++;
+    if (w.status !== 'in_progress') t.finished++;
+    Object.keys(w.quiz_first || {}).forEach((q) => {
+      if (!/^\d{1,2}$/.test(q)) return;
+      const tally = t.quiz[q] || { tries: 0, missed: 0 };
+      tally.tries++;
+      if (!w.quiz_first[q]) tally.missed++;
+      t.quiz[q] = tally;
+    });
+  });
   rows_('Ratings').filter((r) => r.class_id === classId).forEach((r) => {
-    const t = byLesson.get(r.lesson_id) || { lesson_id: r.lesson_id, count: 0, total: 0, stars: [0, 0, 0, 0, 0], confusing: {}, steps: {}, comments: [] };
+    const t = of(r.lesson_id);
     t.count++;
     t.total += r.stars;
     t.stars[r.stars - 1]++;
     (r.confusing || []).forEach((k) => { t.confusing[k] = (t.confusing[k] || 0) + 1; });
     if (r.step >= 0) t.steps[r.step] = (t.steps[r.step] || 0) + 1;
     if (r.comment) t.comments.push(r.comment);
-    byLesson.set(r.lesson_id, t);
+    if (r.hardest) t.hardest.push(r.hardest);
+    if (r.better) t.better.push(r.better);
   });
-  return [...byLesson.values()].map(({ total, ...t }) => ({ ...t, average: Math.round((total / t.count) * 10) / 10 }));
+  rows_('Flags').filter((f) => f.class_id === classId).forEach((f) => {
+    const t = of(f.lesson_id);
+    if (f.reason === 'help') { const n = f.target.split(':')[1]; t.help[n] = (t.help[n] || 0) + 1; return; }
+    const tally = t.flags[f.target] || { count: 0, reasons: {}, notes: [] };
+    tally.count++;
+    tally.reasons[f.reason] = (tally.reasons[f.reason] || 0) + 1;
+    if (f.note) tally.notes.push(f.note);
+    t.flags[f.target] = tally;
+  });
+  return [...byLesson.values()].map(({ total, ...t }) => ({ ...t, average: t.count ? Math.round((total / t.count) * 10) / 10 : 0 }));
 }
 
 // Trail Quest ---------------------------------------------------------------------------------------
@@ -1040,6 +1143,8 @@ const TEACHER_ROUTES = {
   listClasses: (me) => rows_('Classes').filter((c) => c.teacher_email === me.email),
   getClass: (me, id) => ownedClass_(me, id),
   lessonRatings: lessonRatings_,
+  helpRequests: helpRequests_,
+  markHelped: markHelped_,
   setWorld: (me, id, opts) => withLock_(() => {
     const cls = ownedClass_(me, id);
     const mode = opts && (opts.mode === 'earned' || opts.mode === 'free') ? opts.mode : '';
@@ -1074,6 +1179,8 @@ const TEACHER_ROUTES = {
     deleteRows_('Pace', (p) => p.class_id === id);
     deleteRows_('World', (r) => r.class_id === id);
     deleteRows_('Ratings', (r) => r.class_id === id);
+    deleteRows_('Flags', (r) => r.class_id === id);
+    deleteRows_('Help', (r) => r.class_id === id);
     deleteRows_('Students', (s) => s.class_id === id);
     deleteRows_('Classes', (c) => c.id === id);
   }),
@@ -1108,6 +1215,8 @@ const TEACHER_ROUTES = {
     deleteRows_('Contributions', (c) => c.student_id === id);
     deleteRows_('World', (r) => r.student_id === id);
     deleteRows_('Ratings', (r) => r.student_id === id);
+    deleteRows_('Flags', (r) => r.student_id === id);
+    deleteRows_('Help', (r) => r.student_id === id);
     rows_('Teams').filter((t) => (t.members || []).includes(id)).forEach((t) => {
       const members = t.members.filter((m) => m !== id);
       if (members.length < 2) dropTeam_(t);
@@ -1402,6 +1511,13 @@ function saveTeams_(me, classId, lessonId, groups) {
   });
 }
 
+/** First tries on check questions are kept once: a later answer never replaces the first. */
+function firstTries_(had, sent) {
+  const out = {};
+  Object.keys(sent && typeof sent === 'object' ? sent : {}).slice(0, 20).forEach((k) => { if (/^\d{1,2}$/.test(k)) out[k] = !!sent[k]; });
+  return { ...out, ...(had || {}) };
+}
+
 function saveMyWork_(me, lessonId, patch, extra) {
   if (!/^[a-z]\d{1,2}$/.test(String(lessonId))) throw new Error('Unknown lesson.');
   const docText = JSON.stringify({ code: String(patch.code === undefined ? '' : patch.code), assets: patch.assets || {}, files: cleanFiles_(patch.files) });
@@ -1449,6 +1565,7 @@ function saveMyWork_(me, lessonId, patch, extra) {
       quiz_total: Number(patch.quiz_total) || 0,
       auto_ok: !!patch.auto_ok,
       // How far through the lesson's steps the student has got, for the class display.
+      quiz_first: firstTries_(existing && existing.quiz_first, patch.quiz_first),
       step_at: patch.step_at === undefined ? (existing ? existing.step_at : 0) : Math.max(0, Math.min(40, Math.round(Number(patch.step_at) || 0))),
       updated_at: now_(),
       ...(extra || {}),
@@ -1465,6 +1582,11 @@ function saveMyWork_(me, lessonId, patch, extra) {
 
 const STUDENT_ROUTES = {
   rateLesson: rateLesson_,
+  flagStep: flagStep_,
+  myFlags: myFlags_,
+  askHelp: askHelp_,
+  cancelHelp: cancelHelp_,
+  myHelp: myHelp_,
   worldState: worldState_,
   worldEnter: worldEnter_,
   worldRun: worldRun_,

@@ -11,7 +11,7 @@ import { buildMap, legend, leaderboard } from './map.js';
 import { makeEditor } from './lesson.js';
 import { openImport, assignmentsTab, keepingUpTab } from './classroom.js';
 import { groupsTab, sendGradesTab, teamPanel } from './groups.js';
-import { feedbackTab } from './feedback.js';
+import { feedbackTab, helpCard } from './feedback.js';
 import { badgeChip } from './student.js';
 
 export async function viewTeacherHome() {
@@ -269,14 +269,19 @@ export async function viewClass(main, classId, tabParam) {
   const content = tab === 'roster' ? rosterTab(cls, students, board, render)
     : tab === 'grades' ? gradebookTab(cls, students, works)
       : tab === 'groups' ? await groupsTab(cls, students, render)
-      : tab === 'feedback' ? await feedbackTab(cls).catch((e) => h('p.warn', e.message))
+      : tab === 'feedback' ? await feedbackTab(cls, students).catch((e) => h('p.warn', e.message))
       : tab === 'send' ? await sendGradesTab(cls, render).catch((e) => h('p.warn', e.message))
       : tab === 'assignments' ? await assignmentsTab(cls)
         : tab === 'keeping' ? await keepingUpTab(cls, render)
           : journeyTab(board, cls);
+  // Students asking for help show here straight away, with a doorbell, whichever tab is open.
+  const help = helpCard(classId);
+  const before = app.cleanup;
+  app.cleanup = () => { help.stop(); if (before) return before(); return undefined; };
   return h('div.stack',
     h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), musicToggle(cls), questButton(cls), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
     h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('groups', 'Groups'), link('feedback', 'Feedback'), link('send', 'Classroom grades'), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
+    help.el,
     content,
   );
 }

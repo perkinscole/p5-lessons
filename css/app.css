@@ -222,6 +222,31 @@ button.btn.on { background: var(--sun); color: #2b2350; }
 .rate-bars { display: flex; align-items: flex-end; gap: 3px; height: 32px; margin-top: 4px; }
 .rate-bars span { width: 12px; background: #e0a400; border-radius: 2px 2px 0 0; }
 .rate-comments { margin: 6px 0 0; padding-left: 18px; }
+/* Confusing flags, "I'm stuck", and the teacher's help list */
+.linklike { background: none; border: 0; padding: 0; font: inherit; font-size: .85rem; color: var(--ink-2); text-decoration: underline; cursor: pointer; }
+.confuse { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.confuse input { width: 100%; }
+.rate-xp { font-size: .75rem; font-weight: 700; padding: 1px 8px; border-radius: 10px; background: var(--sun); color: #2b2350; }
+.help-box { margin-top: 14px; padding-top: 12px; border-top: 2px dashed var(--line); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.help-box input { width: 100%; }
+.help-box.waiting { padding: 10px; border: 2px solid #c08a1e; border-radius: 4px; background: #fff3c4; color: #2b2350; }
+.help-box p { margin: 0; }
+.help-card { display: none; }
+.help-card.has { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border: 3px solid #c43f29; border-radius: 4px; background: #fff0ec; color: #2b2350; animation: help-pulse 1.6s ease-in-out infinite; }
+.help-card h2 { margin: 0; font-size: 1.2rem; color: #c43f29; }
+.help-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.help-list li { display: flex; align-items: center; gap: 10px; }
+.help-list img { height: 32px; image-rendering: pixelated; }
+.help-who { flex: 1; }
+.help-note { display: block; font-style: italic; }
+.help-card.big h2 { font-size: 3vh; }
+.help-card.big .help-list { font-size: 2.2vh; }
+.pj-person.needs-help { position: relative; outline: 3px solid #c43f29; background: #ffd9d1; border-radius: 4px; }
+.pj-hand { position: absolute; top: -1.6vh; right: -1vh; font-size: 2.4vh; animation: fx-wiggle 1s ease-in-out infinite; }
+.fb-list { margin: 4px 0 0; padding-left: 18px; }
+.fb-lesson h3 { font-size: 1rem; margin: 0; }
+@keyframes help-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(196, 63, 41, .5); } 50% { box-shadow: 0 0 0 8px rgba(196, 63, 41, 0); } }
+@media (prefers-reduced-motion: reduce) { .help-card.has, .pj-hand { animation: none; } }
 /* Trail Quest */
 .quest-lobby { display: grid; grid-template-columns: 300px 1fr 1fr; gap: 20px; align-items: start; }
 @media (max-width: 900px) { .quest-lobby { grid-template-columns: 1fr; } }

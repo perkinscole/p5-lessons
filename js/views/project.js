@@ -11,6 +11,11 @@ import { recentAchievements } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { stageSceneStyle } from '../game/world.js';
 import { standingOn } from './map.js';
+import { helpCard } from './feedback.js';
+import { chime } from '../celebrate.js';
+
+// Students with an open "I'm stuck" request, so their character can wave on the display.
+let needsHelp = new Set();
 
 const todayKey = () => new Date().toLocaleDateString('en-CA');
 const shortCode = (code) => code.replace('6-8.', '');
@@ -81,7 +86,8 @@ function fitTrail(root) {
 }
 
 const sameDay = (iso) => !!iso && new Date(iso).toLocaleDateString('en-CA') === todayKey();
-const personChip = (s) => h('div.pj-person', { title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
+const personChip = (s) => h('div.pj-person', { class: needsHelp.has(s.id) ? 'needs-help' : '', title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
+  needsHelp.has(s.id) && h('span.pj-hand', '✋'),
   h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '' }),
   h('span', s.display_name));
 
@@ -271,10 +277,18 @@ export async function viewProject(main, classId) {
     if (fresh) { board = fresh; draw(); }
   }, 60000);
 
+  // Help requests are checked every few seconds, apart from the slower refresh above.
+  needsHelp = new Set();
+  const help = helpCard(classId, { big: true, onUpdate: (list) => {
+    const next = new Set(list.map((r) => r.student_id));
+    if (next.size !== needsHelp.size || [...next].some((x) => !needsHelp.has(x))) { needsHelp = next; draw(); }
+  } });
+
   const onResize = () => fitTrail(panels);
   window.addEventListener('resize', onResize);
   document.body.classList.add('projecting');
   app.cleanup = () => {
+    help.stop();
     window.removeEventListener('resize', onResize);
     clearInterval(ticker);
     clearInterval(poller);
@@ -292,10 +306,12 @@ export async function viewProject(main, classId) {
       h('div', h('h1', cls.name), h('p', new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))),
       h('div.pj-controls',
         h('button.btn.small', { onclick: setup }, 'Set up today'),
+        h('button.btn.small', { title: 'Play the help doorbell, to test the sound on this computer', 'aria-label': 'Test the help doorbell', onclick: () => { chime('doorbell'); chime('doorbell', 1.1); } }, '🔔'),
         h('button.btn.small', { onclick: fullScreen }, 'Full screen'),
         h('button.btn.small', { onclick: () => go(`/class/${classId}`) }, 'Exit')),
       clock,
     ),
+    help.el,
     panels,
   );
 }

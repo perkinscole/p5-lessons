@@ -50,7 +50,10 @@ const READS = new Set(['session', 'listClasses', 'getClass', 'listStudents', 'cl
 const FRESH_MS = 15000;
 const cache = new Map();
 let generation = 0;
+// Checked every few seconds, so they skip the cache both ways: never reused, and never clearing it.
+const LIVE = new Set(['helpRequests', 'myHelp']);
 function cachedCall(method, ...args) {
+  if (LIVE.has(method)) return call(method, ...args);
   if (!READS.has(method)) {
     generation++;
     cache.clear();

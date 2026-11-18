@@ -525,3 +525,24 @@ test('instructions say what "it" is', () => {
   }
   assert.deepEqual(vague, []);
 });
+
+test('the feedback report names files and steps the way students see them, with no ids', async () => {
+  const { buildReport, troubleSteps, quizRows, sourceFile } = await import('../js/curriculum/report.js');
+  const entry = {
+    lesson_id: 't1', started: 3, finished: 1, count: 3, average: 4, stars: [0, 0, 1, 1, 1], confusing: {}, steps: {}, comments: [],
+    hardest: ['making the sun'], better: ['more pictures'],
+    flags: { 'step:2': { count: 2, reasons: { unclear: 2 }, notes: ['where does the | sun line go'] }, 'quiz:1': { count: 1, reasons: { hard: 1 }, notes: [] } },
+    help: { 2: 1, 5: 1 }, quiz: { 0: { tries: 3, missed: 2 } },
+  };
+  assert.equal(sourceFile('m6'), 'js/curriculum/mind.js');
+  assert.deepEqual(troubleSteps(entry).map((s) => [s.index, s.flags, s.help]), [[2, 2, 1], [5, 0, 1]]);
+  assert.equal(quizRows(entry)[0].rate, 2 / 3);
+  const text = buildReport([entry, { ...entry, lesson_id: 'zz' }], { className: 'Period 3', students: 3, date: '2026-11-18' });
+  assert.match(text, /File: `js\/curriculum\/trunk\.js`/);
+  assert.match(text, /\| 3 \| Add a sun \| 2 \| the instructions were unclear 2 \| 1 \|/);
+  assert.match(text, /- Step 3: "where does the \| sun line go"/);
+  assert.match(text, /67% \(2\/3\)/);
+  assert.match(text, /### "What would make this lesson better\?"\n\n- more pictures/);
+  assert.match(text, /student names removed/);
+  assert.equal(buildReport([entry], { className: 'P', students: 1, date: 'd' }, 't3').includes('Hello, Canvas'), false);
+});
