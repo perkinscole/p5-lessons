@@ -6,6 +6,7 @@ import { PATHS, STAGES, mapLayout, currentLesson, sequence, isSideTrail, sideTra
 import { statsFor } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { BOX, COL_W, MARGIN, place } from '../game/world.js';
+import { overworldArt } from '../game/overworld.js';
 
 const MAP_H = 540;
 
@@ -22,16 +23,24 @@ function routePath(a, b) {
 
 const plate = (cx, cy, w, h, cls) => svg('rect', { x: Math.round(cx - w / 2), y: Math.round(cy - h / 2), width: Math.round(w), height: h, rx: 4, class: cls });
 
+/** Points along a trail, for keeping the scenery off it. Matches routePath. */
+function pointsAlong(a, b) {
+  const out = [];
+  const k = (b.x - a.x) * 0.55;
+  const bent = a.y !== b.y && a.x !== b.x;
+  for (let i = 0; i <= 40; i++) {
+    const t = i / 40;
+    const u = 1 - t;
+    if (!bent) { out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }); continue; }
+    out.push({ x: u * u * u * a.x + 3 * u * u * t * (a.x + k) + 3 * u * t * t * (b.x - k) + t * t * t * b.x, y: u * u * u * a.y + 3 * u * u * t * a.y + 3 * u * t * t * b.y + t * t * t * b.y });
+  }
+  return out;
+}
+
 /** Where a student is standing: their next lesson, or the fork, or the summit. */
 export function standingOn(s) {
   const done = new Set(s.works.filter((w) => w.status !== 'in_progress').map((w) => w.lesson_id));
   return currentLesson(s.path, done) || sequence(s.path).at(-1);
-}
-
-/** The same scatter of numbers every time, so the map never rearranges itself. */
-function scatter(seed) {
-  let a = seed >>> 0;
-  return () => { a = (Math.imul(a ^ (a >>> 15), 0x2c1b3c6d) + 0x9e3779b9) >>> 0; return ((a ^ (a >>> 13)) >>> 0) / 4294967296; };
 }
 
 export function buildMap({ board, meId = null, myPath = null, myDone = new Set(), onNode }) {
@@ -55,38 +64,28 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
     svg('stop', { offset: '0%', class: 'halo-in' }), svg('stop', { offset: '55%', class: 'halo-mid' }), svg('stop', { offset: '100%', class: 'halo-out' }));
   root.append(svg('defs', {}, filter, halo));
 
-  // The ground: one quiet colour, a soft band behind every other stage, and a few contour lines.
-  root.append(svg('rect', { x: 0, y: 0, width, height, class: 'map-ground' }));
-  STAGES.forEach((st, i) => {
+  // The ground: a top-down pixel overworld, with a different little land for each stage.
+  const spans = STAGES.map((st) => {
     const ids = st.kind === 'shared' ? st.lessons : Object.values(st.branches).flat();
     const colsHere = ids.map((id) => byId.get(id).col);
-    const x0 = MARGIN + Math.min(...colsHere) * COL_W - COL_W / 2;
-    const x1 = MARGIN + Math.max(...colsHere) * COL_W + COL_W / 2;
-    if (i % 2 === 0) root.append(svg('rect', { x: x0, y: 0, width: x1 - x0, height, class: 'map-band' }));
-    const cx = (x0 + x1) / 2;
+    return { st, x0: MARGIN + Math.min(...colsHere) * COL_W - COL_W / 2, x1: MARGIN + Math.max(...colsHere) * COL_W + COL_W / 2 };
+  });
+  spans[0].x0 = 0;
+  spans.forEach((sp, i) => { if (spans[i + 1]) { const mid = (sp.x1 + spans[i + 1].x0) / 2; sp.x1 = mid; spans[i + 1].x0 = mid; } else sp.x1 = width; });
+  const lines = edges.map((e) => pointsAlong(place(byId.get(e.from)), place(byId.get(e.to))));
+  root.append(svg('rect', { x: 0, y: 0, width, height, class: 'map-ground' }));
+  root.append(svg('image', { href: overworldArt({ width, height, stops: nodes.map(place), trails: lines, stages: spans }), x: 0, y: 0, width, height, class: 'map-art', preserveAspectRatio: 'none', 'aria-hidden': 'true' }));
+  // Cloud shadows drift slowly over the land, so the map feels alive without getting busy.
+  for (let i = 0; i < Math.ceil(width / 700); i++) {
+    root.append(svg('ellipse', { cx: 200 + i * 700, cy: 130 + (i % 3) * 130, rx: 150, ry: 46, class: `map-cloud drift-${i % 3}`, 'aria-hidden': 'true' }));
+  }
+  for (const { st, x0, x1 } of spans) {
+    const cx = Math.max(60, Math.min(width - 60, (x0 + x1) / 2));
     const text = st.mapName || st.name;
     root.append(plate(cx, 25, text.length * 8.6 + 18, 30, 'stage-plate'));
     const label = svg('text', { x: cx, y: 32, class: 'stage-name', 'text-anchor': 'middle' });
     label.textContent = text;
     root.append(label);
-  });
-  for (let k = 0; k < 4; k++) {
-    let d = '';
-    for (let x = 0; x <= width; x += 60) d += `${x ? ' L' : 'M'}${x},${Math.round(150 + k * 105 + Math.sin(x / 190 + k * 1.7) * 26 + Math.sin(x / 67 + k) * 8)}`;
-    root.append(svg('path', { d, class: 'map-contour' }));
-  }
-  // A few small pines in the gaps, well clear of every stop and its label.
-  const spots = nodes.map(place);
-  const random = scatter(77);
-  for (let i = 0; i < Math.round(width / 34); i++) {
-    const x = 20 + random() * (width - 40);
-    const y = 70 + random() * (height - 100);
-    const size = 0.8 + random() * 0.7;
-    if (spots.some((p) => Math.abs(p.x - x) < 62 && y > p.y - 78 && y < p.y + 52)) continue;
-    if (edges.some((e) => { const a = place(byId.get(e.from)); const b = place(byId.get(e.to)); return x > Math.min(a.x, b.x) - 14 && x < Math.max(a.x, b.x) + 14 && y > Math.min(a.y, b.y) - 26 && y < Math.max(a.y, b.y) + 14; })) continue;
-    root.append(svg('g', { class: 'map-tree', transform: `translate(${Math.round(x)},${Math.round(y)}) scale(${size.toFixed(2)})` },
-      svg('rect', { x: -1.5, y: 4, width: 3, height: 6, class: 'map-trunk' }),
-      svg('polygon', { points: '0,-14 8,-2 -8,-2' }), svg('polygon', { points: '0,-7 10,6 -10,6' })));
   }
 
   // Trails. Other students' roads are drawn first and faintly, so your own road sits on top.

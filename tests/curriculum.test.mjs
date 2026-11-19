@@ -583,3 +583,29 @@ test('finished steps earn XP as a student works, and never from a grade', async 
   assert.equal(statsFor({ works: [{ ...base, grade: { total: 0 } }] }).xp, statsFor({ works: [{ ...base, grade: { total: 100 } }] }).xp);
   assert.equal(statsFor({ works: [base] }).xp, 4 * XP.step + XP.submit + XP.approved);
 });
+
+test('the map\'s scenery never sits under a stop, a label, or a trail', async () => {
+  const { planOverworld, landFor } = await import('../js/game/overworld.js');
+  const stops = [{ x: 72, y: 282 }, { x: 180, y: 282 }, { x: 612, y: 102 }, { x: 612, y: 462 }, { x: 936, y: 282 }];
+  const trails = [[...Array(41)].map((_, i) => ({ x: 72 + i * 2.7, y: 282 })), [...Array(41)].map((_, i) => ({ x: 180 + i * 10.8, y: 282 - i * 4.5 }))];
+  const stages = [{ x0: 0, x1: 500 }, { x0: 500, x1: 900 }, { x0: 900, x1: 1200 }];
+  const plan = planOverworld({ width: 1200, height: 540, stops, trails, stages });
+  assert.ok(plan.things.length > 80, `only ${plan.things.length} things were placed`);
+  assert.ok(new Set(plan.things.map((t) => t.kind)).size >= 6, 'a mix of things');
+  for (const t of plan.things) {
+    assert.ok(t.x >= 0 && t.x < plan.w && t.y >= 0 && t.y < plan.h, `${t.kind} is off the map`);
+    for (const s of stops) {
+      const onTile = Math.abs(t.x * 3 - s.x) < 22 && Math.abs(t.y * 3 - s.y) < 22;
+      assert.ok(!onTile, `${t.kind} is on a stop`);
+      // Anything with height stays out of the space above a stop, where characters stand.
+      if (!plan.loose.has(t.kind)) assert.ok(!(Math.abs(t.x * 3 - s.x) < 40 && t.y * 3 > s.y - 70 && t.y * 3 < s.y + 30), `${t.kind} is where characters stand`);
+    }
+    for (const line of trails) for (const pt of line) assert.ok(Math.hypot(t.x * 3 - pt.x, t.y * 3 - pt.y) > 8, `${t.kind} is on a trail`);
+    assert.ok(t.y * 3 > 46, `${t.kind} is under the stage signs`);
+  }
+  assert.deepEqual(planOverworld({ width: 1200, height: 540, stops, trails, stages }).things, plan.things, 'the same picture every time');
+  assert.equal(landFor(0), 'camp');
+  assert.equal(landFor(6), 'snow');
+  assert.equal(landFor(12), landFor(0), 'extra stages go round again');
+  assert.equal(plan.things.filter((t) => t.kind === 'tent').length, 2, 'the camp at the start');
+});

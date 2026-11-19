@@ -844,3 +844,13 @@ ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: colum
 .you-tag text { fill: var(--accent-ink); font: 700 11px var(--font-body); }
 @media (prefers-reduced-motion: no-preference) { .map-halo { animation: halo-pulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; } .you-tag { animation: map-bob 1.2s steps(2) infinite; } }
 @keyframes halo-pulse { 50% { opacity: .7; transform: scale(1.08); } }
+
+/* Journey map: the pixel overworld under the trails */
+.map-art { image-rendering: pixelated; }
+.map-svg { --map-path: #f3e3bd; --map-path-edge: #7a6248; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']):not([data-theme='contrast']) .map-art { filter: brightness(.42) saturate(.75) hue-rotate(8deg); } }
+:root[data-theme='dark'] .map-art { filter: brightness(.42) saturate(.75) hue-rotate(8deg); }
+:root[data-theme='contrast'] .map-art { display: none; }
+.node-plate { stroke: rgba(60, 50, 40, .35); }
+.map-cloud { fill: rgba(30, 40, 60, .07); }
+:root[data-theme='contrast'] .map-cloud { display: none; }

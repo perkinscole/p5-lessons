@@ -105,7 +105,11 @@ In `js/views/lesson.js`, `gate()` is the first unanswered check question; a stud
 
 ### The journey map
 
-`js/views/map.js` draws the map as plain SVG: a quiet ground, soft bands behind alternate stages, and trails that curve out of each fork and back into each crossing (`routePath`). The teacher asked for this after finding the earlier blocky side-view world too busy to see characters on, so keep the background muted and let the characters (outlined by the `map-sticker` filter) and the student's own road be the brightest things on it. Colours come from the `--map-*` variables, with dark and high-contrast sets. `js/game/world.js` still draws the scenery behind the class display's race; the map no longer uses it.
+`js/views/map.js` draws the map as SVG over a pixel overworld. The trails curve out of each fork and back into each crossing (`routePath`), and characters get a white outline, a shadow, and a glow (`map-sticker`, `map-halo`) with a YOU tag on the student's own.
+
+The ground comes from `js/game/overworld.js`: a top-down picture drawn in code, with a different land for each stage in trail order (`ORDER`: camp, forest, lake, autumn, highland, two of snow for the Summit, alpine, grove, crystal, dusk, desert). `planOverworld` decides where everything goes with no drawing, so a test can check that nothing sits under a stop, a label, a trail, or where characters stand; `overworldArt` paints it once. A new prop needs a sprite in `SPRITES` and, if it is bigger than a bush, a size in `ROOM`.
+
+The teacher's history with this picture: the first version was a busy blocky side-view world that hid the characters and drew roads as boxy pipes; a plain flat map fixed that but lost the charm. So keep the palette soft, keep props off the trails, and let characters and the student's own road be the brightest things on it. `js/game/world.js` still draws the scenery behind the class display's race; the map no longer uses it.
 
 ### Celebrations
 
