@@ -101,7 +101,7 @@ Constraints that follow from this:
 
 ### Moving through a lesson
 
-In `js/views/lesson.js`, `gate()` is the first unanswered check question; a student can't open anything past it, and `kindOf(step)` labels each step as something to do or only to read. Answered questions are restored from `quiz_first` when a lesson is reopened. Steps themselves are not locked: an unfinished one can be skipped, because a check that wrongly fails must never trap a student.
+In `js/views/lesson.js`, `gate()` is the first unanswered check question; a student can't open anything past it, and `kindOf(step)` labels each step as something to do or only to read. Answered questions are restored from `quiz_first` when a lesson is reopened. Steps themselves are not locked: an unfinished one can be skipped, because a check that wrongly fails must never trap a student. An idle student gets a nudge (the `nudge` class, added by a timer in the lesson page): the next thing to do pulses after 25 seconds, and after 50 the editor shows the place marker with the code to type. It is browser-only and must stay that way: no request, nothing stored.
 
 ### Celebrations
 

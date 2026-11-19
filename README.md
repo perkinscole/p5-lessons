@@ -132,6 +132,8 @@ Students carry their XP in a **💰 purse** in the top bar. Submitting a lesson 
 
 Every step carries a label so students know what it wants: **✏️ Your turn** (do this in your code), **👀 Just read**, or **❓ Answer this**. A student can't move past a check question until they have answered it correctly: the steps after it are greyed out and can't be clicked. A step they haven't finished can still be skipped, but the button says **Skip for now** instead of **Next**. Teachers looking at a lesson are never locked.
 
+If a student stops, the lesson nudges them. After about 25 seconds with no typing or clicking, the next thing to do pulses gold: where the code goes, the answers to pick from, or the Next button. After about 50 seconds on a step that needs code, the editor jumps to the right line and shows **▼ type this here** with the code to type, and a soft chime plays. Any key or click stops the pulsing. **Show me** does the same thing on request. Nothing is recorded or sent to you about it.
+
 ## Feedback and help
 
 **"I'm stuck."** Every lesson has a **✋ I'm stuck: ask for help** button. A student can add a short note, and their request appears within a few seconds on the class page, with a doorbell: their name, the exact step, and the note. On the projected class display it stays private: their character hops and glows, and a small **✋** button in the corner opens the list for you. Press **✓ Helped** to clear it, or the student can press **I figured it out**. The 🔔 button on the display tests the doorbell on that computer.

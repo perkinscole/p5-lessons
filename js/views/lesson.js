@@ -507,7 +507,11 @@ export async function viewLesson(main, id, previewPath) {
     openFile(MAIN);
     const line = place.line - 1;
     mainDoc.addLineClass(line, 'background', 'place-line');
-    const marker = h('div.place-marker', place.how === 'replace' ? '▲ change this line' : '▼ your new line goes here');
+    // Show what to type right where it goes, so nobody has to look back and forth to find it.
+    const now = flow[stepIndex] && flow[stepIndex].step;
+    const shown = now && !now.reveal && !now.skeleton && typeof now.code === 'string' ? now.code : undefined;
+    const marker = h('div.place-marker', h('div', place.how === 'replace' ? '▲ change this line to:' : shown ? '▼ type this here:' : '▼ your new line goes here'),
+      shown && h('pre.place-ghost', shown.replace(/^\n+/, '').replace(/\n+$/, '')));
     const above = place.how === 'before' || place.how === 'top';
     const widget = cm.addLineWidget(line, marker, { above });
     placeMarks.push(() => mainDoc.removeLineClass(line, 'background', 'place-line'), () => widget.clear());
@@ -769,6 +773,34 @@ export async function viewLesson(main, id, previewPath) {
   drawHead();
   drawStep();
 
+  // A nudge for a student who has stopped. Nothing is sent anywhere: it only draws the eye to the
+  // next thing to do, first gently, then by pointing at the exact line in the code.
+  let lastActive = Date.now();
+  let nudged = 0;
+  const NUDGE = 'nudge';
+  const calm = () => { page.querySelectorAll(`.${NUDGE}`).forEach((el) => el.classList.remove(NUDGE)); nudged = 0; };
+  const active = () => { lastActive = Date.now(); if (nudged) calm(); };
+  const nudgeTimer = isStudent && !approved ? setInterval(() => {
+    if (document.hidden || document.querySelector('.backdrop, .fx-splash')) { lastActive = Date.now(); return; }
+    const idle = (Date.now() - lastActive) / 1000;
+    const item = flow[stepIndex];
+    const todo = item && item.step && kindOf(item.step) === 'do' && !(item.step.check && stepPasses(item.step, allCode()));
+    if (idle > 25 && nudged < 1) {
+      nudged = 1;
+      // What to look at depends on the step: where the code goes, an answer to pick, or the way on.
+      const targets = !item ? ['.btn.primary.big'] : item.quiz ? (answered.has(item.quiz) ? ['.step-nav .btn.primary'] : ['.step-kind', '.quiz-options']) : todo ? ['.step-kind', '.step-place', '.snippet'] : ['.step-nav .step-next'];
+      targets.forEach((sel) => { const el = stepBox.querySelector(sel); if (el) el.classList.add(NUDGE); });
+    }
+    if (idle > 50 && nudged < 2 && todo) {
+      nudged = 2;
+      const place = placeOf(item.step);
+      if (place && canEdit(MAIN)) { showPlace(place); chime('step'); }
+      const editor = page.querySelector('.CodeMirror');
+      if (editor) editor.classList.add(NUDGE);
+    }
+  }, 5000) : null;
+  ['pointerdown', 'keydown', 'wheel'].forEach((ev) => window.addEventListener(ev, active, true));
+
   // Steps that were already done when the lesson opened stay quiet. Finishing one chimes once.
   const cheered = new Set(lesson.steps.map((s, i) => (s.check && stepPasses(s, allCode()) ? i : -1)));
   const onChange = debounce(() => {
@@ -832,6 +864,8 @@ export async function viewLesson(main, id, previewPath) {
   app.cleanup = async () => {
     if (stuck) stuck.stop();
     clearInterval(teamTimer);
+    clearInterval(nudgeTimer);
+    ['pointerdown', 'keydown', 'wheel'].forEach((ev) => window.removeEventListener(ev, active, true));
     window.removeEventListener('beforeunload', beforeUnload);
     document.body.classList.remove('in-workspace');
     saveSoon.cancel();

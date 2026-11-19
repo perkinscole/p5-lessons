@@ -806,3 +806,11 @@ ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: colum
 @keyframes fx-up { from { opacity: 0; transform: translateY(24px); } }
 @media (prefers-reduced-motion: reduce) { .fx-splash, .fx-splash *, .fx-right, .fx-shake { animation: none !important; } }
 .fx-splash.is-lesson .fx-splash-detail { font: 400 clamp(2rem, 8vh, 4.5rem) var(--font-display); color: #ffd84a; }
+
+/* Idle nudge: a slow pulse on the next thing to do */
+.nudge { animation: nudge 1.3s ease-in-out infinite; position: relative; z-index: 1; }
+.CodeMirror.nudge { animation: nudge-edge 1.3s ease-in-out infinite; }
+@keyframes nudge { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 196, 0, 0); transform: scale(1); } 50% { box-shadow: 0 0 0 6px rgba(255, 196, 0, .85), 0 0 22px 8px rgba(255, 196, 0, .5); transform: scale(1.02); } }
+@keyframes nudge-edge { 0%, 100% { box-shadow: inset 0 0 0 0 rgba(255, 196, 0, 0); } 50% { box-shadow: inset 0 0 0 5px rgba(255, 196, 0, .9); } }
+@media (prefers-reduced-motion: reduce) { .nudge, .CodeMirror.nudge { animation: none; outline: 4px solid #ffc400; } }
+.place-ghost { margin: 3px 0 0; padding: 4px 8px; font: 400 var(--code-size, 14px)/1.5 var(--font-code); color: #0b2a52; background: #fff; border-radius: 3px; white-space: pre; opacity: .85; }
