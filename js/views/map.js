@@ -1,5 +1,7 @@
 // The journey chart: every student's character standing where they are on the branching trail.
-import { h, svg, modal } from '../ui.js';
+import { h, svg, modal, clear } from '../ui.js';
+import { getSettings, setSetting } from '../settings.js';
+import { buildMap3d } from './map3d.js';
 import { app, go } from '../main.js';
 import { getLesson } from '../curriculum/engine.js';
 import { PATHS, STAGES, mapLayout, currentLesson, sequence, isSideTrail, sideTrailOpen } from '../curriculum/graph.js';
@@ -24,7 +26,7 @@ function routePath(a, b) {
 const plate = (cx, cy, w, h, cls) => svg('rect', { x: Math.round(cx - w / 2), y: Math.round(cy - h / 2), width: Math.round(w), height: h, rx: 4, class: cls });
 
 /** Points along a trail, for keeping the scenery off it. Matches routePath. */
-function pointsAlong(a, b) {
+export function pointsAlong(a, b) {
   const out = [];
   const k = (b.x - a.x) * 0.55;
   const bent = a.y !== b.y && a.x !== b.x;
@@ -200,8 +202,30 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
   return root;
 }
 
-function showCrowd(id, people) {
+export function showCrowd(id, people) {
   modal((close) => h('div.stack', h('h2', getLesson(id).title), h('ul.people', people.map((s) => h('li', h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '' }), s.display_name))), h('button.btn', { onclick: close }, 'Close')));
+}
+
+/**
+ * The map on the page: 3D unless this person has chosen the flat one. `centerId` is the stop to
+ * open on. The choice is kept with the other Display settings in this browser.
+ */
+export function mapView(opts, centerId = null) {
+  const wrap = h('div.map-wrap');
+  const draw = () => {
+    const flat = !!getSettings().mapFlat;
+    const map = flat ? h('div.map-scroll', { tabindex: 0, 'aria-label': 'Journey map, scrollable' }, buildMap(opts)) : buildMap3d(opts);
+    clear(wrap).append(
+      h('div.row.end', h('button.btn.small', { type: 'button', onclick: () => { setSetting({ mapFlat: !flat }); draw(); } }, flat ? '⛰️ 3D map' : '🗺️ Flat map')),
+      map);
+    if (!centerId) return;
+    requestAnimationFrame(() => {
+      if (map.centerOn) map.centerOn(centerId);
+      else { const here = mapLayout().nodes.find((n) => n.id === centerId); if (here) map.scrollLeft = place(here).x - map.clientWidth / 2; }
+    });
+  };
+  draw();
+  return wrap;
 }
 
 export function legend() {
@@ -237,19 +261,15 @@ export async function viewMap(_main, classId) {
   const me = isStudent ? board.find((b) => b.id === session.student.id) : null;
   const myDone = me ? new Set(me.works.filter((w) => w.status !== 'in_progress').map((w) => w.lesson_id)) : new Set();
   const myCurrent = me ? currentLesson(session.student.path, myDone) : null;
-  const mapEl = buildMap({
+  const opts = {
     board, meId: me?.id, myPath: isStudent ? session.student.path : null, myDone,
     onNode: {
       can: (id, onMyRoad, state) => (isStudent ? onMyRoad && (state === 'done' || id === myCurrent || (isSideTrail(id) && sideTrailOpen(id, myDone))) : true),
       go: (id) => go(`/lesson/${id}`),
     },
-  });
-  const scroller = h('div.map-scroll', { tabindex: 0, 'aria-label': 'Journey map, scrollable' }, mapEl);
-  if (me) {
-    // Open the map centered on the student, not at the start of a long trail.
-    const here = mapLayout().nodes.find((n) => n.id === standingOn({ ...me, path: session.student.path }));
-    if (here) requestAnimationFrame(() => { scroller.scrollLeft = place(here).x - scroller.clientWidth / 2; });
-  }
+  };
+  // Open the map centered on the student, not at the start of a long trail.
+  const scroller = mapView(opts, me ? standingOn({ ...me, path: session.student.path }) : null);
   return h('div.stack',
     h('div', h('h1', isStudent ? `${session.class.name}: the journey` : 'Class journey'), h('p.muted', 'Every road meets at each Crossing, then splits again. Scroll sideways to see the whole trail.')),
     legend(),

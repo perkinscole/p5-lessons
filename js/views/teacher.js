@@ -7,7 +7,7 @@ import { PATHS, PATH_IDS, STAGES, SIDE_TRAILS, sequence, stageOf, isBeyond } fro
 import { createPlayer } from '../sandbox.js';
 import { statsFor, TEACHER_BADGES, isDone } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
-import { buildMap, legend, leaderboard } from './map.js';
+import { mapView, legend, leaderboard } from './map.js';
 import { makeEditor } from './lesson.js';
 import { openImport, assignmentsTab, keepingUpTab } from './classroom.js';
 import { groupsTab, sendGradesTab, teamPanel } from './groups.js';
@@ -254,7 +254,7 @@ function journeyTab(board, cls) {
   return h('div.stack',
     h('p.row', h('a.btn', { href: `#/arcade/${cls.id}` }, 'Open class Arcade')),
     legend(),
-    h('div.map-scroll', { tabindex: 0, 'aria-label': 'Journey map, scrollable' }, buildMap({ board, onNode: { can: () => true, go: (id) => go(`/lesson/${id}`) } })),
+    mapView({ board, onNode: { can: () => true, go: (id) => go(`/lesson/${id}`) } }),
     h('h2', 'Everyone on the trail'),
     leaderboard(board, null),
   );

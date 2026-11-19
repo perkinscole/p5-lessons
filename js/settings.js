@@ -2,7 +2,7 @@
 import { h, clear, modal, toast } from './ui.js';
 
 const KEY = 'pixeltrail.settings';
-const DEFAULTS = { lang: 'en', font: 'atkinson', theme: 'auto', editor: 'night', codeSize: 14, textSize: 100, spacing: 'normal', plainHeadings: false, wrap: false, readRate: 1, autoRead: false, gameSound: true };
+const DEFAULTS = { mapFlat: false, lang: 'en', font: 'atkinson', theme: 'auto', editor: 'night', codeSize: 14, textSize: 100, spacing: 'normal', plainHeadings: false, wrap: false, readRate: 1, autoRead: false, gameSound: true };
 
 let settings = { ...DEFAULTS };
 try { settings = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (_) { /* private mode: use defaults */ }
@@ -28,6 +28,9 @@ export function applySettings() {
   root.style.setProperty('--code-size', `${settings.codeSize}px`);
   listeners.forEach((fn) => fn(settings));
 }
+
+/** Change a setting from outside the Display panel. */
+export const setSetting = (patch) => update(patch);
 
 function update(patch) {
   settings = { ...settings, ...patch };

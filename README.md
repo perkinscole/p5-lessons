@@ -128,6 +128,10 @@ Finishing a step plays a short chime and the "Done" mark sparkles. A right answe
 
 Students carry their XP in a **💰 purse** in the top bar. Submitting a lesson fills the whole screen with "Lesson complete!", a fanfare, and confetti while the XP counts up, and then coins fly into the purse. A new rank and each new badge then take over the screen in turn, each with its own sound; a tap or any key moves on. A badge you give a student, or a rank they reach when you approve work, does the same the next time they open Home. Equipping gear on the character page chimes as well. **Display → Play sounds** turns all of it off for a student, and animations are skipped for anyone whose device is set to reduce motion.
 
+## The journey map
+
+The Journey page shows the whole trail as a small 3D world seen at an angle. Each stage is its own land (a camp, a forest, a lake, a snowy summit with real mountains, a mushroom grove, a desert with pyramids). At a fork, the high roads climb onto mesas in the distance and the low roads drop into canyons nearer to you. Lesson stops and characters always sit in front of the scenery, each character has a glow, and a student's own carries a **YOU** tag. Scroll sideways, or use the arrow keys, to travel along the trail. **Flat map** switches to a simpler top-down version, and the choice is remembered on that device.
+
 ## Moving through a lesson
 
 Every step carries a label so students know what it wants: **✏️ Your turn** (do this in your code), **👀 Just read**, or **❓ Answer this**. A student can't move past a check question until they have answered it correctly: the steps after it are greyed out and can't be clicked. A step they haven't finished can still be skipped, but the button says **Skip for now** instead of **Next**. Teachers looking at a lesson are never locked.

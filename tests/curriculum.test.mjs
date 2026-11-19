@@ -615,3 +615,28 @@ test('the map\'s scenery never sits under a stop, a label, or a trail', async ()
   assert.equal(landFor(12), landFor(0), 'extra stages go round again');
   assert.equal(plan.things.filter((t) => t.kind === 'tent').length, 2, 'the camp at the start');
 });
+
+test('the 3D map\'s land: roads climb ramps onto mesas, and never have to jump a cliff', async () => {
+  const { buildHeights, cliffAt } = await import('../js/game/terrain.js');
+  const w = 200;
+  const h = 120;
+  const mesa = { x0: 80, x1: 140, y0: 20, y1: 50, height: 150, ramp: 26 };
+  const pit = { x0: 80, x1: 140, y0: 80, y1: 110, height: -60, ramp: 26 };
+  const H = buildHeights({ w, h, terraces: [mesa, pit], bumps: [{ kind: 'peak', x: 20, y: 60 }, { kind: 'pyramid', x: 180, y: 60 }] });
+  const at = (x, y) => H[y * w + x];
+  assert.ok(at(110, 35) > 140, 'the mesa is up');
+  assert.ok(at(110, 95) < -45, 'the canyon is down');
+  assert.ok(Math.abs(at(30, 20)) < 12 && Math.abs(at(110, 65)) < 12, 'ordinary ground is near level');
+  // Walking along the lane onto the mesa is a steady climb with no step bigger than a stride.
+  let last = at(50, 35);
+  for (let x = 51; x <= 85; x++) { const now = at(x, 35); assert.ok(now >= last - 0.5 && now - last < 14, `a step of ${(now - last).toFixed(1)} at x ${x}`); last = now; }
+  // Once the road is on top, the front of the mesa is a cliff facing the viewer.
+  assert.ok(Math.max(...[48, 49, 50, 51, 52].map((y) => cliffAt(H, w, h, 110, y))) > 30, 'a cliff along the front');
+  // Half way up the ramp, the side is a slope, not a wall.
+  assert.ok(Math.max(...Array.from({ length: 40 }, (_, k) => Math.abs(cliffAt(H, w, h, 67, 15 + k)))) < 16, 'no wall beside the ramp');
+  assert.ok(at(20, 60) > 90 && at(20, 60) > at(26, 60) && at(26, 60) > at(31, 60), 'a mountain rises to a point');
+  assert.ok(at(180, 60) > 55 && Math.abs(at(174, 60) - at(180, 54)) < 0.01, 'a pyramid has flat, matching faces');
+  // A lookout a trail walks straight up: its near edge is a slope.
+  const soft = buildHeights({ w, h, terraces: [{ ...mesa, soft: true }] });
+  assert.ok(Math.max(...Array.from({ length: 60 }, (_, k) => soft[(30 + k) * w + 110] - soft[(31 + k) * w + 110])) < 12, 'a soft edge has no cliff');
+});

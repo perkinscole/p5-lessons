@@ -105,11 +105,16 @@ In `js/views/lesson.js`, `gate()` is the first unanswered check question; a stud
 
 ### The journey map
 
-`js/views/map.js` draws the map as SVG over a pixel overworld. The trails curve out of each fork and back into each crossing (`routePath`), and characters get a white outline, a shadow, and a glow (`map-sticker`, `map-halo`) with a YOU tag on the student's own.
+The map is 3D by default (`js/views/map3d.js`), with the flat one (`buildMap` in `js/views/map.js`) behind a **Flat map** button; `mapView` picks between them from the `mapFlat` Display setting. Both are used on the student's Journey page and the teacher's Journey tab.
 
-The ground comes from `js/game/overworld.js`: a top-down picture drawn in code, with a different land for each stage in trail order (`ORDER`: camp, forest, lake, autumn, highland, two of snow for the Summit, alpine, grove, crystal, dusk, desert). `planOverworld` decides where everything goes with no drawing, so a test can check that nothing sits under a stop, a label, a trail, or where characters stand; `overworldArt` paints it once. A new prop needs a sprite in `SPRITES` and, if it is bigger than a bush, a size in `ROOM`. The land has height: `map.js` turns each run of stops on a high road into a raised mesa and each on a low road into a sunken canyon (`terraces`, one tier of cliff per lane away from the middle), and `overworldArt` draws the stone faces. That depth is what the teacher missed from the first version, so keep it.
+How the 3D one works, with no 3D library:
 
-The teacher's history with this picture: the first version was a busy blocky side-view world that hid the characters and drew roads as boxy pipes; a plain flat map fixed that but lost the charm. So keep the palette soft, keep props off the trails, and let characters and the student's own road be the brightest things on it. `js/game/world.js` still draws the scenery behind the class display's race; the map no longer uses it.
+- `js/game/overworld.js` plans and paints a top-down pixel picture of the land: a different land for each stage in trail order (`ORDER`), with props kept off stops, labels, and trails (`planOverworld`, which has no drawing and is tested). `paintGround` gives the ground alone; `spritePixels` gives each standing thing as pixels.
+- `js/game/terrain.js` (`buildHeights`, tested) says how high the ground is. Each run of stops on a high road is a mesa and each on a low road a canyon, reached by a ramp along the trail so a road never jumps a cliff. Mountains and pyramids are terrain too.
+- `map3d.js` draws it the way old flight games did: for each strip of ground from near to far, each screen column looks up the height and paints down to what is already there. Standing things are planted as the strips pass them, so nearer land hides them. Trails are painted onto the ground picture, so they follow the land. It draws at half size and only when the map is scrolled or resized.
+- Lesson stops, names, and characters are ordinary page elements placed over the picture (`.pin`). That keeps them sharp, clickable, reachable by keyboard, and never hidden behind a hill. Keep it that way: the teacher's first complaint about the map was that characters were hard to see.
+
+The teacher's history with this picture: a busy blocky side-view world hid the characters and drew roads as boxy pipes; a flat map fixed that but lost the charm; a top-down pixel overworld brought charm back but not depth; they then asked for a view at an angle with roads climbing into the distance. So keep the depth, keep the palette soft, and keep characters and the student's own road the brightest things on it. `js/game/world.js` still draws the scenery behind the class display's race; the map no longer uses it.
 
 ### Celebrations
 
