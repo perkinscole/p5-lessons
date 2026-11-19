@@ -105,7 +105,7 @@ In `js/views/lesson.js`, `gate()` is the first unanswered check question; a stud
 
 ### Celebrations
 
-`js/celebrate.js` holds every chime and reward animation (`chime`, `sparkle`, `confetti`, `pop`, `popBadge`, `celebrateNew`). Use it for any new "you did it" moment rather than playing sounds directly, so the Display sound setting and reduced-motion are respected in one place. Don't give a pop-up card a class that an existing component uses (`badge` restyled it once).
+`js/celebrate.js` holds every chime and reward animation (`chime`, `sparkle`, `confetti`, `pop`, `correct`, `incorrect`, `splash`, `popBadge`, `popRank`, `flyXP`, `celebrateNew`). `splash` is the full-screen moment for a finished lesson, a badge, or a rank; they queue and a tap or key moves on. The student's XP sits in the top bar (`xpPurse`), and `flyXP` sends coins into it. Use it for any new "you did it" moment rather than playing sounds directly, so the Display sound setting and reduced-motion are respected in one place. Don't give a pop-up card a class that an existing component uses (`badge` restyled it once).
 
 ### Feedback and help
 

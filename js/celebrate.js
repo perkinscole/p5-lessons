@@ -89,30 +89,110 @@ export function countUp(el, from, to, format = (n) => String(n), ms = 900) {
   requestAnimationFrame(tick);
 }
 
-// Pop-up cards for badges and ranks. They queue, so three badges arrive one after another.
-let waiting = 0;
-function card(kind, icon, eyebrow, title, detail, sound) {
-  const delay = waiting * 1500;
-  waiting++;
-  setTimeout(() => {
-    const el = h(`button.fx-card.is-${kind}`, { type: 'button', 'aria-label': `${eyebrow}: ${title}. Dismiss` },
-      h('span.fx-card-icon', icon), h('span.fx-card-text', h('span.fx-card-eyebrow', eyebrow), h('strong', title), detail && h('span.fx-card-detail', detail)));
-    const close = () => { el.classList.add('leaving'); setTimeout(() => el.remove(), 300); };
+// The XP purse -------------------------------------------------------------------------------------
+// A student's XP sits in the top bar. When they earn some, coins fly across the screen into it.
+let purseXp = null;
+const purseText = (n) => `${n} XP`;
+/** The purse for the top bar. It shows the last total known, so it doesn't flicker between pages. */
+export function xpPurse() {
+  return h('span.xp-purse', { id: 'xp-purse', title: 'Your XP', translate: 'no', hidden: purseXp === null }, h('span.xp-purse-icon', '💰'), h('strong', purseText(purseXp || 0)));
+}
+/** Set what the purse shows, with no animation. */
+export function setPurse(xp) {
+  purseXp = xp;
+  const el = document.getElementById('xp-purse');
+  if (el) { el.hidden = false; el.querySelector('strong').textContent = purseText(xp); }
+}
+/** Send coins from an element into the purse, then count the purse up to its new total. */
+export function flyXP(from, total) {
+  const el = document.getElementById('xp-purse');
+  const before = purseXp === null ? total : purseXp;
+  const gained = total - before;
+  purseXp = total;
+  if (!el) return;
+  el.hidden = false;
+  const number = el.querySelector('strong');
+  if (gained <= 0 || still() || !from || !from.getBoundingClientRect) { number.textContent = purseText(total); return; }
+  const a = from.getBoundingClientRect();
+  const b = el.getBoundingClientRect();
+  const coins = Math.max(5, Math.min(16, Math.round(gained / 8)));
+  for (let i = 0; i < coins; i++) {
+    const coin = h('span.fx-coin', { style: `left:${a.left + a.width / 2 + ((i * 53) % 60) - 30}px;top:${a.top + a.height / 2 + ((i * 31) % 40) - 20}px` }, '🪙');
+    layer().append(coin);
+    const wait = 80 + i * 70;
+    setTimeout(() => { coin.style.transform = `translate(${b.left + b.width / 2 - parseFloat(coin.style.left)}px, ${b.top + b.height / 2 - parseFloat(coin.style.top)}px) scale(.5)`; coin.style.opacity = '.9'; }, wait);
+    setTimeout(() => { coin.remove(); sfx('coin'); pop(el); }, wait + 620);
+  }
+  setTimeout(() => countUp(number, before, total, purseText, 300 + coins * 70), 700);
+  setTimeout(() => { sparkle(el, 16); el.classList.add('gained'); setTimeout(() => el.classList.remove('gained'), 1600); }, 700 + coins * 70);
+}
+
+// Right and wrong answers ---------------------------------------------------------------------------
+const PRAISE = ['Correct!', 'Nice!', 'You got it!', 'Exactly!', 'Yes!'];
+/** A right answer: the choice lights up, sparks fly, words rise, and the screen edge glows green. */
+export function correct(target, streak = 1) {
+  chime('right');
+  if (streak >= 2) chime('step', 0.3);
+  if (!target) return;
+  target.classList.add('fx-right');
+  if (still()) return;
+  sparkle(target, 20);
+  const r = target.getBoundingClientRect();
+  const words = streak >= 2 ? `🔥 ${streak} in a row!` : `✓ ${PRAISE[Math.floor(Math.random() * PRAISE.length)]}`;
+  const rise = h('div.fx-rise', { style: `left:${r.left + r.width / 2}px;top:${r.top}px` }, words);
+  const flash = h('div.fx-flash');
+  layer().append(rise, flash);
+  setTimeout(() => { rise.remove(); flash.remove(); }, 1300);
+}
+/** A wrong answer: a low note and a quick shake, nothing more. */
+export function incorrect(target) {
+  chime('wrong');
+  if (!target || still()) return;
+  target.classList.remove('fx-shake');
+  void target.offsetWidth;
+  target.classList.add('fx-shake');
+}
+
+// Full-screen moments -----------------------------------------------------------------------------
+// A badge, a new rank, or a finished lesson takes over the whole screen for a moment. They queue,
+// so three badges arrive one after another, and a tap or any key moves on.
+let line = Promise.resolve();
+/** Show one full-screen moment. Resolves when it has gone. `onShow(el)` runs as it appears. */
+export function splash({ kind = 'badge', icon, eyebrow, title, detail, sound = 'badge', seconds = 3.6, onShow }) {
+  const show = () => new Promise((resolve) => {
+    let done = false;
+    const el = h(`div.fx-splash.is-${kind}`, { role: 'status', 'aria-live': 'assertive' },
+      h('div.fx-rays', { 'aria-hidden': 'true' }),
+      h('div.fx-splash-icon', { 'aria-hidden': 'true' }, icon),
+      h('p.fx-splash-eyebrow', eyebrow),
+      h('h2.fx-splash-title', title),
+      detail && h('p.fx-splash-detail', detail),
+      h('p.fx-splash-hint', 'Tap to continue'));
+    const close = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('keydown', close, true);
+      el.classList.add('leaving');
+      setTimeout(() => { el.remove(); resolve(); }, still() ? 0 : 280);
+    };
     el.onclick = close;
-    layer().querySelectorAll('.fx-card').forEach((old) => old.click()); // one card at a time
-    layer().append(el);
+    document.body.append(el);
+    // A key pressed a moment after it appears moves on. Not at once, or typing would skip it unseen.
+    setTimeout(() => { if (!done) window.addEventListener('keydown', close, true); }, 600);
     chime(sound);
-    setTimeout(() => sparkle(el.querySelector('.fx-card-icon'), 14), 250);
-    setTimeout(close, 4200);
-    waiting = Math.max(0, waiting - 1);
-  }, delay);
+    if (!still()) { confetti(kind === 'lesson' ? 80 : 50); setTimeout(() => sparkle(el.querySelector('.fx-splash-icon'), 22), 350); }
+    if (onShow) onShow(el);
+    setTimeout(close, seconds * 1000);
+  });
+  line = line.then(show, show);
+  return line;
 }
 export function popBadge(id, note) {
   const b = badgeById(id);
-  if (b) card('badge', b.icon, 'Badge earned!', b.name, note || b.desc, 'badge');
+  return b ? splash({ kind: 'badge', icon: b.icon, eyebrow: 'Badge earned!', title: b.name, detail: note || b.desc, sound: 'badge' }) : Promise.resolve();
 }
 export function popRank(name) {
-  card('rank', '⬆️', 'Rank up!', name, 'Keep going!', 'rank');
+  return splash({ kind: 'rank', icon: '⬆️', eyebrow: 'Rank up!', title: name, detail: 'Keep going!', sound: 'rank' });
 }
 
 // What has already been celebrated, kept in this browser, so a badge pops up once. A badge a
@@ -128,7 +208,6 @@ export function celebrateNew(studentId, stats, notes = {}) {
   if (seen) {
     if (stats.rankIndex > seen.rank) popRank(stats.rank.name);
     stats.badges.filter((b) => !seen.badges.includes(b)).slice(0, 4).forEach((b) => popBadge(b, notes[b]));
-    if (stats.rankIndex > seen.rank || stats.badges.some((b) => !seen.badges.includes(b))) confetti(40);
   }
   markCelebrated(studentId, stats);
 }

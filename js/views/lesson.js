@@ -5,7 +5,7 @@ import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, ru
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
 import { ratingBox, confusingButton, helpBox } from './feedback.js';
-import { chime, sparkle, pop, confetti, countUp, markCelebrated } from '../celebrate.js';
+import { chime, sparkle, pop, countUp, markCelebrated, correct, incorrect, splash, popBadge, popRank, flyXP } from '../celebrate.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
@@ -426,6 +426,8 @@ export async function viewLesson(main, id, previewPath) {
     dots.append(h('li', h('button', { class: `${stepIndex === flow.length ? 'on' : ''} finish`, disabled: shut, 'aria-label': shut ? `Finish, locked. ${LOCKED}` : 'Finish', title: shut ? LOCKED : 'Finish', onclick: () => { stepIndex = flow.length; drawStep(); } }, '★')));
   };
 
+  // Right answers in a row on the first try, for a little extra cheer.
+  let streak = 0;
   const quizPane = (q) => {
     let firstTry = !answered.has(q);
     const feedback = h('div.quiz-feedback', { 'aria-live': 'polite' });
@@ -440,8 +442,8 @@ export async function viewLesson(main, id, previewPath) {
         if (qi >= 0 && quizFirst[qi] === undefined) { quizFirst[qi] = i === q.answer; markDirty(); }
         if (i === q.answer) {
           e.currentTarget.classList.add('right');
-          chime('right');
-          sparkle(e.currentTarget);
+          streak = firstTry ? streak + 1 : 0;
+          correct(e.currentTarget, streak);
           if (firstTry && !answered.has(q)) quizRight++;
           answered.add(q);
           clear(feedback).append(h('p.ok', '✓ ', md(q.why)));
@@ -451,7 +453,8 @@ export async function viewLesson(main, id, previewPath) {
           markDirty();
         } else {
           firstTry = false;
-          chime('wrong');
+          streak = 0;
+          incorrect(e.currentTarget);
           e.currentTarget.classList.add('wrong');
           e.currentTarget.disabled = true;
           clear(feedback).append(h('p.warn', 'Not quite. Try another one.'));
@@ -712,13 +715,16 @@ export async function viewLesson(main, id, previewPath) {
     const rankedUp = after.rankIndex > before.rankIndex;
     const firstSubmit = after.done.size > before.done.size; // Resubmitting doesn't earn more play time.
     const nextId = currentLesson(path, me.done);
-    const gained = h('h2', '+0 XP');
-    countUp(gained, 0, after.xp - before.xp, (n) => `+${n} XP`);
-    chime('submit');
-    confetti();
-    if (rankedUp) chime('rank', 0.9);
-    newBadges.slice(0, 3).forEach((b, i) => chime('badge', (rankedUp ? 1.9 : 0.9) + i * 0.5));
+    const gain = after.xp - before.xp;
+    const gained = h('h2', `+${gain} XP`);
     markCelebrated(me.student.id, after);
+    // The whole screen celebrates first: the lesson, then a new rank, then each new badge.
+    // The XP flies into the purse as the first one leaves.
+    let big = null;
+    splash({ kind: 'lesson', icon: '🏁', eyebrow: 'Lesson complete!', title: lesson.title, detail: gain > 0 ? `+${gain} XP` : 'Submitted again', sound: 'submit', seconds: 5, onShow: (el) => { big = el.querySelector('.fx-splash-detail'); if (gain > 0) countUp(big, 0, gain, (n) => `+${n} XP`, 1100); } })
+      .then(() => flyXP(document.querySelector('.celebrate h2') || document.body, after.xp));
+    if (rankedUp) popRank(after.rank.name);
+    newBadges.slice(0, 3).forEach((b) => popBadge(b));
     modal((close) => h('div.stack.celebrate',
       h('p.eyebrow', 'Lesson submitted'),
       gained,

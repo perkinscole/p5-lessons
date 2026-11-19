@@ -124,7 +124,9 @@ In a lesson, students can add up to 8 extra code files and upload images, using 
 
 ## Sounds and celebrations
 
-Finishing a step plays a short chime and the "Done" mark sparkles. A right answer on a check question chimes too. Submitting a lesson plays a fanfare with confetti while the XP counts up, and new badges and ranks pop in. A badge you give a student, or a rank they reach when you approve work, pops up with its own sound the next time they open Home. Equipping gear on the character page chimes as well. **Display → Play sounds** turns all of it off for a student, and animations are skipped for anyone whose device is set to reduce motion.
+Finishing a step plays a short chime and the "Done" mark sparkles. A right answer on a check question lights up green with sparks, a word of praise, and a glow round the screen; several right in a row on the first try are called out as a streak. A wrong answer gets a low note and a small shake.
+
+Students carry their XP in a **💰 purse** in the top bar. Submitting a lesson fills the whole screen with "Lesson complete!", a fanfare, and confetti while the XP counts up, and then coins fly into the purse. A new rank and each new badge then take over the screen in turn, each with its own sound; a tap or any key moves on. A badge you give a student, or a rank they reach when you approve work, does the same the next time they open Home. Equipping gear on the character page chimes as well. **Display → Play sounds** turns all of it off for a student, and animations are skipped for anyone whose device is set to reduce motion.
 
 ## Moving through a lesson
 

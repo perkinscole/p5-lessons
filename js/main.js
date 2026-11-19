@@ -3,6 +3,8 @@ import { h, clear, attempt, toast } from './ui.js';
 import { createLocalStore } from './data/local.js';
 import { createAppsScriptStore } from './data/appsscript.js';
 import { avatarURL, defaultAvatar } from './game/avatar.js';
+import { statsFor } from './game/rules.js';
+import { xpPurse, setPurse } from './celebrate.js';
 import { viewLogin, viewNoAccess } from './views/auth.js';
 import { viewHome, viewChooseRoad, viewCharacter, SessionEnded } from './views/student.js';
 import { viewMap } from './views/map.js';
@@ -46,10 +48,17 @@ function topbar() {
   const who = s.role === 'student'
     ? [h('img.mini-av', { src: avatarURL(s.student.avatar || defaultAvatar(s.student.id), 2), alt: '' }), s.student.display_name]
     : [s.teacher.display_name];
+  // Students carry their XP in the top bar. It is filled in from the class board, which pages load anyway.
+  if (s.role === 'student' && s.class?.id) {
+    store.classBoard(s.class.id).then((board) => {
+      const row = board.find((x) => x.id === s.student.id);
+      if (row && !document.querySelector('.fx-coin')) setPurse(statsFor({ ...row, path: s.student.path }).xp);
+    }).catch(() => {});
+  }
   return h('header.topbar',
     h('a.brand', { href: '#/', translate: 'no' }, 'Pixel Trail'),
     h('nav.navs', { 'aria-label': 'Main' }, links),
-    h('div.who', h('button.btn.small', { onclick: openSettings }, 'Display'), h('button.btn.small', { onclick: openBugReport, title: 'Report a problem', 'aria-label': 'Report a problem' }, '🐞'), h('span.who-name', { translate: 'no' }, who), store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
+    h('div.who', s.role === 'student' && xpPurse(), h('button.btn.small', { onclick: openSettings }, 'Display'), h('button.btn.small', { onclick: openBugReport, title: 'Report a problem', 'aria-label': 'Report a problem' }, '🐞'), h('span.who-name', { translate: 'no' }, who), store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
   );
 }
 
