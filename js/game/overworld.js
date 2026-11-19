@@ -20,14 +20,14 @@ function makeRandom(seed) {
 
 // Each land: ground colours [base, light speck, dark speck], and what grows there with how often.
 const LANDS = {
-  camp: { ground: ['#b9d39a', '#c6dca9', '#a9c68b'], things: [['oak', 3], ['flowers', 6], ['tuft', 6], ['rock', 1], ['pine', 1]], crowd: 1 },
+  camp: { ground: ['#b9d39a', '#c6dca9', '#a9c68b'], things: [['oak', 3], ['flowers', 6], ['tuft', 6], ['rock', 1], ['pine', 1], ['well', 0.4]], crowd: 1 },
   forest: { ground: ['#a7c88f', '#b4d29c', '#97ba80'], things: [['pine', 9], ['oak', 5], ['tuft', 3], ['rock', 1], ['mushroom', 1]], crowd: 2.5 },
   lake: { ground: ['#b4d4a0', '#c2ddae', '#a4c690'], things: [['pond', 2], ['reeds', 3], ['oak', 2], ['flowers', 5], ['tuft', 4]], crowd: 1 },
-  autumn: { ground: ['#cfcf9a', '#d9d9aa', '#c0c08a'], things: [['maple', 9], ['oak', 1], ['tuft', 3], ['rock', 2], ['pumpkin', 3]], crowd: 2.1 },
+  autumn: { ground: ['#cfcf9a', '#d9d9aa', '#c0c08a'], things: [['maple', 9], ['oak', 1], ['tuft', 3], ['rock', 2], ['pumpkin', 3], ['haystack', 3]], crowd: 2.1 },
   hills: { ground: ['#c2cf9f', '#cfdaae', '#b3c190'], things: [['rock', 5], ['boulder', 3], ['pine', 3], ['tuft', 5], ['cabin', 1]], crowd: 1.1 },
   highland: { ground: ['#c9cbb4', '#d5d7c2', '#b9bba4'], things: [['boulder', 4], ['rock', 5], ['pine', 4], ['cabin', 1], ['tuft', 4]], crowd: 1.3 },
-  snow: { ground: ['#e6edf0', '#f3f7f9', '#d5dfe4'], things: [['peak', 6], ['snowpine', 6], ['rock', 2], ['snowman', 1], ['tuft', 3]], crowd: 1.6 },
-  alpine: { ground: ['#bcd8a6', '#cae1b5', '#abc995'], things: [['flowers', 9], ['snowpine', 2], ['pine', 3], ['tuft', 5], ['rock', 2]], crowd: 1.2 },
+  snow: { ground: ['#e6edf0', '#f3f7f9', '#d5dfe4'], things: [['peak', 6], ['snowpine', 6], ['rock', 2], ['snowman', 1], ['igloo', 1], ['tuft', 3]], crowd: 1.6 },
+  alpine: { ground: ['#bcd8a6', '#cae1b5', '#abc995'], things: [['flowers', 9], ['snowpine', 2], ['pine', 3], ['tuft', 5], ['rock', 2], ['windmill', 1]], crowd: 1.2 },
   grove: { ground: ['#c9c2dc', '#d6d0e6', '#b9b1cf'], things: [['mushroom', 7], ['bigshroom', 7], ['tuft', 3], ['crystal', 1], ['flowers', 3]], crowd: 1.9 },
   crystal: { ground: ['#c3cfe0', '#d0dbe9', '#b3c0d3'], things: [['crystal', 9], ['rock', 3], ['bigshroom', 1], ['tuft', 2]], crowd: 1.7 },
   dusk: { ground: ['#cdbfd6', '#d9cde0', '#bdaec8'], things: [['bigshroom', 5], ['mushroom', 5], ['crystal', 3], ['pond', 1], ['tuft', 3]], crowd: 1.4 },
@@ -66,10 +66,14 @@ const SPRITES = {
   fire: (p, x, y) => { p(x - 2, y, 5, 1, '#6b4a2b'); p(x - 1, y - 1, 3, 1, '#8a5a34'); p(x - 1, y - 3, 3, 2, '#f08a3c'); p(x, y - 5, 1, 2, '#f08a3c'); p(x, y - 3, 1, 2, '#ffd84a'); },
   flag: (p, x, y) => { p(x, y - 12, 1, 13, '#ffffff'); p(x + 1, y - 12, 6, 2, '#ffd23f'); p(x + 1, y - 10, 4, 2, '#ffd23f'); p(x - 1, y, 3, 1, SHADOW); },
   sign: (p, x, y) => { p(x, y - 4, 1, 5, '#7a5a3a'); p(x - 3, y - 7, 7, 3, '#c79a63'); p(x - 2, y - 6, 5, 1, '#8a6a42'); },
+  igloo: (p, x, y) => { p(x - 5, y, 11, 2, SHADOW); p(x - 4, y - 4, 9, 5, '#eef4f8'); p(x - 3, y - 6, 7, 2, '#eef4f8'); p(x - 1, y - 7, 3, 1, '#eef4f8'); p(x - 4, y - 2, 9, 1, '#cfdde6'); p(x - 2, y - 5, 1, 3, '#cfdde6'); p(x + 2, y - 5, 1, 3, '#cfdde6'); p(x - 1, y - 2, 3, 3, '#3b4a5c'); },
+  windmill: (p, x, y) => { p(x - 4, y, 9, 2, SHADOW); p(x - 2, y - 9, 5, 10, '#e9dcc0'); p(x - 3, y - 4, 7, 5, '#e9dcc0'); p(x - 2, y - 11, 5, 2, '#b5524a'); p(x - 1, y - 12, 3, 1, '#b5524a'); p(x, y - 2, 1, 3, '#6b4a2b'); p(x - 6, y - 9, 13, 1, '#7a5a3a'); p(x, y - 15, 1, 13, '#7a5a3a'); p(x - 6, y - 10, 3, 1, '#fff6e6'); p(x + 4, y - 8, 3, 1, '#fff6e6'); p(x + 1, y - 15, 1, 3, '#fff6e6'); p(x - 1, y - 5, 1, 3, '#fff6e6'); },
+  haystack: (p, x, y) => { p(x - 3, y, 7, 1, SHADOW); p(x - 3, y - 3, 7, 4, '#e2bd52'); p(x - 2, y - 5, 5, 2, '#e2bd52'); p(x - 1, y - 6, 3, 1, '#e2bd52'); p(x - 2, y - 3, 1, 3, '#c79a3a'); p(x + 1, y - 4, 1, 4, '#f1d67c'); },
+  well: (p, x, y) => { p(x - 3, y, 7, 1, SHADOW); p(x - 3, y - 3, 7, 4, '#a9aab2'); p(x - 2, y - 2, 5, 1, '#5c7fa8'); p(x - 3, y - 8, 1, 5, '#7a5a3a'); p(x + 3, y - 8, 1, 5, '#7a5a3a'); p(x - 4, y - 9, 9, 2, '#b5524a'); },
   bridge: (p, x, y) => { p(x - 5, y - 3, 11, 7, '#b98a5c'); for (let k = -5; k <= 5; k += 2) p(x + k, y - 3, 1, 7, '#9a7046'); p(x - 5, y - 4, 11, 1, '#7a5a3a'); p(x - 5, y + 4, 11, 1, '#7a5a3a'); },
 };
 // How much room each thing needs: [half width, height above its base, depth below], in art pixels.
-const ROOM = { peak: [13, 13, 1], pyramid: [12, 12, 1], pond: [8, 7, 1], bigshroom: [6, 12, 2], boulder: [5, 8, 2], cabin: [6, 9, 2], oak: [5, 10, 2], maple: [5, 10, 2], tent: [7, 10, 2] };
+const ROOM = { windmill: [7, 15, 2], igloo: [6, 8, 2], peak: [13, 13, 1], pyramid: [12, 12, 1], pond: [8, 7, 1], bigshroom: [6, 12, 2], boulder: [5, 8, 2], cabin: [6, 9, 2], oak: [5, 10, 2], maple: [5, 10, 2], tent: [7, 10, 2] };
 const roomFor = (kind) => ROOM[kind] || [4, 9, 1];
 // Ground cover: flat, small, and allowed right up to the edge of a trail.
 const LOOSE = new Set(['tuft', 'flowers', 'dune']);

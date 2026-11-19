@@ -10,14 +10,14 @@ const smooth = (a, b, v) => { const t = Math.max(0, Math.min(1, (v - a) / (b - a
  *   terraces: [{ x0, x1, y0, y1, height, ramp, soft }] in art pixels. `ramp` is how far the slope
  *             runs before x0 and after x1. `soft` makes the near edge a slope too, for a trail
  *             that comes straight up the front.
- *   bumps:    [{ kind: 'peak' | 'pyramid' | 'spire', x, y, tall }] in art pixels
+ *   bumps:    [{ kind: 'peak' | 'pyramid' | 'spire' | 'castle' | 'tower', x, y, tall }] in art pixels
  *   calm:     a grid of 1s where the land must stay smooth (trails and stops), for the hills to avoid
  *   hills:    how tall the rolling hills are, away from calm ground. 0 for none.
  *   step, block: build the land out of blocks `block` cells wide whose tops are `step` apart, the
  *             way a block-building game does. 0 leaves it smooth.
  * Returns a Float32Array of w * h heights.
  */
-export function buildHeights({ w, h, terraces = [], bumps = [], calm = null, hills = 0, hillScale = null, step = 0, block = 1 }) {
+export function buildHeights({ w, h, terraces = [], bumps = [], calm = null, hills = 0, hillScale = null, lift = null, step = 0, block = 1 }) {
   const H = new Float32Array(w * h);
   // Gentle rolls everywhere, so flat ground isn't a sheet of glass.
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) H[y * w + x] = 3 + (Math.sin(x * 0.21 + y * 0.13) + Math.sin(x * 0.07 - y * 0.19)) * 1.6;
@@ -35,6 +35,8 @@ export function buildHeights({ w, h, terraces = [], bumps = [], calm = null, hil
       }
     }
   }
+  // `lift(x, y)` raises whole stretches of land, such as foothills along the back.
+  if (lift) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) H[y * w + x] += lift(x, y);
   if (hills) {
     // How far each cell is from calm ground, by sweeping the grid forward and back.
     const far = new Float32Array(w * h).fill(999);
@@ -52,6 +54,7 @@ export function buildHeights({ w, h, terraces = [], bumps = [], calm = null, hil
     }
   }
   for (const b of bumps) {
+    if (b.kind === 'castle' || b.kind === 'tower') continue; // built from whole blocks, below
     if (b.kind === 'spire') {
       // A crystal spire: a narrow column, a block or two across, flat on top.
       for (let y = Math.max(0, b.y - 3); y <= Math.min(h - 1, b.y + 3); y++) for (let x = Math.max(0, b.x - 3); x <= Math.min(w - 1, b.x + 3); x++) if (Math.hypot(x - b.x, y - b.y) < 3) H[y * w + x] = Math.max(H[y * w + x], b.tall || 84);
@@ -75,8 +78,36 @@ export function buildHeights({ w, h, terraces = [], bumps = [], calm = null, hil
       for (let y = by; y < Math.min(h, by + block); y++) for (let x = bx; x < Math.min(w, bx + block); x++) H[y * w + x] = tall;
     }
   }
+  // Buildings are laid block by block on top of whatever ground is there.
+  for (const b of bumps) {
+    const plan = b.kind === 'castle' ? castlePlan : b.kind === 'tower' ? towerPlan : null;
+    if (!plan) continue;
+    const size = b.kind === 'castle' ? CASTLE : TOWER;
+    const unit = step || 12;
+    const cell = block || 4;
+    for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+      const tall = plan(i, j) * unit;
+      for (let y = b.y + j * cell; y < Math.min(h, b.y + (j + 1) * cell); y++) for (let x = b.x + i * cell; x < Math.min(w, b.x + (i + 1) * cell); x++) if (x >= 0 && y >= 0) H[y * w + x] = tall;
+    }
+  }
   return H;
 }
+
+/** A castle is this many blocks square; a tower this many. (x, y) is the top-left corner. */
+export const CASTLE = 7;
+export const TOWER = 2;
+// Heights in blocks. A castle: four corner towers, walls with battlements and a gate in the
+// front, a courtyard, and a tall keep in the middle.
+function castlePlan(i, j) {
+  const last = CASTLE - 1;
+  const edge = i === 0 || j === 0 || i === last || j === last;
+  if ((i === 0 || i === last) && (j === 0 || j === last)) return 9;
+  if (j === last && i === 3) return 1; // the gate
+  if (edge) return (i + j) % 2 ? 5 : 4;
+  if (i >= 2 && i <= 4 && j >= 2 && j <= 4) return i === 3 && j === 3 ? 12 : 10;
+  return 1;
+}
+const towerPlan = () => 8;
 
 // Smooth random lumps from 0 to 1: the same every time for the same place and layer.
 const hash = (x, y, k) => { let n = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(k, 2147483647); n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };

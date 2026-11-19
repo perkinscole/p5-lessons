@@ -883,3 +883,28 @@ button.pin-tile:hover { background: var(--sun); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme='light']):not([data-theme='contrast']) .map3d-canvas { filter: brightness(.6) saturate(.8); } }
 :root[data-theme='dark'] .map3d-canvas { filter: brightness(.6) saturate(.8); }
 .map-wrap > .row { margin-bottom: 6px; }
+
+/* Life on the 3D map: animals, birds, and a balloon */
+.critter { position: absolute; left: 0; top: 0; pointer-events: none; }
+.critter img, .map3d-sky img { display: block; width: 100%; max-width: none; image-rendering: pixelated; }
+.map3d-sky { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.map3d-sky .balloon { position: absolute; top: 46px; left: 0; width: 44px; }
+.map3d-sky .bird { position: absolute; left: 0; width: 21px; }
+.critter.twinkle img { filter: drop-shadow(0 0 4px #fff3a0); }
+@media (prefers-reduced-motion: no-preference) {
+  .critter.roam img { animation: roam 9s steps(24) infinite; }
+  .critter.hop img { animation: hop 3s steps(6) infinite; }
+  .critter.bob img { animation: bob 4s ease-in-out infinite; }
+  .critter.flit img { animation: flit 5s steps(10) infinite; }
+  .critter.twinkle img { animation: twinkle 3s ease-in-out infinite; }
+  .map3d-sky .balloon { animation: balloon 150s linear infinite; }
+  .map3d-sky .bird { animation: bird 46s linear infinite; }
+}
+@media (prefers-reduced-motion: reduce) { .map3d-sky .bird { display: none; } .map3d-sky .balloon { left: 70%; } }
+@keyframes roam { 0% { transform: translateX(0) scaleX(1); } 46% { transform: translateX(160%) scaleX(1); } 50% { transform: translateX(160%) scaleX(-1); } 96% { transform: translateX(0) scaleX(-1); } 100% { transform: translateX(0) scaleX(1); } }
+@keyframes hop { 0%, 60%, 100% { transform: translate(0, 0); } 15% { transform: translate(20%, -45%); } 30% { transform: translate(40%, 0); } 45% { transform: translate(60%, -45%); } }
+@keyframes bob { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(60%, 8%); } }
+@keyframes flit { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(150%, -120%); } 50% { transform: translate(-80%, -200%); } 75% { transform: translate(-160%, -60%); } }
+@keyframes twinkle { 0%, 100% { opacity: .15; transform: translate(0, 0); } 50% { opacity: 1; transform: translate(60%, -80%); } }
+@keyframes balloon { from { transform: translateX(-60px); } to { transform: translateX(calc(100vw + 60px)); } }
+@keyframes bird { from { transform: translate(-40px, 0); } 50% { transform: translate(50vw, -14px); } to { transform: translate(calc(100vw + 40px), 4px); } }

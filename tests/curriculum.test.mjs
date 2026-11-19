@@ -652,6 +652,16 @@ test('the 3D map\'s land: roads climb ramps onto mesas, and never have to jump a
   for (let i = 0; i < blocky.length; i += 37) assert.ok(blocky[i] % 12 === 0);
   assert.equal(blocky[32 * w + 108], blocky[35 * w + 111], 'one block, one height');
   assert.ok(blocky[35 * w + 110] >= 144, 'the mesa is still up');
+  // A castle is laid block by block: corner towers, a gate in the front wall, and the keep tallest.
+  const { CASTLE } = await import('../js/game/terrain.js');
+  const fort = buildHeights({ w, h, bumps: [{ kind: 'castle', x: 40, y: 40 }, { kind: 'tower', x: 120, y: 60 }], step: 12, block: 4 });
+  const blockAt = (i, j) => fort[(40 + j * 4 + 1) * w + 40 + i * 4 + 1] / 12;
+  assert.equal(blockAt(0, 0), 9);
+  assert.equal(blockAt(CASTLE - 1, CASTLE - 1), 9);
+  assert.equal(blockAt(3, 3), 12, 'the keep');
+  assert.equal(blockAt(3, CASTLE - 1), 1, 'the gate');
+  assert.ok(blockAt(1, 0) >= 4 && blockAt(1, 0) <= 5 && blockAt(1, 0) !== blockAt(2, 0), 'battlements go up and down');
+  assert.equal(fort[61 * w + 121] / 12, 8, 'a watchtower');
   // A lookout a trail walks straight up: its near edge is a slope.
   const soft = buildHeights({ w, h, terraces: [{ ...mesa, soft: true }] });
   assert.ok(Math.max(...Array.from({ length: 60 }, (_, k) => soft[(30 + k) * w + 110] - soft[(31 + k) * w + 110])) < 12, 'a soft edge has no cliff');

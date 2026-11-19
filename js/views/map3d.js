@@ -11,7 +11,8 @@ import { PATHS, STAGES, mapLayout, currentLesson, sequence } from '../curriculum
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { COL_W, MARGIN, place } from '../game/world.js';
 import { paintGround, spritePixels, FLAT, SHAPED, groundOf, landFor } from '../game/overworld.js';
-import { buildHeights, grain, lumps } from '../game/terrain.js';
+import { buildHeights, grain, lumps, CASTLE, TOWER } from '../game/terrain.js';
+import { critterArt, HABITATS } from '../game/critters.js';
 import { standingOn, showCrowd, pointsAlong } from './map.js';
 
 const ART = 3; // page pixels per art pixel of the ground picture
@@ -136,15 +137,59 @@ function buildWorld(myPath) {
   for (const st of stops) { const cx = Math.round(st.x / ART); const cy = Math.round(st.y / ART); for (let dy = -7; dy <= 5; dy++) for (let dx = -8; dx <= 8; dx++) if (cx + dx >= 0 && cx + dx < w && cy + dy >= 0 && cy + dy < rows) calm[(cy + dy) * w + cx + dx] = 1; }
   // Each land has its own lie: the camp and the lake are gentle, the highlands and the snow are rough.
   const ROUGH = { camp: 0.5, forest: 1.1, lake: 0.35, autumn: 1, highland: 1.7, snow: 1.4, alpine: 0.9, grove: 0.8, crystal: 1.1, dusk: 0.9, desert: 1.25 };
-  const H = buildHeights({ w, h: rows, terraces, bumps, calm, hills: 46, hillScale: (x) => ROUGH[landAt(x)] || 1, step: STEP, block: BLOCK });
+  // Buildings: a castle in the highlands and a dark one in the dusk land, with watchtowers in the
+  // woods. Each goes on the first clear patch of its land, behind the trail where it can be seen.
+  const taken = (x0, y0, size) => { for (let y = y0 - 6; y < y0 + size + 6; y += 2) for (let x = x0 - 6; x < x0 + size + 6; x += 2) { if (x < 0 || y < 0 || x >= w || y >= rows || calm[y * w + x]) return true; } return terraces.some((t) => x0 + size > t.x0 - t.ramp && x0 < t.x1 + t.ramp && y0 + size > t.y0 - 8 && y0 < t.y1 + 8); };
+  const SITES = [['castle', 'highland', CASTLE, 128], ['castle', 'dusk', CASTLE, 232], ['tower', 'forest', TOWER, 150], ['tower', 'autumn', TOWER, 236], ['tower', 'alpine', TOWER, 140], ['castle', 'desert', CASTLE, 120]];
+  for (const [kind, land, blocks, rowWanted] of SITES) {
+    const size = blocks * BLOCK;
+    let done = false;
+    for (let dy = 0; dy < 60 && !done; dy += BLOCK) for (const y0 of [rowWanted - dy, rowWanted + dy]) {
+      for (let x0 = 0; x0 + size < w && !done; x0 += BLOCK) {
+        if (landAt(x0) !== land || landAt(x0 + size) !== land || y0 < 100 || y0 + size >= rows - 4) continue;
+        const ax = Math.floor(x0 / BLOCK) * BLOCK;
+        const ay = Math.floor(y0 / BLOCK) * BLOCK;
+        if (taken(ax, ay, size)) continue;
+        bumps.push({ kind, x: ax, y: ay, land });
+        for (let y = ay - 2; y < ay + size + 2; y++) for (let x = ax - 2; x < ax + size + 2; x++) calm[y * w + x] = 1;
+        done = true;
+      }
+      if (done) break;
+    }
+  }
+  // The land climbs into wooded foothills along the back, so the trail isn't out on an empty plain.
+  const BACK = 96;
+  const foothills = (x, y) => (y < BACK ? ((BACK - y) / BACK) ** 1.4 * 105 * (0.6 + lumps(x / 29, y / 17, 31) * 0.8) : 0);
+  const H = buildHeights({ w, h: rows, terraces, bumps: bumps.filter((b) => b.kind !== 'castle' && b.kind !== 'tower'), calm, hills: 46, hillScale: (x) => ROUGH[landAt(x)] || 1, lift: foothills, step: STEP, block: BLOCK });
+
+  // A river runs through the lake land from the hills to the front, and the trail crosses it on
+  // a plank bridge.
+  const deck = new Uint8Array(w * rows);
+  const wet = new Uint8Array(w * rows);
+  const lakeSpan = spans.find((sp, i) => landFor(i) === 'lake');
+  if (lakeSpan) {
+    const mid = (lakeSpan.x0 + lakeSpan.x1) / 2 / ART;
+    for (let by = BACK; by < rows; by += BLOCK) for (let bx = 0; bx < w; bx += BLOCK) {
+      const bank = mid + Math.sin(by / 13) * 7 + Math.sin(by / 5.1) * 2;
+      if (Math.abs(bx + BLOCK / 2 - bank) > 5 || H[by * w + bx] > STEP * 2) continue;
+      let trail = false;
+      for (let y = by; y < Math.min(rows, by + BLOCK); y++) for (let x = bx; x < Math.min(w, bx + BLOCK); x++) if (onTrail[y * w + x]) trail = true;
+      for (let y = by; y < Math.min(rows, by + BLOCK); y++) for (let x = bx; x < Math.min(w, bx + BLOCK); x++) { const i = y * w + x; if (trail) { deck[i] = 1; H[i] = 0; } else { H[i] = -STEP; wet[i] = 1; } }
+    }
+  }
+  // Then the buildings, block by block, on top of the finished ground.
+  const built = bumps.filter((b) => b.kind === 'castle' || b.kind === 'tower');
+  if (built.length) {
+    const stamped = buildHeights({ w, h: rows, bumps: built, step: STEP, block: BLOCK });
+    for (const b of built) { const size = (b.kind === 'castle' ? CASTLE : TOWER) * BLOCK; for (let y = b.y; y < b.y + size; y++) for (let x = b.x; x < b.x + size; x++) H[y * w + x] = stamped[y * w + x]; }
+  }
 
   // Water: the lake land is half pools, the alpine meadow has tarns, and the desert has an oasis
   // or two. A pool is a block lower than the ground, and never touches a trail.
-  const wet = new Uint8Array(w * rows);
   const POOLS = { lake: 0.5, alpine: 0.72, desert: 0.8, camp: 0.8 };
   for (let by = 0; by < rows; by += BLOCK) for (let bx = 0; bx < w; bx += BLOCK) {
     const want = POOLS[landAt(bx)];
-    if (!want || H[by * w + bx] > STEP || H[by * w + bx] < 0 || lumps(bx / 21, by / 15, 11) < want) continue;
+    if (!want || by < BACK || H[by * w + bx] > STEP || H[by * w + bx] < 0 || lumps(bx / 21, by / 15, 11) < want) continue;
     let near = false;
     for (let dy = -6; dy <= BLOCK + 6 && !near; dy += 3) for (let dx = -6; dx <= BLOCK + 6; dx += 3) { const x = bx + dx; const y = by + dy; if (x >= 0 && y >= 0 && x < w && y < rows && calm[y * w + x]) { near = true; break; } }
     if (near) continue;
@@ -157,10 +202,10 @@ function buildWorld(myPath) {
   const SIDES = { snow: [140, 146, 162], highland: [138, 130, 118], desert: [212, 166, 96], grove: [128, 96, 140], crystal: [118, 122, 160], dusk: [112, 86, 128], autumn: [142, 98, 64] };
   const EARTH = [146, 104, 68];
   const SPIRE = [[[150, 236, 232], [86, 178, 190]], [[214, 180, 250], [150, 112, 206]], [[255, 190, 216], [214, 124, 164]]];
-  const made = new Uint8Array(w * rows); // 1 mountain, 2 pyramid, 3 to 5 a crystal spire
+  const made = new Uint8Array(w * rows); // 1 mountain, 2 pyramid, 3 to 5 a crystal spire, 6 a castle, 7 a dark castle
   for (const b of bumps) for (let y = Math.max(0, b.y - 16); y <= Math.min(rows - 1, b.y + 16); y++) for (let x = Math.max(0, b.x - 16); x <= Math.min(w - 1, b.x + 16); x++) {
     const d = b.kind === 'pyramid' ? Math.max(Math.abs(x - b.x), Math.abs(y - b.y)) : Math.hypot(x - b.x, y - b.y);
-    if (b.kind === 'spire') { if (d < 5 && H[y * w + x] >= b.tall) made[y * w + x] = 3 + b.tint; } else if (d < (b.kind === 'peak' ? 15 : 13) && H[y * w + x] > 30) made[y * w + x] = b.kind === 'peak' ? 1 : 2;
+    if (b.kind === 'castle' || b.kind === 'tower') { const size = (b.kind === 'castle' ? CASTLE : TOWER) * BLOCK; if (x >= b.x && y >= b.y && x < b.x + size && y < b.y + size) made[y * w + x] = b.land === 'dusk' ? 7 : 6; } else if (b.kind === 'spire') { if (d < 5 && H[y * w + x] >= b.tall) made[y * w + x] = 3 + b.tint; } else if (d < (b.kind === 'peak' ? 15 : 13) && H[y * w + x] > 30) made[y * w + x] = b.kind === 'peak' ? 1 : 2;
   }
   // Anything standing throws a small shadow on the ground under it.
   const shade = new Float32Array(w * rows).fill(1);
@@ -189,10 +234,15 @@ function buildWorld(myPath) {
     const bx = (x / BLOCK) | 0;
     const by = (y / BLOCK) | 0;
     const tall = H[i];
-    const side = made[i] === 1 ? [136, 140, 154] : made[i] === 2 ? [222, 174, 96] : made[i] >= 3 ? SPIRE[made[i] - 3][1] : (SIDES[land] || EARTH);
+    const side = deck[i] ? [112, 78, 48] : made[i] === 6 ? [150, 150, 160] : made[i] === 7 ? [86, 70, 108] : made[i] === 1 ? [136, 140, 154] : made[i] === 2 ? [222, 174, 96] : made[i] >= 3 ? SPIRE[made[i] - 3][1] : (SIDES[land] || EARTH);
     S[i] = pack(side[0], side[1], side[2]);
     if (made[i] === 1) C[i] = tall > 96 || (land === 'snow' && tall > 48) ? pack(250, 252, 255) : pack(164, 168, 182);
     else if (made[i] === 2) C[i] = pack(244, 206, 120);
+    else if (made[i] >= 6) {
+      // Castle stone, with slate on the keep, red caps on the towers, and a worn courtyard.
+      const dark = made[i] === 7;
+      C[i] = tall >= 132 ? pack(96, 110, 150) : tall >= 100 ? (dark ? pack(150, 90, 190) : pack(196, 78, 70)) : tall <= STEP ? (dark ? pack(96, 84, 110) : pack(176, 160, 132)) : (dark ? pack(120, 104, 146) : pack(188, 188, 198));
+    } else if (deck[i]) C[i] = (x + y) % 3 === 0 ? pack(150, 108, 68) : pack(178, 132, 86);
     else if (made[i] >= 3) { const c = SPIRE[made[i] - 3][0]; C[i] = pack(c[0], c[1], c[2]); } else if (wet[i]) {
       // Water: deep blue with a slow pattern of lighter ripples.
       const ripple = lumps(x / 3 + y / 7, y / 2.2, 15);
@@ -203,7 +253,7 @@ function buildWorld(myPath) {
       const dots = DOTS[land];
       if (dots && grain(x, y, 20) < dots[0]) { const c = dots[1][Math.floor(grain(x, y, 21) * dots[1].length)]; C[i] = pack(c[0], c[1], c[2]); } else C[i] = vivid(C[i], 1.32, 1.1);
     }
-    if (onTrail[i]) { C[i] = vivid(C[i], 1.15, 1.08); continue; }
+    if (onTrail[i] && !deck[i]) { C[i] = vivid(C[i], 1.15, 1.08); continue; }
 
     // Light. The sun is low in the north-west: a block is in shadow when something taller stands
     // that way, corners where a taller block sits behind or in front are dimmer, and high ground
@@ -233,7 +283,42 @@ function buildWorld(myPath) {
   const standing = plan.things.filter((t) => !FLAT.has(t.kind) && !SHAPED.has(t.kind) && !spire(t) && !wet[Math.min(rows - 1, t.y) * w + Math.min(w - 1, t.x)])
     .map((t) => ({ x: t.x * ART, z: depthOf(t.y * ART), lift: heightAt(t.x * ART, t.y * ART), grow: GROW[t.kind] || 1, art: spritePixels(t.kind, (t.x + t.y) % 3) }))
     .sort((a, b) => a.z - b.z);
-  return { nodes, byId, spans, width, w, rows, H, C, S, heightAt, standing, at };
+  // Woods fill the foothills along the back, each land with its own kind of tree.
+  const WOODS = { camp: 'oak', forest: 'pine', lake: 'oak', autumn: 'maple', highland: 'pine', snow: 'snowpine', alpine: 'pine', grove: 'bigshroom', crystal: 'crystal', dusk: 'bigshroom', desert: 'palm' };
+  for (let k = 0; k < Math.round(w * 1.1); k++) {
+    const x = Math.floor(grain(k, 1, 40) * w);
+    const y = 3 + Math.floor(grain(k, 2, 41) * (BACK + 14));
+    const kind = grain(k, 3, 42) < 0.8 ? WOODS[landAt(x)] : 'rock';
+    if (made[y * w + x] || wet[y * w + x]) continue;
+    standing.push({ x: x * ART, z: depthOf(y * ART), lift: H[y * w + x], grow: (GROW[kind] || 1) * 1.15, art: spritePixels(kind, k % 3) });
+  }
+  // A flag flies from each keep.
+  for (const b of built) if (b.kind === 'castle') { const cx = b.x + (CASTLE * BLOCK) / 2; const cy = b.y + (CASTLE * BLOCK) / 2; standing.push({ x: cx * ART, z: depthOf(cy * ART), lift: H[cy * w + cx], grow: 1.6, art: spritePixels('flag', 0) }); }
+  standing.sort((a, b) => a.z - b.z);
+
+  // Animals. Each needs open, level ground in its own land (or water, for the ones that float),
+  // and must not be hidden behind higher land in front of it.
+  const critters = [];
+  const hidden = (x, y) => { const z0 = depthOf(y * ART); const mine = (CAM_H - H[y * w + x] - 10) / z0; for (let yy = y + 2; yy < rows; yy += 2) if ((CAM_H - H[yy * w + x]) / depthOf(yy * ART) < mine) return true; return false; };
+  spans.forEach((sp, i) => {
+    const list = HABITATS[landFor(i)] || [];
+    const x0 = Math.ceil(sp.x0 / ART);
+    const wide = Math.floor((sp.x1 - sp.x0) / ART) - 1;
+    list.forEach(([kind, count, move, where], n) => {
+      let placed = 0;
+      for (let k = 0; k < count * 40 && placed < count; k++) {
+        const x = x0 + Math.floor(grain(k, i * 10 + n, 50) * wide);
+        const y = BACK + 6 + Math.floor(grain(k, i * 10 + n, 51) * (rows - BACK - 14));
+        const here = y * w + x;
+        if (calm[here] || made[here] || !!wet[here] !== (where === 'water') || deck[here]) continue;
+        if (where !== 'water' && (H[here] !== H[here + 3] || H[here] !== H[here - 3])) continue;
+        if (hidden(x, y)) continue;
+        critters.push({ kind, move, x: x * ART, z: depthOf(y * ART), lift: H[here] + (move === 'flit' || move === 'twinkle' ? 10 + grain(k, n, 52) * 16 : 0), beat: grain(k, n, 53) });
+        placed++;
+      }
+    });
+  });
+  return { nodes, byId, spans, width, w, rows, H, C, S, heightAt, standing, critters, at };
 }
 
 const worlds = new Map();
@@ -242,7 +327,7 @@ const worldFor = (myPath) => { const key = myPath || ''; if (!worlds.has(key)) w
 /** The 3D map. Returns the element to put on the page. */
 export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set(), onNode }) {
   const world = worldFor(myPath);
-  const { nodes, byId, spans, width, w, rows, H, C, S, heightAt, standing, at } = world;
+  const { nodes, byId, spans, width, w, rows, H, C, S, heightAt, standing, critters, at } = world;
   const canvas = h('canvas.map3d-canvas', { 'aria-hidden': 'true' });
   const overlay = h('div.map3d-overlay');
   const stage = h('div.map3d-stage', canvas, overlay);
@@ -282,7 +367,17 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     return { el, x: p.x, z: depthOf(p.y), lift: heightAt(p.x, p.y), busy: sorted.length > 0 || state === 'current' };
   });
   const signs = spans.map(({ st, x0, x1 }) => ({ el: h('div.map3d-sign', st.mapName || st.name), x: (x0 + x1) / 2 }));
-  overlay.append(...signs.map((s) => s.el), ...pins.map((p) => p.el));
+  // Animals are small page elements too, each with its own slow movement.
+  const beasts = critters.map((c) => {
+    const art = critterArt(c.kind);
+    const el = h('div.critter', { class: c.move, 'aria-hidden': 'true' }, h('img', { src: art.url, alt: '', style: `animation-delay:${(-c.beat * 9).toFixed(1)}s;animation-duration:${(5 + c.beat * 6).toFixed(1)}s` }));
+    return { ...c, el, art };
+  });
+  // Birds cross the sky now and then, and a balloon drifts over.
+  const sky2 = h('div.map3d-sky', { 'aria-hidden': 'true' },
+    h('img.balloon', { src: critterArt('balloon').url, alt: '' }),
+    [0, 1, 2, 3, 4].map((i) => h('img.bird', { src: critterArt('bird').url, alt: '', style: `top:${70 + (i % 3) * 16 + i * 5}px;animation-delay:${(-i * 0.7 - 6).toFixed(1)}s` })));
+  overlay.append(sky2, ...beasts.map((b) => b.el), ...signs.map((s) => s.el), ...pins.map((p) => p.el));
 
   let W = 0;
   let HI = 0;
@@ -371,8 +466,9 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     for (let z = NEAR; z < FAR; z += step, step *= 1.013) {
       while (next < seen.length && seen[next].z <= z) plant(seen[next++]);
       let row = Math.floor(rowOf(z) / ART);
-      // Past the back of the picture, the far land repeats, fading into the haze.
-      if (row < 0) row = (-row) % 96;
+      // Past the back of the picture the foothills keep climbing, up to meet the mountains.
+      let climb = 0;
+      if (row < 0) { climb = Math.min(120, -row * 2.2); row = (-row) % 4; }
       if (row >= rows) continue;
       const base = row * w;
       const s = 1 / z;
@@ -382,8 +478,11 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
       const lift = HORIZON / PX;
       const k = s / PX;
       for (let i = 0; i < W; i++, ax += perCol) {
-        const a = ax < 0 ? 0 : ax >= w ? w - 1 : ax | 0;
-        const tall = H[base + a];
+        // Past either end of the trail the land carries on, as a mirror image of what is there.
+        let a = ax | 0;
+        if (a < 0) a = -a; else if (a >= w) a = 2 * w - 1 - a;
+        if (a < 0) a = 0; else if (a >= w) a = w - 1;
+        const tall = H[base + a] + climb;
         let y = (lift + (CAM_H - tall) * k) | 0;
         if (y < 0) y = 0;
         const stop = ybuf[i];
@@ -436,6 +535,16 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
       p.el.style.setProperty('--near', Math.max(0.12, Math.min(1, (1.85 - p.z) / 1.0)).toFixed(2));
       // Names would be too small to read at that distance, so they shrink less than the stop does.
       p.el.style.setProperty('--name', (size < 0.86 ? 0.86 / size : 1).toFixed(3));
+    }
+    for (const b of beasts) {
+      const sx = cx + ((b.x - camX) * STRETCH) / b.z;
+      if (sx < -60 || sx > wide + 60) { b.el.style.display = 'none'; continue; }
+      const sy = HORIZON + (CAM_H - b.lift) / b.z;
+      const size = (ART * 1.25) / b.z;
+      b.el.style.display = '';
+      b.el.style.width = `${Math.round(b.art.w * size)}px`;
+      b.el.style.transform = `translate(${Math.round(sx - (b.art.w * size) / 2)}px, ${Math.round(sy - b.art.h * size)}px)`;
+      b.el.style.zIndex = String(Math.round(90 - b.z * 30));
     }
     for (const s of signs) {
       const sx = cx + ((s.x - camX) * STRETCH) / MID;
