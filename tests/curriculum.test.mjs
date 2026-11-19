@@ -666,3 +666,19 @@ test('the 3D map\'s land: roads climb ramps onto mesas, and never have to jump a
   const soft = buildHeights({ w, h, terraces: [{ ...mesa, soft: true }] });
   assert.ok(Math.max(...Array.from({ length: 60 }, (_, k) => soft[(30 + k) * w + 110] - soft[(31 + k) * w + 110])) < 12, 'a soft edge has no cliff');
 });
+
+test('every lesson stop on the 3D map gets a building that suits its road and land', async () => {
+  // stops.js draws with a canvas, so only its choosing rule is checked here.
+  const src = (await import('node:fs')).readFileSync(new URL('../js/game/stops.js', import.meta.url), 'utf8');
+  const { stopKind } = await import('../js/game/stops.js');
+  const drawn = new Set([...src.matchAll(/^  (\w+): \(p\) =>/gm)].map((m) => m[1]));
+  const lands = ['camp', 'forest', 'lake', 'autumn', 'highland', 'snow', 'alpine', 'grove', 'crystal', 'dusk', 'desert', 'somewhere new'];
+  for (const land of lands) for (const lane of [-1.5, -0.5, 0, 0.5, 1.5]) for (let k = 0; k < 6; k++) {
+    assert.ok(drawn.has(stopKind({ lane, land, k })), `${land} lane ${lane} stop ${k} has no drawing`);
+  }
+  assert.equal(stopKind({ lane: 1.5, land: 'forest', k: 0 }), 'cave', 'the lowest road is caves');
+  assert.ok(['castle', 'tower'].includes(stopKind({ lane: -1.5, land: 'forest', k: 0 })), 'the highest road is castles and towers');
+  assert.notEqual(stopKind({ lane: -1.5, land: 'forest', k: 0 }), stopKind({ lane: -1.5, land: 'forest', k: 1 }), 'neighbours differ');
+  assert.equal(stopKind({ lane: 0, land: 'camp', k: 0 }), 'tent');
+  assert.equal(stopKind({ lane: 0, land: 'snow', k: 1, summit: true }), 'shrine', 'the Summit is special');
+});

@@ -13,6 +13,7 @@ import { COL_W, MARGIN, place } from '../game/world.js';
 import { paintGround, spritePixels, FLAT, SHAPED, groundOf, landFor } from '../game/overworld.js';
 import { buildHeights, grain, lumps, CASTLE, TOWER } from '../game/terrain.js';
 import { critterArt, HABITATS } from '../game/critters.js';
+import { stopArt, stopKind } from '../game/stops.js';
 import { standingOn, showCrowd, pointsAlong } from './map.js';
 
 const ART = 3; // page pixels per art pixel of the ground picture
@@ -342,8 +343,16 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
   const myCurrent = meId ? currentLesson(myPath, myDone) : null;
   const groups = new Map();
   for (const s of board) { const id = standingOn(s); if (!groups.has(id)) groups.set(id, []); groups.get(id).push(s); }
+  const landOf = (x) => { let i = 0; while (i + 1 < spans.length && x >= spans[i + 1].x0) i++; return landFor(i); };
+  const counts = new Map();
+  const lastCore = sequence(null).filter((id) => { const n = byId.get(id); return n && !n.beyond; }).at(-1);
   const pins = nodes.map((n) => {
     const lesson = getLesson(n.id);
+    // Every stop is a little building: which one depends on its land and its road.
+    const land = landOf(at(n).x);
+    const turn = `${land}:${n.lane}`;
+    counts.set(turn, (counts.get(turn) || 0) + 1);
+    const building = stopKind({ lane: n.lane, side: n.side, land, k: counts.get(turn) - 1, summit: n.id === lastCore });
     const onMyRoad = myOrder.includes(n.id);
     const state = myDone.has(n.id) ? 'done' : n.id === myCurrent ? 'current' : 'todo';
     const clickable = !!(onNode && onNode.can(n.id, onMyRoad, state));
@@ -353,16 +362,20 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     const room = n.lane < -1 ? 12 : n.lane < 0 ? 14 : 17;
     const name = lesson.title.length > room ? `${lesson.title.slice(0, room - 1)}…` : lesson.title;
     const el = h('div.pin', { class: `${state}${onMyRoad || !meId ? '' : ' offroad'}` },
-      sorted.length > 0 && h('div.pin-people', { translate: 'no' },
-        sorted.map((s) => h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '', title: s.display_name, class: s.id === meId ? 'me' : '' })),
-        sorted.some((s) => s.id === meId) && h('span.pin-you', 'YOU'),
-        people.length > 1 && h('button.pin-count', { type: 'button', 'aria-label': `${people.length} people here. Show names.`, onclick: (e) => { e.stopPropagation(); showCrowd(n.id, people); } }, String(people.length))),
-      h(clickable ? 'button.pin-tile' : 'div.pin-tile', {
-        type: clickable ? 'button' : null, title: `${lesson.title} · about ${lesson.mins} minutes · ${lesson.concepts.join(', ')}`, style: n.path ? `border-color:${PATHS[n.path].color}` : null,
+      h(clickable ? 'button.pin-stop' : 'div.pin-stop', {
+        type: clickable ? 'button' : null, title: `${lesson.title} · about ${lesson.mins} minutes · ${lesson.concepts.join(', ')}`,
         'aria-label': `${lesson.title}${state === 'done' ? ', done' : state === 'current' ? ', your next lesson' : ''}`,
         onclick: clickable ? () => onNode.go(n.id) : null,
-      }, state === 'done' ? '✓' : n.id === myCurrent ? '▶' : ''),
-      h('span.pin-post'),
+      },
+        h('img', { src: stopArt(building), alt: '' }),
+        // A small disc in the road's colour says where you stand with it: done, next, or not yet.
+        h('span.pin-badge', { style: n.path ? `border-color:${PATHS[n.path].color}` : null }, state === 'done' ? '✓' : n.id === myCurrent ? '▶' : '')),
+      // Characters stand on the road beside their stop, each with a shadow at their feet.
+      sorted.length > 0 && h('div.pin-people', { translate: 'no' },
+        sorted.map((s) => h('span.pin-person', { class: s.id === meId ? 'me' : '', title: s.display_name },
+          h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '' }),
+          s.id === meId && h('span.pin-you', 'YOU'))),
+        people.length > 1 && h('button.pin-count', { type: 'button', 'aria-label': `${people.length} people here. Show names.`, onclick: (e) => { e.stopPropagation(); showCrowd(n.id, people); } }, String(people.length))),
       h('div.pin-name', name));
     const p = at(n);
     return { el, x: p.x, z: depthOf(p.y), lift: heightAt(p.x, p.y), busy: sorted.length > 0 || state === 'current' };
@@ -374,12 +387,11 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     const el = h('div.critter', { class: c.move, 'aria-hidden': 'true' }, h('img', { src: art.url, alt: '', style: `animation-delay:${(-c.beat * 9).toFixed(1)}s;animation-duration:${(5 + c.beat * 6).toFixed(1)}s` }));
     return { ...c, el, art };
   });
-  // Balloons and flocks of birds hang at fixed places in the sky. They belong to the world, not
+  // Flocks of birds hang at fixed places in the sky. They belong to the world, not
   // the screen: scrolling slides them past, slower than the land, so they read as far away.
   const SKY_SLIDE = 0.3;
   const skyWide = Math.round(width * SPEED * SKY_SLIDE) + 1600;
   const sky2 = h('div.map3d-sky', { 'aria-hidden': 'true', style: `width:${skyWide}px` },
-    Array.from({ length: Math.ceil(skyWide / 620) }, (_, k) => h('img.balloon', { src: critterArt('balloon').url, alt: '', style: `left:${260 + k * 620 + Math.round(grain(k, 1, 60) * 200)}px;top:${34 + Math.round(grain(k, 2, 61) * 46)}px;width:${34 + Math.round(grain(k, 3, 62) * 18)}px;animation-delay:${(-grain(k, 4, 63) * 20).toFixed(1)}s` })),
     Array.from({ length: Math.ceil(skyWide / 480) }, (_, k) => h('div.flock', { style: `left:${90 + k * 480 + Math.round(grain(k, 5, 64) * 160)}px;top:${62 + Math.round(grain(k, 6, 65) * 40)}px;animation-delay:${(-grain(k, 7, 66) * 30).toFixed(1)}s` },
       [0, 1, 2, 3].map((b) => h('img.bird', { src: critterArt('bird').url, alt: '', style: `left:${b * 17}px;top:${(b % 2) * 9 + b * 2}px` })))));
   overlay.append(sky2, ...beasts.map((b) => b.el), ...signs.map((s) => s.el), ...pins.map((p) => p.el));
