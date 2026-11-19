@@ -5,7 +5,7 @@ import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, ru
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
 import { ratingBox, confusingButton, helpBox } from './feedback.js';
-import { chime, sparkle, pop, countUp, markCelebrated, correct, incorrect, splash, popBadge, popRank, flyXP } from '../celebrate.js';
+import { chime, sparkle, pop, countUp, markCelebrated, correct, incorrect, splash, popBadge, popRank, flyXP, gainXP } from '../celebrate.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
@@ -528,8 +528,70 @@ export async function viewLesson(main, id, previewPath) {
     placeBox.append(h('span.place-text', '📍 ', PLACE_TEXT[place.how](place.line)), canEdit(MAIN) && h('button.btn.small', { onclick: () => showPlace(place) }, 'Show me'));
   }
 
+  // Type-along, for the first lessons: a new line is opened where the code goes, with the code shown
+  // faintly on it. The faint part shrinks as the student types over it, and turns red on a slip.
+  const TYPE_ALONG = new Set(['t1', 't2', 't3']);
+  const typedSteps = new Set();
+  let typing = null;
+  const squash = (t) => t.replace(/\s+/g, '');
+  function stopTyping() {
+    if (!typing) return;
+    if (typing.mark) typing.mark.clear();
+    cm.setOption('autoCloseBrackets', typing.closers);
+    typing = null;
+  }
+  function updateTyping() {
+    if (!typing) return;
+    if (typing.mark) { typing.mark.clear(); typing.mark = null; }
+    const first = mainDoc.getLineNumber(typing.handle);
+    if (first === null) { stopTyping(); return; }
+    const endLine = typing.end ? mainDoc.getLineNumber(typing.end) : mainDoc.lineCount();
+    const ghost = (line, text, bad) => { typing.mark = mainDoc.setBookmark({ line, ch: mainDoc.getLine(line).length }, { widget: h(`span.type-ghost${bad ? '.bad' : ''}`, text), insertLeft: false }); };
+    for (let k = 0; k < typing.targets.length; k++) {
+      const target = typing.targets[k];
+      const line = first + k;
+      // The student hasn't made this line yet: tell them to press Enter on the one before.
+      if (endLine === null || line >= endLine) { ghost(line - 1, `  ⏎ Enter, then: ${target.trim()}`); return; }
+      const typed = squash(mainDoc.getLine(line));
+      const want = squash(target);
+      if (typed === want) continue;
+      if (!want.startsWith(typed)) { ghost(line, `   ✗ should be: ${target.trim()}`, true); return; }
+      let pos = 0;
+      for (let seen = 0; pos < target.length && seen < typed.length; pos++) if (!/\s/.test(target[pos])) seen++;
+      ghost(line, typed ? target.slice(pos) : target.trim());
+      return;
+    }
+    stopTyping(); // every line matches
+  }
+  function startTyping(step, place) {
+    openFile(MAIN);
+    const targets = step.code.split('\n').filter((l) => l.trim());
+    if (!targets.length) return;
+    const indent = targets[0].match(/^\s*/)[0];
+    const count = mainDoc.lineCount();
+    let at = place.how === 'after' ? place.line : place.how === 'end' ? count : place.line - 1;
+    if (at >= count) { mainDoc.replaceRange(`\n${indent}`, { line: count - 1, ch: mainDoc.getLine(count - 1).length }); at = mainDoc.lineCount() - 1; } else mainDoc.replaceRange(`${indent}\n`, { line: at, ch: 0 });
+    // The editor normally adds a closing bracket for you. Here every character shown gets typed, so it is off for now.
+    typing = { handle: mainDoc.getLineHandle(at), end: at + 1 < mainDoc.lineCount() ? mainDoc.getLineHandle(at + 1) : null, targets, closers: cm.getOption('autoCloseBrackets') };
+    cm.setOption('autoCloseBrackets', false);
+    cm.setCursor({ line: at, ch: mainDoc.getLine(at).length });
+    cm.scrollIntoView({ line: at, ch: 0 }, 80);
+    cm.focus();
+    updateTyping();
+  }
+  /** Start type-along for this step, once, if it is the kind of step it suits. */
+  function maybeTypeAlong(n, step) {
+    if (!TYPE_ALONG.has(id) || !isStudent || approved || typedSteps.has(n) || !canEdit(MAIN)) return;
+    if (typeof step.code !== 'string' || step.reveal || step.skeleton) return;
+    const place = placeOf(step);
+    if (!place || place.how === 'replace') return;
+    typedSteps.add(n);
+    startTyping(step, place);
+  }
+
   const drawStep = () => {
     clearPlace();
+    stopTyping();
     if (stepNumberAt(stepIndex) > furthest) { furthest = stepNumberAt(stepIndex); markDirty(); }
     drawDots();
     clear(stepBox);
@@ -588,6 +650,9 @@ export async function viewLesson(main, id, previewPath) {
         h('button.btn.step-next', { class: nextLabel() === 'Skip for now' ? '' : 'primary', onclick: () => { stepIndex++; drawStep(); run(); } }, nextLabel()),
       ),
     ].filter(Boolean));
+    // After the page has drawn, so the editor is on screen to take the cursor.
+    const n = flow[stepIndex].n;
+    setTimeout(() => { if (flow[stepIndex] && flow[stepIndex].step === s) maybeTypeAlong(n, s); }, 0);
     drawPlace();
   };
 
@@ -810,6 +875,11 @@ export async function viewLesson(main, id, previewPath) {
     fresh.forEach((i) => cheered.add(i));
     if (fresh.length && !applyingRemote) {
       chime('step');
+      // Each finished step pays a little XP straight away, so there is a reason to do the next one.
+      if (isStudent && !approved) {
+        gainXP(stepBox.querySelector('.step-check') || stepBox, fresh.length * XP.step);
+        saveSoon();
+      }
       const badge = stepBox.querySelector('.step-check');
       if (badge && flow[stepIndex] && fresh.includes(flow[stepIndex].n)) setTimeout(() => { pop(badge); sparkle(badge); }, 0);
     }
@@ -823,7 +893,7 @@ export async function viewLesson(main, id, previewPath) {
       if (next) { next.textContent = ok ? 'Next' : 'Skip for now'; next.classList.toggle('primary', ok); }
     }
   }, 350);
-  cm.on('change', () => { clearPlace(); markDirty(); onChange(); });
+  cm.on('change', () => { clearPlace(); markDirty(); onChange(); updateTyping(); });
 
   const stuck = isStudent && !approved ? helpBox(id, () => Math.min(stepNumberAt(stepIndex), lesson.steps.length - 1), helpOpen) : null;
   const feedback = work?.grade?.feedback || (work?.status === 'returned');

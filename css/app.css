@@ -814,3 +814,11 @@ ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: colum
 @keyframes nudge-edge { 0%, 100% { box-shadow: inset 0 0 0 0 rgba(255, 196, 0, 0); } 50% { box-shadow: inset 0 0 0 5px rgba(255, 196, 0, .9); } }
 @media (prefers-reduced-motion: reduce) { .nudge, .CodeMirror.nudge { animation: none; outline: 4px solid #ffc400; } }
 .place-ghost { margin: 3px 0 0; padding: 4px 8px; font: 400 var(--code-size, 14px)/1.5 var(--font-code); color: #0b2a52; background: #fff; border-radius: 3px; white-space: pre; opacity: .85; }
+
+/* Type-along ghost text, and the teacher's private stalled list */
+.type-ghost { opacity: .5; color: #d6daff; pointer-events: none; white-space: pre; font-style: italic; }
+.type-ghost.bad { opacity: 1; color: #ffb0a0; font-style: normal; font-weight: 600; }
+:root[data-editor='day'] .type-ghost, :root[data-editor='soft'] .type-ghost { color: #4a4f80; }
+:root[data-editor='day'] .type-ghost.bad, :root[data-editor='soft'] .type-ghost.bad { color: #b3261e; }
+.stalled-card { padding: 8px 12px; background: var(--paper-2); border: 2px dashed var(--line); border-radius: 3px; }
+.stalled-card summary { cursor: pointer; }

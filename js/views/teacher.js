@@ -11,7 +11,7 @@ import { buildMap, legend, leaderboard } from './map.js';
 import { makeEditor } from './lesson.js';
 import { openImport, assignmentsTab, keepingUpTab } from './classroom.js';
 import { groupsTab, sendGradesTab, teamPanel } from './groups.js';
-import { feedbackTab, helpCard } from './feedback.js';
+import { feedbackTab, helpCard, stalledCard } from './feedback.js';
 import { bugsCard } from './bugs.js';
 import { badgeChip } from './student.js';
 
@@ -317,12 +317,14 @@ export async function viewClass(main, classId, tabParam) {
           : journeyTab(board, cls);
   // Students asking for help show here straight away, with a doorbell, whichever tab is open.
   const help = helpCard(classId);
+  const stalled = stalledCard(classId, students, works);
   const before = app.cleanup;
-  app.cleanup = () => { help.stop(); if (before) return before(); return undefined; };
+  app.cleanup = () => { help.stop(); stalled.stop(); if (before) return before(); return undefined; };
   return h('div.stack',
     h('div.row.between', h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', cls.name)), h('div.row', cls.code && h('p.class-code', 'Class code ', h('strong.code', cls.code)), musicToggle(cls), questButton(cls), h('a.btn.primary', { href: `#/project/${classId}` }, 'Project this class'))),
     h('div.tabs', { role: 'tablist' }, link('journey', 'Journey'), link('grades', waiting ? `Grades (${waiting})` : 'Grades'), link('roster', `Roster (${students.length})`), link('groups', 'Groups'), link('feedback', 'Feedback'), link('send', 'Classroom grades'), link('assignments', 'Assignments'), link('keeping', needing ? `Keeping up (${needing})` : 'Keeping up')),
     help.el,
+    stalled.el,
     content,
   );
 }

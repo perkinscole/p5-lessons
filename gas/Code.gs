@@ -450,7 +450,7 @@ function buildBoard_(classId) {
   // Progress only: never code, grades, feedback, reflections, or emails.
   return students.map((s) => ({
     id: s.id, display_name: s.display_name, avatar: s.avatar, path: s.path, game_name: s.game_name,
-    works: works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, step_at: w.step_at, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
+    works: works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, step_at: w.step_at, checks_passed: w.checks_passed, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
     awards: awards.filter((a) => a.student_id === s.id).map((a) => ({ badge_id: a.badge_id, note: a.note, created_at: a.created_at })),
     sprites_shared: sprites.filter((sp) => sp.student_id === s.id && sp.published).length,
     // How many lessons they rated (not what they said): rating earns a little XP.
@@ -1706,7 +1706,7 @@ function saveMyWork_(me, lessonId, patch, extra) {
       ...(existing || { id: uuid_(), student_id: me.student.id, lesson_id: lessonId, status: 'in_progress', shared: false, submitted_at: null }),
       stretch_done: Math.max(0, Math.min(3, Number(patch.stretch_done) || 0)),
       reflection: text_(patch.reflection, 4000),
-      checks_passed: Number(patch.checks_passed) || 0,
+      checks_passed: Math.max(0, Math.min(40, Math.round(Number(patch.checks_passed) || 0))),
       checks_total: Number(patch.checks_total) || 0,
       quiz_right: Number(patch.quiz_right) || 0,
       quiz_total: Number(patch.quiz_total) || 0,

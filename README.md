@@ -134,6 +134,12 @@ Every step carries a label so students know what it wants: **✏️ Your turn** 
 
 If a student stops, the lesson nudges them. After about 25 seconds with no typing or clicking, the next thing to do pulses gold: where the code goes, the answers to pick from, or the Next button. After about 50 seconds on a step that needs code, the editor jumps to the right line and shows **▼ type this here** with the code to type, and a soft chime plays. Any key or click stops the pulsing. **Show me** does the same thing on request. Nothing is recorded or sent to you about it.
 
+In the first three lessons, coding steps are **type-along**: the lesson opens a new line where the code goes, puts the cursor on it, and shows the code faintly on that line. The faint part shrinks as the student types over it and turns red with "✗ should be: …" on a slip. From lesson 4 on they find the line themselves, with **Show me** as a fallback.
+
+Each step whose check passes pays **5 XP** on the spot, with coins flying into the purse, so there is a reason to do the next small thing. Before this, XP only arrived when a lesson was submitted. These come from the app's own step checks, never from your grades.
+
+On a class page you also get a private **💤 stopped working** list: students whose unfinished lesson has had no typing, answers, or moving on for 5 minutes or more, with the step they are on. Only you see it; it is never on the projected display. It refreshes once a minute and drops anyone who starts again.
+
 ## Feedback and help
 
 **"I'm stuck."** Every lesson has a **✋ I'm stuck: ask for help** button. A student can add a short note, and their request appears within a few seconds on the class page, with a doorbell: their name, the exact step, and the note. On the projected class display it stays private: their character hops and glows, and a small **✋** button in the corner opens the list for you. Press **✓ Helped** to clear it, or the student can press **I figured it out**. The 🔔 button on the display tests the doorbell on that computer.

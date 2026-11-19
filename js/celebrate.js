@@ -92,6 +92,7 @@ export function countUp(el, from, to, format = (n) => String(n), ms = 900) {
 // The XP purse -------------------------------------------------------------------------------------
 // A student's XP sits in the top bar. When they earn some, coins fly across the screen into it.
 let purseXp = null;
+let gainedAt = 0;
 const purseText = (n) => `${n} XP`;
 /** The purse for the top bar. It shows the last total known, so it doesn't flicker between pages. */
 export function xpPurse() {
@@ -99,6 +100,8 @@ export function xpPurse() {
 }
 /** Set what the purse shows, with no animation. */
 export function setPurse(xp) {
+  // Just after coins have flown in, the server may still report the older total. Don't count back down.
+  if (purseXp !== null && xp < purseXp && Date.now() - gainedAt < 120000) return;
   purseXp = xp;
   const el = document.getElementById('xp-purse');
   if (el) { el.hidden = false; el.querySelector('strong').textContent = purseText(xp); }
@@ -109,6 +112,7 @@ export function flyXP(from, total) {
   const before = purseXp === null ? total : purseXp;
   const gained = total - before;
   purseXp = total;
+  if (gained > 0) gainedAt = Date.now();
   if (!el) return;
   el.hidden = false;
   const number = el.querySelector('strong');
@@ -125,6 +129,13 @@ export function flyXP(from, total) {
   }
   setTimeout(() => countUp(number, before, total, purseText, 300 + coins * 70), 700);
   setTimeout(() => { sparkle(el, 16); el.classList.add('gained'); setTimeout(() => el.classList.remove('gained'), 1600); }, 700 + coins * 70);
+}
+
+/** Add to the purse right now, with coins from an element. For XP earned mid-lesson. */
+export function gainXP(from, amount) {
+  if (purseXp === null || amount <= 0) return;
+  gainedAt = Date.now();
+  flyXP(from, purseXp + amount);
 }
 
 // Right and wrong answers ---------------------------------------------------------------------------

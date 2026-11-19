@@ -949,8 +949,10 @@ test('reliability: the class board is built once and shared, and changes still s
   // Changes that show on the board replace the shared copy at once.
   server.as(kids[0])('updateProfile', { game_name: 'Sky Dash' });
   assert.equal(server.as(kids[1])('classBoard', cls.id).find((s) => s.game_name === 'Sky Dash').display_name, 'Kid 0');
-  server.as(kids[2])('saveWork', 't1', { code: 'x', assets: {} });
+  server.as(kids[2])('saveWork', 't1', { code: 'x', assets: {}, checks_passed: 99999 });
   assert.equal(server.as(kids[1])('classBoard', cls.id).filter((s) => s.works.length).length, 1);
+  // The board carries how many steps pass (it earns XP), held to a sane number.
+  assert.equal(server.as(kids[1])('classBoard', cls.id).find((s) => s.works.length).works[0].checks_passed, 40);
   server.as(OWNER)('removeStudent', server.as(OWNER)('listStudents', cls.id)[0].id);
   assert.equal(server.as(kids[1])('classBoard', cls.id).length, 2);
 });

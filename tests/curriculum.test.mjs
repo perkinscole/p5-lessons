@@ -556,3 +556,30 @@ test('problem reports read well as Markdown', async () => {
   assert.match(text, /boom \(App:1\)/);
   assert.doesNotMatch(text, /undefined/);
 });
+
+test('the stalled list finds students who were working and stopped', async () => {
+  const { stalledList } = await import('../js/curriculum/report.js');
+  const now = Date.parse('2026-11-19T15:00:00Z');
+  const ago = (m) => new Date(now - m * 60000).toISOString();
+  const works = [
+    { student_id: 'a', lesson_id: 't1', status: 'in_progress', step_at: 2, updated_at: ago(8) },
+    { student_id: 'b', lesson_id: 't1', status: 'in_progress', step_at: 4, updated_at: ago(1) }, // still typing
+    { student_id: 'c', lesson_id: 't1', status: 'submitted', step_at: 7, updated_at: ago(9) }, // finished
+    { student_id: 'd', lesson_id: 't2', status: 'in_progress', step_at: 1, updated_at: ago(300) }, // not here today
+    { student_id: 'e', lesson_id: 't1', status: 'in_progress', step_at: 3, updated_at: ago(40) }, // an old lesson...
+    { student_id: 'e', lesson_id: 't2', status: 'in_progress', step_at: 0, updated_at: ago(2) }, // ...but busy on a new one
+    { student_id: 'f', lesson_id: 't3', status: 'in_progress', step_at: 5, updated_at: ago(21) },
+    { student_id: 'g', lesson_id: 't3', status: 'in_progress', updated_at: '' },
+  ];
+  assert.deepEqual(stalledList(works, now), [{ student_id: 'f', lesson_id: 't3', step_at: 5, minutes: 21 }, { student_id: 'a', lesson_id: 't1', step_at: 2, minutes: 8 }]);
+  assert.deepEqual(stalledList([], now), []);
+});
+
+test('finished steps earn XP as a student works, and never from a grade', async () => {
+  const { statsFor, XP } = await import('../js/game/rules.js');
+  assert.equal(statsFor({ works: [{ lesson_id: 't1', status: 'in_progress', checks_passed: 3 }] }).xp, 3 * XP.step);
+  assert.equal(statsFor({ works: [{ lesson_id: 't1', status: 'in_progress', checks_passed: 999 }] }).xp, 12 * XP.step, 'held to a sensible number of steps');
+  const base = { lesson_id: 't1', status: 'approved', auto_ok: true, checks_passed: 4 };
+  assert.equal(statsFor({ works: [{ ...base, grade: { total: 0 } }] }).xp, statsFor({ works: [{ ...base, grade: { total: 100 } }] }).xp);
+  assert.equal(statsFor({ works: [base] }).xp, 4 * XP.step + XP.submit + XP.approved);
+});
