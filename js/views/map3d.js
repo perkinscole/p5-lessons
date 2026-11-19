@@ -16,10 +16,10 @@ import { standingOn, showCrowd, pointsAlong } from './map.js';
 
 const ART = 3; // page pixels per art pixel of the ground picture
 const PX = 2; // page pixels per pixel of the 3D picture, which is drawn small and scaled up
-const VIEW_H = 640;
+const VIEW_H = 700; // room above the land for mountains to loom
 const OFF = 300; // the ground picture has this much extra land behind the furthest road
 const LAND_H = 860;
-const HORIZON = 40;
+const HORIZON = 100;
 const CAM_H = 407;
 const STRETCH = 1.45; // the world is widened, so far-off stops still have room for their names
 // How far away each lane is. Lane 0 is the shared trail down the middle.
@@ -37,6 +37,15 @@ function solid(color) {
   const m = /^var\((--[\w-]+)\)$/.exec(String(color).trim());
   return m ? (getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim() || '#888888') : color;
 }
+
+// A jagged line of summits: sharp-pointed waves of different sizes added together.
+const crag = (v) => 1 - Math.abs((((v % 1) + 1) % 1) - 0.5) * 2;
+const peaks = (u, range) => range.base + range.waves.reduce((a, [tall, wide, shift]) => a + tall * crag(u / wide + shift), 0);
+const broad = (u, range) => range.waves.slice(0, 2).reduce((a, [tall, wide, shift]) => a + tall * crag(u / wide + shift), 0);
+const RANGES = [
+  { slide: 0.035, base: 54, haze: 0.5, snow: true, waves: [[92, 610, 0.1], [48, 257, 0.55], [22, 97, 0.3], [9, 41, 0.8]], lit: [150, 165, 196], dark: [120, 136, 172], snowLit: [255, 255, 255], snowDark: [228, 235, 246] },
+  { slide: 0.085, base: 26, haze: 0.45, snow: false, waves: [[44, 380, 0.6], [26, 149, 0.15], [10, 53, 0.4]], lit: [118, 142, 150], dark: [94, 118, 130] },
+];
 
 const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
 const pack = (r, g, b) => (255 << 24) | (b << 16) | (g << 8) | r;
@@ -202,7 +211,7 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     taken = new Uint8Array(W * HI);
     // The sky is the same every frame: pale at the horizon, bluer above.
     sky = new Uint32Array(HI);
-    for (let y = 0; y < HI; y++) { const k = Math.min(1, y / (HORIZON / PX + 40)); sky[y] = pack(150 + 76 * k, 200 + 36 * k, 236 + 4 * k); }
+    for (let y = 0; y < HI; y++) { const k = Math.min(1, y / (HORIZON / PX + 30)); sky[y] = pack(138 + 88 * k, 190 + 46 * k, 234 + 6 * k); }
   }
 
   function draw() {
@@ -210,12 +219,28 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     const cx = (W * PX) / 2;
     const camX = (scroller.scrollLeft + cx) / SPEED;
     for (let y = 0; y < HI; y++) buf.fill(sky[y], y * W, (y + 1) * W);
-    // Far hills on the horizon, which slide past slowly as you scroll.
-    const ridgeBase = Math.round((HORIZON + CAM_H / FAR) / PX) + 2;
+    // Mountains loom behind the land in two ranges. The far one is tall, pale, and capped with snow;
+    // the near one is lower and darker. Each slides at its own speed as you scroll, which is what
+    // makes them feel a long way off.
+    const foot = Math.round((HORIZON + CAM_H / FAR) / PX) + 2;
     for (let i = 0; i < W; i++) {
-      const u = i * PX + camX * 0.12;
-      const ridge = Math.round(10 + Math.sin(u * 0.011) * 7 + Math.sin(u * 0.031 + 2) * 4 + Math.sin(u * 0.07) * 2);
-      for (let y = Math.max(0, ridgeBase - ridge); y < ridgeBase; y++) buf[y * W + i] = pack(186, 204, 220);
+      for (const range of RANGES) {
+        const u = i * PX + camX * range.slide;
+        const tall = Math.round(peaks(u, range) / PX);
+        // Light comes from one side: a slope is bright or shaded by the big shapes only, so each
+        // mountain has two broad faces. The snow line dips and rises a little along the range.
+        const lit = broad(u + 6, range) > broad(u, range);
+        const snow = range.snow ? Math.round(tall * 0.3 + crag(u / 61) * 6 + crag(u / 19) * 2 - 3) : 0;
+        const top = foot - tall;
+        for (let y = Math.max(0, top); y < foot; y++) {
+          // Haze thickens toward the foot, so the range seems to rise out of the distance.
+          const haze = Math.max(0, (y - top) / Math.max(1, tall)) * range.haze;
+          // Snow thins out in a ragged edge where it meets the rock.
+          const white = y - top < snow - ((i + y) % 3 === 0 && y - top > snow - 4 ? 3 : 0);
+          const c = white ? (lit ? range.snowLit : range.snowDark) : (lit ? range.lit : range.dark);
+          buf[y * W + i] = pack(c[0] + (FOG[0] - c[0]) * haze, c[1] + (FOG[1] - c[1]) * haze, c[2] + (FOG[2] - c[2]) * haze);
+        }
+      }
     }
     ybuf.fill(HI);
     taken.fill(0);
@@ -283,6 +308,8 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
       p.el.style.transform = `translate(${Math.round(sx)}px, ${Math.round(sy)}px) scale(${size.toFixed(3)})`;
       // Nearer stops sit in front of further ones, and anyone standing on one comes to the front.
       p.el.style.zIndex = String(Math.round(300 - p.z * 100) + (p.busy ? 200 : 0));
+      // Someone far off glows less than someone close, the way a lamp does.
+      p.el.style.setProperty('--near', Math.max(0.12, Math.min(1, (1.75 - p.z) / 0.8)).toFixed(2));
     }
     for (const s of signs) {
       const sx = cx + ((s.x - camX) * STRETCH) / MID;
