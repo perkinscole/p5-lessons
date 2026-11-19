@@ -857,8 +857,8 @@ ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: colum
 
 /* The 3D journey map */
 .map3d { position: relative; overflow-x: auto; overflow-y: hidden; }
-.map3d-stage { position: sticky; left: 0; width: 100%; height: 700px; overflow: hidden; background: #b9d0e6; }
-.map3d-canvas { display: block; width: 100%; height: 700px; image-rendering: pixelated; }
+.map3d-stage { position: sticky; left: 0; width: 100%; height: 730px; overflow: hidden; background: #b9d0e6; }
+.map3d-canvas { display: block; width: 100%; height: 730px; image-rendering: pixelated; }
 .map3d-spacer { height: 1px; margin-top: -1px; }
 .map3d-overlay { position: absolute; inset: 0; pointer-events: none; }
 .map3d-sign { position: absolute; left: 0; top: 6px; padding: 1px 10px; white-space: nowrap; font: 400 20px/1.3 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--line); border-radius: 4px; box-shadow: 2px 2px 0 rgba(0, 0, 0, .25); z-index: 900; }
@@ -870,7 +870,7 @@ button.pin-tile:hover { background: var(--sun); }
 .pin.done .pin-tile { background: #1d8f58; color: #fff; }
 .pin.current .pin-tile { background: var(--accent); color: #fff; box-shadow: 0 4px 0 rgba(0, 0, 0, .28), 0 0 0 4px rgba(255, 255, 255, .85), 0 0 0 7px var(--accent); }
 .pin.offroad .pin-tile, .pin.offroad .pin-name { opacity: .62; }
-.pin-name { position: absolute; left: 0; top: 13px; transform: translateX(-50%); padding: 0 6px; white-space: nowrap; font: 12px/1.5 var(--font-body); color: var(--ink); background: var(--card); border: 1px solid rgba(60, 50, 40, .35); border-radius: 4px; }
+.pin-name { position: absolute; left: 0; top: 13px; transform: translateX(-50%) scale(var(--name, 1)); transform-origin: 50% 0; padding: 0 6px; white-space: nowrap; font: 12px/1.5 var(--font-body); color: var(--ink); background: var(--card); border: 1px solid rgba(60, 50, 40, .35); border-radius: 4px; }
 .pin-people { position: absolute; left: 0; bottom: 30px; width: max-content; transform: translateX(-50%); display: flex; align-items: flex-end; padding: 10px 26px 0; }
 .pin-people::before { content: ''; position: absolute; inset: -6px -10px 0; background: radial-gradient(closest-side, rgba(255, 243, 166, .95), rgba(255, 210, 63, .6) 55%, rgba(255, 196, 0, 0)); opacity: var(--near, 1); }
 .pin-people img { position: relative; flex: none; max-width: none; width: 114px; height: 76px; margin: 0 -37px; transform: translateX(18px); image-rendering: pixelated; filter: drop-shadow(2px 0 0 #fff) drop-shadow(-2px 0 0 #fff) drop-shadow(0 2px 0 #fff) drop-shadow(0 -2px 0 #fff) drop-shadow(0 3px 2px rgba(0, 0, 0, .35)); }

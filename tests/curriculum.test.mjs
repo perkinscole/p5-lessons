@@ -634,8 +634,24 @@ test('the 3D map\'s land: roads climb ramps onto mesas, and never have to jump a
   assert.ok(Math.max(...[48, 49, 50, 51, 52].map((y) => cliffAt(H, w, h, 110, y))) > 30, 'a cliff along the front');
   // Half way up the ramp, the side is a slope, not a wall.
   assert.ok(Math.max(...Array.from({ length: 40 }, (_, k) => Math.abs(cliffAt(H, w, h, 67, 15 + k)))) < 16, 'no wall beside the ramp');
-  assert.ok(at(20, 60) > 90 && at(20, 60) > at(26, 60) && at(26, 60) > at(31, 60), 'a mountain rises to a point');
-  assert.ok(at(180, 60) > 55 && Math.abs(at(174, 60) - at(180, 54)) < 0.01, 'a pyramid has flat, matching faces');
+  assert.ok(at(20, 60) > 130 && at(20, 60) > at(26, 60) && at(26, 60) > at(33, 60), 'a mountain rises to a point');
+  assert.ok(at(180, 60) > 75 && Math.abs(at(174, 60) - at(180, 54)) < 0.01, 'a pyramid has flat, matching faces');
+  // Rolling hills stay off the trail: calm ground is level, and the open land is not.
+  const calm = new Uint8Array(w * h);
+  for (let x = 0; x < w; x++) calm[60 * w + x] = 1;
+  const hilly = buildHeights({ w, h, calm, hills: 40 });
+  const plain = buildHeights({ w, h });
+  let onTrail = 0;
+  let offTrail = 0;
+  for (let x = 0; x < w; x++) { onTrail = Math.max(onTrail, Math.abs(hilly[60 * w + x] - plain[60 * w + x]), Math.abs(hilly[63 * w + x] - plain[63 * w + x])); offTrail = Math.max(offTrail, hilly[10 * w + x] - plain[10 * w + x]); }
+  assert.ok(onTrail < 0.01, `the trail moved by ${onTrail}`);
+  assert.ok(offTrail > 18, `the hills are only ${offTrail.toFixed(1)} tall`);
+  assert.deepEqual([...buildHeights({ w, h, calm, hills: 40 })], [...hilly], 'the same hills every time');
+  // Built from blocks: every block is one height, a whole number of steps.
+  const blocky = buildHeights({ w, h, terraces: [mesa], calm, hills: 40, step: 12, block: 4 });
+  for (let i = 0; i < blocky.length; i += 37) assert.ok(blocky[i] % 12 === 0);
+  assert.equal(blocky[32 * w + 108], blocky[35 * w + 111], 'one block, one height');
+  assert.ok(blocky[35 * w + 110] >= 144, 'the mesa is still up');
   // A lookout a trail walks straight up: its near edge is a slope.
   const soft = buildHeights({ w, h, terraces: [{ ...mesa, soft: true }] });
   assert.ok(Math.max(...Array.from({ length: 60 }, (_, k) => soft[(30 + k) * w + 110] - soft[(31 + k) * w + 110])) < 12, 'a soft edge has no cliff');

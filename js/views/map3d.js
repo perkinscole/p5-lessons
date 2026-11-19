@@ -11,24 +11,27 @@ import { PATHS, STAGES, mapLayout, currentLesson, sequence } from '../curriculum
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { COL_W, MARGIN, place } from '../game/world.js';
 import { paintGround, spritePixels, FLAT, SHAPED, groundOf, landFor } from '../game/overworld.js';
-import { buildHeights, cliffAt } from '../game/terrain.js';
+import { buildHeights, grain } from '../game/terrain.js';
 import { standingOn, showCrowd, pointsAlong } from './map.js';
 
 const ART = 3; // page pixels per art pixel of the ground picture
 const PX = 2; // page pixels per pixel of the 3D picture, which is drawn small and scaled up
-const VIEW_H = 700; // room above the land for mountains to loom
+const VIEW_H = 730; // room above the land for mountains to loom
 const OFF = 300; // the ground picture has this much extra land behind the furthest road
 const LAND_H = 860;
-const HORIZON = 100;
-const CAM_H = 407;
+const HORIZON = 96;
+const CAM_H = 372;
 const STRETCH = 1.45; // the world is widened, so far-off stops still have room for their names
 // How far away each lane is. Lane 0 is the shared trail down the middle.
 const MID = 1.2415;
-const PER_LANE = 0.2477;
+const PER_LANE = 0.33; // the bigger this is, the more a far road shrinks next to a near one
 const depthOf = (t) => MID - ((t - OFF - 282) / 120) * PER_LANE;
 const rowOf = (z) => OFF + 282 + ((MID - z) / PER_LANE) * 120;
 // How high each road runs: the further from the middle, the higher or deeper.
-const LIFT = { '-1.5': 150, '-0.5': 60, '0.5': -40, '1.5': -60 };
+const LIFT = { '-1.5': 192, '-0.5': 84, '0.5': -48, '1.5': -60 };
+// The land is built from blocks, like a block-building game: this many ground cells wide, this tall.
+const BLOCK = 4;
+const STEP = 12;
 const NEAR = depthOf(LAND_H - 1);
 const FAR = 7;
 
@@ -113,34 +116,43 @@ function buildWorld(myPath) {
   for (const line of lines) for (const pt of line) { const x = Math.round(pt.x / ART); const y = Math.round(pt.y / ART); for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (x + dx >= 0 && x + dx < w && y + dy >= 0 && y + dy < rows) onTrail[(y + dy) * w + x + dx] = 1; }
 
   const bumps = plan.things.filter((t) => SHAPED.has(t.kind));
-  const H = buildHeights({ w, h: rows, terraces, bumps });
+  // Hills roll everywhere except along the trails and round the stops, which stay level.
+  const calm = onTrail.slice();
+  for (const st of stops) { const cx = Math.round(st.x / ART); const cy = Math.round(st.y / ART); for (let dy = -7; dy <= 5; dy++) for (let dx = -8; dx <= 8; dx++) if (cx + dx >= 0 && cx + dx < w && cy + dy >= 0 && cy + dy < rows) calm[(cy + dy) * w + cx + dx] = 1; }
+  const H = buildHeights({ w, h: rows, terraces, bumps, calm, hills: 46, step: STEP, block: BLOCK });
   const C = new Uint32Array(g.getImageData(0, 0, w, rows).data.buffer.slice(0));
+  // S is what each block's sides are made of: earth under grass, stone in the mountains, sandstone in the desert.
+  const S = new Uint32Array(w * rows);
   const landAt = (x) => { let i = 0; while (i + 1 < spans.length && x * ART >= spans[i + 1].x0) i++; return landFor(i); };
-
-  // Colour the land by its shape: stone where it drops away, snow on the peaks, lit and shaded faces.
-  for (const b of bumps) {
-    const snowy = landAt(b.x) === 'snow';
-    for (let y = Math.max(0, b.y - 12); y <= Math.min(rows - 1, b.y + 12); y++) for (let x = Math.max(0, b.x - 12); x <= Math.min(w - 1, b.x + 12); x++) {
-      const tall = H[y * w + x];
-      if (tall < 8) continue;
-      const lit = x < b.x ? 1.08 : 0.86;
-      if (b.kind === 'pyramid') C[y * w + x] = tone(pack(240, 200, 113), (y > b.y ? 1.05 : 0.92) * lit);
-      else C[y * w + x] = tall > 52 || (snowy && tall > 30) ? tone(pack(255, 255, 255), x < b.x ? 1 : 0.9) : tone(pack(170, 174, 186), lit);
-    }
+  const SIDES = { snow: [150, 152, 162], highland: [146, 140, 128], desert: [214, 176, 112], grove: [150, 126, 150], crystal: [140, 140, 164], dusk: [150, 126, 150] };
+  const EARTH = [150, 112, 78];
+  const made = new Uint8Array(w * rows); // 1 mountain, 2 pyramid
+  for (const b of bumps) for (let y = Math.max(0, b.y - 16); y <= Math.min(rows - 1, b.y + 16); y++) for (let x = Math.max(0, b.x - 16); x <= Math.min(w - 1, b.x + 16); x++) {
+    const d = b.kind === 'peak' ? Math.hypot(x - b.x, y - b.y) : Math.max(Math.abs(x - b.x), Math.abs(y - b.y));
+    if (d < (b.kind === 'peak' ? 15 : 13) && H[y * w + x] > 30) made[y * w + x] = b.kind === 'peak' ? 1 : 2;
   }
-  for (let y = 0; y < rows - 1; y++) for (let x = 0; x < w; x++) {
+  for (let y = 0; y < rows; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x;
-    const drop = cliffAt(H, w, rows, x, y);
+    const land = landAt(x);
+    const bx = (x / BLOCK) | 0;
+    const by = (y / BLOCK) | 0;
+    const side = made[i] === 1 ? [142, 146, 158] : made[i] === 2 ? [224, 180, 104] : (SIDES[land] || EARTH);
+    S[i] = pack(side[0], side[1], side[2]);
+    if (made[i] === 1) C[i] = H[i] > 96 || (land === 'snow' && H[i] > 48) ? pack(250, 252, 255) : pack(168, 172, 184);
+    else if (made[i] === 2) C[i] = pack(240, 204, 124);
     if (onTrail[i]) continue;
-    if (drop > 5) { const [r, gr, b] = rgb(groundOf(landAt(x))[0]); C[i] = tone(pack(155 * 0.75 + r * 0.25, 142 * 0.75 + gr * 0.25, 125 * 0.75 + b * 0.25), (x + y) % 7 < 4 ? 1 : 0.88); } else if (drop > 1.6) C[i] = tone(C[i], 0.9);
-    else if (drop < -1.6) C[i] = tone(C[i], 1.07);
+    // Texture: every block is a slightly different shade, each cell is speckled, and a faint
+    // line marks where one block meets the next.
+    let k = 0.94 + grain(bx, by, 3) * 0.12 + (grain(x, y, 4) - 0.5) * 0.07;
+    if (x % BLOCK === 0 || y % BLOCK === 0) k *= 0.93;
+    C[i] = tone(C[i], k);
   }
 
   const heightAt = (x, t) => H[Math.max(0, Math.min(rows - 1, Math.round(t / ART))) * w + Math.max(0, Math.min(w - 1, Math.round(x / ART)))];
   const standing = plan.things.filter((t) => !FLAT.has(t.kind) && !SHAPED.has(t.kind))
     .map((t) => ({ x: t.x * ART, z: depthOf(t.y * ART), lift: heightAt(t.x * ART, t.y * ART), art: spritePixels(t.kind, (t.x + t.y) % 3) }))
     .sort((a, b) => a.z - b.z);
-  return { nodes, byId, spans, width, w, rows, H, C, heightAt, standing, at };
+  return { nodes, byId, spans, width, w, rows, H, C, S, heightAt, standing, at };
 }
 
 const worlds = new Map();
@@ -149,7 +161,7 @@ const worldFor = (myPath) => { const key = myPath || ''; if (!worlds.has(key)) w
 /** The 3D map. Returns the element to put on the page. */
 export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set(), onNode }) {
   const world = worldFor(myPath);
-  const { nodes, byId, spans, width, w, rows, H, C, heightAt, standing, at } = world;
+  const { nodes, byId, spans, width, w, rows, H, C, S, heightAt, standing, at } = world;
   const canvas = h('canvas.map3d-canvas', { 'aria-hidden': 'true' });
   const overlay = h('div.map3d-overlay');
   const stage = h('div.map3d-stage', canvas, overlay);
@@ -171,7 +183,9 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     const clickable = !!(onNode && onNode.can(n.id, onMyRoad, state));
     const people = groups.get(n.id) || [];
     const sorted = [...people].sort((a) => (a.id === meId ? 1 : -1)).slice(-4);
-    const name = lesson.title.length > 16 ? `${lesson.title.slice(0, 15)}…` : lesson.title;
+    // Far-off stops are closer together on screen, so their names are cut shorter.
+    const room = n.lane < -1 ? 12 : n.lane < 0 ? 14 : 17;
+    const name = lesson.title.length > room ? `${lesson.title.slice(0, room - 1)}…` : lesson.title;
     const el = h('div.pin', { class: `${state}${onMyRoad || !meId ? '' : ' offroad'}` },
       sorted.length > 0 && h('div.pin-people', { translate: 'no' },
         sorted.map((s) => h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '', title: s.display_name, class: s.id === meId ? 'me' : '' })),
@@ -195,6 +209,7 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
   let buf = null;
   let ybuf = null;
   let taken = null;
+  let before = null;
   let sky = null;
   const g = canvas.getContext('2d');
   const FOG = [226, 236, 240];
@@ -209,6 +224,7 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     buf = new Uint32Array(image.data.buffer);
     ybuf = new Int32Array(W);
     taken = new Uint8Array(W * HI);
+    before = new Float32Array(W);
     // The sky is the same every frame: pale at the horizon, bluer above.
     sky = new Uint32Array(HI);
     for (let y = 0; y < HI; y++) { const k = Math.min(1, y / (HORIZON / PX + 30)); sky[y] = pack(138 + 88 * k, 190 + 46 * k, 234 + 6 * k); }
@@ -269,6 +285,7 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
       }
     };
 
+    before.fill(1e9);
     let step = 0.005;
     for (let z = NEAR; z < FAR; z += step, step *= 1.013) {
       while (next < seen.length && seen[next].z <= z) plant(seen[next++]);
@@ -280,17 +297,42 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
       const s = 1 / z;
       const perCol = PX / (s * STRETCH) / ART;
       let ax = (camX + (1 - cx) / (s * STRETCH)) / ART;
-      const fog = z > 1.75 ? Math.min(0.85, (z - 1.75) / 3.2) : 0;
+      const fog = z > 2.0 ? Math.min(0.85, (z - 2.0) / 3.4) : 0;
       const lift = HORIZON / PX;
       const k = s / PX;
       for (let i = 0; i < W; i++, ax += perCol) {
         const a = ax < 0 ? 0 : ax >= w ? w - 1 : ax | 0;
-        let y = (lift + (CAM_H - H[base + a]) * k) | 0;
+        const tall = H[base + a];
+        let y = (lift + (CAM_H - tall) * k) | 0;
         if (y < 0) y = 0;
-        if (y >= ybuf[i]) continue;
+        const stop = ybuf[i];
+        if (y >= stop) continue;
         let c = C[base + a];
+        // Where this ground stands higher than the ground in front of it, the lower part of what
+        // shows is the side of a block. It gets earth or stone, with a line at every block.
+        // `before` remembers how high the ground was at the last strip, just nearer the camera.
+        const rise = tall - before[i];
+        before[i] = tall;
+        let face = rise > 1 ? Math.min(stop - y, Math.round(rise * k)) : 0;
         if (fog) c = pack((c & 255) + (FOG[0] - (c & 255)) * fog, ((c >> 8) & 255) + (FOG[1] - ((c >> 8) & 255)) * fog, ((c >> 16) & 255) + (FOG[2] - ((c >> 16) & 255)) * fog);
-        for (let yy = y, at2 = y * W + i; yy < ybuf[i]; yy++, at2 += W) if (!taken[at2]) buf[at2] = c;
+        const top = stop - face;
+        let at2 = y * W + i;
+        for (let yy = y; yy < top; yy++, at2 += W) if (!taken[at2]) buf[at2] = c;
+        if (face) {
+          const side = S[base + a];
+          const seam = a % BLOCK === 0 ? 0.84 : 1;
+          const grassy = c;
+          for (let yy = top; yy < stop; yy++, at2 += W) {
+            if (taken[at2]) continue;
+            // How far down the side this pixel is, in world height: darker at each block line,
+            // lighter just under the lip, and shaded a little more toward the bottom.
+            const down = (yy - top) / k;
+            const line = down % STEP < 1.6 ? 0.8 : 1;
+            let px = down < 2.2 ? tone(grassy, 0.86) : tone(side, seam * line * (0.98 - Math.min(0.2, down / 500)) * (0.95 + grain(a, (down / 3) | 0, 6) * 0.1));
+            if (fog) px = pack((px & 255) + (FOG[0] - (px & 255)) * fog, ((px >> 8) & 255) + (FOG[1] - ((px >> 8) & 255)) * fog, ((px >> 16) & 255) + (FOG[2] - ((px >> 16) & 255)) * fog);
+            buf[at2] = px;
+          }
+        }
         ybuf[i] = y;
       }
     }
@@ -303,13 +345,16 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
       const sx = cx + ((p.x - camX) * STRETCH) / p.z;
       if (sx < -120 || sx > wide + 120) { p.el.style.display = 'none'; continue; }
       const sy = HORIZON + (CAM_H - p.lift) / p.z;
-      const size = Math.max(0.8, Math.min(1.2, 0.9 / p.z + 0.16));
+      // A stop on the far road is well under half the size of one on the near road.
+      const size = Math.max(0.58, Math.min(1.5, 1.08 / p.z));
       p.el.style.display = '';
       p.el.style.transform = `translate(${Math.round(sx)}px, ${Math.round(sy)}px) scale(${size.toFixed(3)})`;
       // Nearer stops sit in front of further ones, and anyone standing on one comes to the front.
       p.el.style.zIndex = String(Math.round(300 - p.z * 100) + (p.busy ? 200 : 0));
       // Someone far off glows less than someone close, the way a lamp does.
-      p.el.style.setProperty('--near', Math.max(0.12, Math.min(1, (1.75 - p.z) / 0.8)).toFixed(2));
+      p.el.style.setProperty('--near', Math.max(0.12, Math.min(1, (1.85 - p.z) / 1.0)).toFixed(2));
+      // Names would be too small to read at that distance, so they shrink less than the stop does.
+      p.el.style.setProperty('--name', (size < 0.86 ? 0.86 / size : 1).toFixed(3));
     }
     for (const s of signs) {
       const sx = cx + ((s.x - camX) * STRETCH) / MID;
