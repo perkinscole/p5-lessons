@@ -43,14 +43,17 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
 
   // A white edge and a soft shadow round each character, so they stand out from the map like stickers.
   const filter = svg('filter', { id: 'map-sticker', x: '-30%', y: '-30%', width: '160%', height: '170%' },
-    svg('feMorphology', { in: 'SourceAlpha', operator: 'dilate', radius: 2, result: 'edge' }),
+    svg('feMorphology', { in: 'SourceAlpha', operator: 'dilate', radius: 3, result: 'edge' }),
     svg('feFlood', { 'flood-color': '#ffffff', result: 'white' }),
     svg('feComposite', { in: 'white', in2: 'edge', operator: 'in', result: 'outline' }),
     svg('feGaussianBlur', { in: 'edge', stdDeviation: 2, result: 'blur' }),
     svg('feOffset', { in: 'blur', dy: 3, result: 'shadow' }),
     svg('feComponentTransfer', { in: 'shadow', result: 'soft' }, svg('feFuncA', { type: 'linear', slope: 0.45 })),
     svg('feMerge', {}, svg('feMergeNode', { in: 'soft' }), svg('feMergeNode', { in: 'outline' }), svg('feMergeNode', { in: 'SourceGraphic' })));
-  root.append(svg('defs', {}, filter));
+  // A pool of light behind each character.
+  const halo = svg('radialGradient', { id: 'map-halo' },
+    svg('stop', { offset: '0%', class: 'halo-in' }), svg('stop', { offset: '55%', class: 'halo-mid' }), svg('stop', { offset: '100%', class: 'halo-out' }));
+  root.append(svg('defs', {}, filter, halo));
 
   // The ground: one quiet colour, a soft band behind every other stage, and a few contour lines.
   root.append(svg('rect', { x: 0, y: 0, width, height, class: 'map-ground' }));
@@ -145,6 +148,8 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
     const { x, y } = place(n);
     const sorted = [...people].sort((a) => (a.id === meId ? 1 : -1));
     const shown = sorted.slice(-4);
+    // One glow for the whole group, drawn first so it sits behind everyone standing here.
+    root.append(svg('ellipse', { cx: x, cy: y - BOX - 26, rx: 34 + shown.length * 10, ry: 38, fill: 'url(#map-halo)', class: 'map-halo', 'aria-hidden': 'true' }));
     shown.forEach((s, i) => {
       const dx = (i - (shown.length - 1) / 2) * 24;
       const dy = -BOX - SPRITE_H - 5 - (i % 2) * 6;
@@ -156,6 +161,15 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
       t.textContent = s.display_name;
       img.append(t);
       root.append(img);
+      if (s.id === meId) {
+        // The student's own character carries a tag, so they can find themselves at a glance.
+        const tag = svg('g', { class: 'you-tag', transform: `translate(${x + dx},${y + dy - 12})`, 'aria-hidden': 'true' },
+          svg('rect', { x: -19, y: -11, width: 38, height: 18, rx: 9 }), svg('polygon', { points: '-5,6 5,6 0,12' }));
+        const word = svg('text', { 'text-anchor': 'middle', y: 2 });
+        word.textContent = 'YOU';
+        tag.append(word);
+        root.append(tag);
+      }
     });
     const count = svg('g', { class: 'crowd', transform: `translate(${x + 40},${y - 66})`, tabindex: 0, role: 'button', 'aria-label': `${people.length} people here. Show names.`,
       onclick: () => showCrowd(id, people), onkeydown: (e) => { if (e.key === 'Enter') showCrowd(id, people); } });

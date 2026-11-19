@@ -834,3 +834,13 @@ ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: colum
 :root[data-editor='day'] .type-ghost.bad, :root[data-editor='soft'] .type-ghost.bad { color: #b3261e; }
 .stalled-card { padding: 8px 12px; background: var(--paper-2); border: 2px dashed var(--line); border-radius: 3px; }
 .stalled-card summary { cursor: pointer; }
+
+/* Journey map: a glow behind each character, and a tag on your own */
+.halo-in { stop-color: #fff3a6; stop-opacity: 1; }
+.halo-mid { stop-color: #ffd23f; stop-opacity: .8; }
+.halo-out { stop-color: #ffc400; stop-opacity: 0; }
+.you-tag rect, .you-tag polygon { fill: var(--accent); }
+.you-tag rect { stroke: #fff; stroke-width: 2; }
+.you-tag text { fill: var(--accent-ink); font: 700 11px var(--font-body); }
+@media (prefers-reduced-motion: no-preference) { .map-halo { animation: halo-pulse 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; } .you-tag { animation: map-bob 1.2s steps(2) infinite; } }
+@keyframes halo-pulse { 50% { opacity: .7; transform: scale(1.08); } }
