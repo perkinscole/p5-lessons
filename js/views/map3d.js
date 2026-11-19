@@ -373,10 +373,14 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     const el = h('div.critter', { class: c.move, 'aria-hidden': 'true' }, h('img', { src: art.url, alt: '', style: `animation-delay:${(-c.beat * 9).toFixed(1)}s;animation-duration:${(5 + c.beat * 6).toFixed(1)}s` }));
     return { ...c, el, art };
   });
-  // Birds cross the sky now and then, and a balloon drifts over.
-  const sky2 = h('div.map3d-sky', { 'aria-hidden': 'true' },
-    h('img.balloon', { src: critterArt('balloon').url, alt: '' }),
-    [0, 1, 2, 3, 4].map((i) => h('img.bird', { src: critterArt('bird').url, alt: '', style: `top:${70 + (i % 3) * 16 + i * 5}px;animation-delay:${(-i * 0.7 - 6).toFixed(1)}s` })));
+  // Balloons and flocks of birds hang at fixed places in the sky. They belong to the world, not
+  // the screen: scrolling slides them past, slower than the land, so they read as far away.
+  const SKY_SLIDE = 0.3;
+  const skyWide = Math.round(width * SPEED * SKY_SLIDE) + 1600;
+  const sky2 = h('div.map3d-sky', { 'aria-hidden': 'true', style: `width:${skyWide}px` },
+    Array.from({ length: Math.ceil(skyWide / 620) }, (_, k) => h('img.balloon', { src: critterArt('balloon').url, alt: '', style: `left:${260 + k * 620 + Math.round(grain(k, 1, 60) * 200)}px;top:${34 + Math.round(grain(k, 2, 61) * 46)}px;width:${34 + Math.round(grain(k, 3, 62) * 18)}px;animation-delay:${(-grain(k, 4, 63) * 20).toFixed(1)}s` })),
+    Array.from({ length: Math.ceil(skyWide / 480) }, (_, k) => h('div.flock', { style: `left:${90 + k * 480 + Math.round(grain(k, 5, 64) * 160)}px;top:${62 + Math.round(grain(k, 6, 65) * 40)}px;animation-delay:${(-grain(k, 7, 66) * 30).toFixed(1)}s` },
+      [0, 1, 2, 3].map((b) => h('img.bird', { src: critterArt('bird').url, alt: '', style: `left:${b * 17}px;top:${(b % 2) * 9 + b * 2}px` })))));
   overlay.append(sky2, ...beasts.map((b) => b.el), ...signs.map((s) => s.el), ...pins.map((p) => p.el));
 
   let W = 0;
@@ -536,6 +540,7 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
       // Names would be too small to read at that distance, so they shrink less than the stop does.
       p.el.style.setProperty('--name', (size < 0.86 ? 0.86 / size : 1).toFixed(3));
     }
+    sky2.style.transform = `translateX(${-Math.round(scroller.scrollLeft * SKY_SLIDE)}px)`;
     for (const b of beasts) {
       const sx = cx + ((b.x - camX) * STRETCH) / b.z;
       if (sx < -60 || sx > wide + 60) { b.el.style.display = 'none'; continue; }
