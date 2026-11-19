@@ -21,15 +21,15 @@ function makeRandom(seed) {
 // Each land: ground colours [base, light speck, dark speck], and what grows there with how often.
 const LANDS = {
   camp: { ground: ['#b9d39a', '#c6dca9', '#a9c68b'], things: [['oak', 3], ['flowers', 6], ['tuft', 6], ['rock', 1], ['pine', 1]], crowd: 1 },
-  forest: { ground: ['#a7c88f', '#b4d29c', '#97ba80'], things: [['pine', 8], ['oak', 4], ['tuft', 3], ['rock', 1], ['mushroom', 1]], crowd: 1.7 },
+  forest: { ground: ['#a7c88f', '#b4d29c', '#97ba80'], things: [['pine', 9], ['oak', 5], ['tuft', 3], ['rock', 1], ['mushroom', 1]], crowd: 2.5 },
   lake: { ground: ['#b4d4a0', '#c2ddae', '#a4c690'], things: [['pond', 2], ['reeds', 3], ['oak', 2], ['flowers', 5], ['tuft', 4]], crowd: 1 },
-  autumn: { ground: ['#cfcf9a', '#d9d9aa', '#c0c08a'], things: [['maple', 8], ['oak', 1], ['tuft', 3], ['rock', 2], ['pumpkin', 2]], crowd: 1.6 },
+  autumn: { ground: ['#cfcf9a', '#d9d9aa', '#c0c08a'], things: [['maple', 9], ['oak', 1], ['tuft', 3], ['rock', 2], ['pumpkin', 3]], crowd: 2.1 },
   hills: { ground: ['#c2cf9f', '#cfdaae', '#b3c190'], things: [['rock', 5], ['boulder', 3], ['pine', 3], ['tuft', 5], ['cabin', 1]], crowd: 1.1 },
   highland: { ground: ['#c9cbb4', '#d5d7c2', '#b9bba4'], things: [['boulder', 4], ['rock', 5], ['pine', 4], ['cabin', 1], ['tuft', 4]], crowd: 1.3 },
   snow: { ground: ['#e6edf0', '#f3f7f9', '#d5dfe4'], things: [['peak', 6], ['snowpine', 6], ['rock', 2], ['snowman', 1], ['tuft', 3]], crowd: 1.6 },
   alpine: { ground: ['#bcd8a6', '#cae1b5', '#abc995'], things: [['flowers', 9], ['snowpine', 2], ['pine', 3], ['tuft', 5], ['rock', 2]], crowd: 1.2 },
-  grove: { ground: ['#c9c2dc', '#d6d0e6', '#b9b1cf'], things: [['mushroom', 8], ['bigshroom', 4], ['tuft', 3], ['crystal', 1], ['flowers', 3]], crowd: 1.5 },
-  crystal: { ground: ['#c3cfe0', '#d0dbe9', '#b3c0d3'], things: [['crystal', 7], ['rock', 3], ['bigshroom', 2], ['tuft', 2]], crowd: 1.2 },
+  grove: { ground: ['#c9c2dc', '#d6d0e6', '#b9b1cf'], things: [['mushroom', 7], ['bigshroom', 7], ['tuft', 3], ['crystal', 1], ['flowers', 3]], crowd: 1.9 },
+  crystal: { ground: ['#c3cfe0', '#d0dbe9', '#b3c0d3'], things: [['crystal', 9], ['rock', 3], ['bigshroom', 1], ['tuft', 2]], crowd: 1.7 },
   dusk: { ground: ['#cdbfd6', '#d9cde0', '#bdaec8'], things: [['bigshroom', 5], ['mushroom', 5], ['crystal', 3], ['pond', 1], ['tuft', 3]], crowd: 1.4 },
   desert: { ground: ['#ead9ab', '#f1e3bb', '#dcc998'], things: [['pyramid', 3], ['cactus', 6], ['rock', 3], ['dune', 5], ['palm', 2]], crowd: 1 },
 };

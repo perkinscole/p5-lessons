@@ -11,7 +11,7 @@ import { PATHS, STAGES, mapLayout, currentLesson, sequence } from '../curriculum
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { COL_W, MARGIN, place } from '../game/world.js';
 import { paintGround, spritePixels, FLAT, SHAPED, groundOf, landFor } from '../game/overworld.js';
-import { buildHeights, grain } from '../game/terrain.js';
+import { buildHeights, grain, lumps } from '../game/terrain.js';
 import { standingOn, showCrowd, pointsAlong } from './map.js';
 
 const ART = 3; // page pixels per art pixel of the ground picture
@@ -52,6 +52,15 @@ const RANGES = [
 
 const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
 const pack = (r, g, b) => (255 << 24) | (b << 16) | (g << 8) | r;
+/** Stronger colour and contrast, for land that would otherwise look washed out. */
+function vivid(c, sat, con) {
+  const r = c & 255;
+  const g = (c >> 8) & 255;
+  const b = (c >> 16) & 255;
+  const grey = (r + g + b) / 3;
+  const ch = (v) => Math.max(0, Math.min(255, (grey + (v - grey) * sat - 128) * con + 128));
+  return pack(ch(r), ch(g), ch(b));
+}
 const tone = (c, k) => pack(Math.min(255, (c & 255) * k), Math.min(255, ((c >> 8) & 255) * k), Math.min(255, ((c >> 16) & 255) * k));
 
 /** Build the world once: ground colours, heights, and everything that stands up. */
@@ -115,42 +124,114 @@ function buildWorld(myPath) {
   const onTrail = new Uint8Array(w * rows);
   for (const line of lines) for (const pt of line) { const x = Math.round(pt.x / ART); const y = Math.round(pt.y / ART); for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (x + dx >= 0 && x + dx < w && y + dy >= 0 && y + dy < rows) onTrail[(y + dy) * w + x + dx] = 1; }
 
-  const bumps = plan.things.filter((t) => SHAPED.has(t.kind));
+  const landAt = (x) => { let i = 0; while (i + 1 < spans.length && x * ART >= spans[i + 1].x0) i++; return landFor(i); };
+  // Mountains, pyramids, and some of the crystals are made of land, not drawn on it.
+  const spire = (t) => t.kind === 'crystal' && grain(t.x, t.y, 12) < 0.55;
+  const bumps = [
+    ...plan.things.filter((t) => SHAPED.has(t.kind)),
+    ...plan.things.filter(spire).map((t) => ({ kind: 'spire', x: t.x, y: t.y, tall: 48 + Math.floor(grain(t.x, t.y, 13) * 6) * STEP, tint: Math.floor(grain(t.x, t.y, 14) * 3) })),
+  ];
   // Hills roll everywhere except along the trails and round the stops, which stay level.
   const calm = onTrail.slice();
   for (const st of stops) { const cx = Math.round(st.x / ART); const cy = Math.round(st.y / ART); for (let dy = -7; dy <= 5; dy++) for (let dx = -8; dx <= 8; dx++) if (cx + dx >= 0 && cx + dx < w && cy + dy >= 0 && cy + dy < rows) calm[(cy + dy) * w + cx + dx] = 1; }
-  const H = buildHeights({ w, h: rows, terraces, bumps, calm, hills: 46, step: STEP, block: BLOCK });
+  // Each land has its own lie: the camp and the lake are gentle, the highlands and the snow are rough.
+  const ROUGH = { camp: 0.5, forest: 1.1, lake: 0.35, autumn: 1, highland: 1.7, snow: 1.4, alpine: 0.9, grove: 0.8, crystal: 1.1, dusk: 0.9, desert: 1.25 };
+  const H = buildHeights({ w, h: rows, terraces, bumps, calm, hills: 46, hillScale: (x) => ROUGH[landAt(x)] || 1, step: STEP, block: BLOCK });
+
+  // Water: the lake land is half pools, the alpine meadow has tarns, and the desert has an oasis
+  // or two. A pool is a block lower than the ground, and never touches a trail.
+  const wet = new Uint8Array(w * rows);
+  const POOLS = { lake: 0.5, alpine: 0.72, desert: 0.8, camp: 0.8 };
+  for (let by = 0; by < rows; by += BLOCK) for (let bx = 0; bx < w; bx += BLOCK) {
+    const want = POOLS[landAt(bx)];
+    if (!want || H[by * w + bx] > STEP || H[by * w + bx] < 0 || lumps(bx / 21, by / 15, 11) < want) continue;
+    let near = false;
+    for (let dy = -6; dy <= BLOCK + 6 && !near; dy += 3) for (let dx = -6; dx <= BLOCK + 6; dx += 3) { const x = bx + dx; const y = by + dy; if (x >= 0 && y >= 0 && x < w && y < rows && calm[y * w + x]) { near = true; break; } }
+    if (near) continue;
+    for (let y = by; y < Math.min(rows, by + BLOCK); y++) for (let x = bx; x < Math.min(w, bx + BLOCK); x++) { H[y * w + x] = -STEP; wet[y * w + x] = 1; }
+  }
+
   const C = new Uint32Array(g.getImageData(0, 0, w, rows).data.buffer.slice(0));
   // S is what each block's sides are made of: earth under grass, stone in the mountains, sandstone in the desert.
   const S = new Uint32Array(w * rows);
-  const landAt = (x) => { let i = 0; while (i + 1 < spans.length && x * ART >= spans[i + 1].x0) i++; return landFor(i); };
-  const SIDES = { snow: [150, 152, 162], highland: [146, 140, 128], desert: [214, 176, 112], grove: [150, 126, 150], crystal: [140, 140, 164], dusk: [150, 126, 150] };
-  const EARTH = [150, 112, 78];
-  const made = new Uint8Array(w * rows); // 1 mountain, 2 pyramid
+  const SIDES = { snow: [140, 146, 162], highland: [138, 130, 118], desert: [212, 166, 96], grove: [128, 96, 140], crystal: [118, 122, 160], dusk: [112, 86, 128], autumn: [142, 98, 64] };
+  const EARTH = [146, 104, 68];
+  const SPIRE = [[[150, 236, 232], [86, 178, 190]], [[214, 180, 250], [150, 112, 206]], [[255, 190, 216], [214, 124, 164]]];
+  const made = new Uint8Array(w * rows); // 1 mountain, 2 pyramid, 3 to 5 a crystal spire
   for (const b of bumps) for (let y = Math.max(0, b.y - 16); y <= Math.min(rows - 1, b.y + 16); y++) for (let x = Math.max(0, b.x - 16); x <= Math.min(w - 1, b.x + 16); x++) {
-    const d = b.kind === 'peak' ? Math.hypot(x - b.x, y - b.y) : Math.max(Math.abs(x - b.x), Math.abs(y - b.y));
-    if (d < (b.kind === 'peak' ? 15 : 13) && H[y * w + x] > 30) made[y * w + x] = b.kind === 'peak' ? 1 : 2;
+    const d = b.kind === 'pyramid' ? Math.max(Math.abs(x - b.x), Math.abs(y - b.y)) : Math.hypot(x - b.x, y - b.y);
+    if (b.kind === 'spire') { if (d < 5 && H[y * w + x] >= b.tall) made[y * w + x] = 3 + b.tint; } else if (d < (b.kind === 'peak' ? 15 : 13) && H[y * w + x] > 30) made[y * w + x] = b.kind === 'peak' ? 1 : 2;
   }
+  // Anything standing throws a small shadow on the ground under it.
+  const shade = new Float32Array(w * rows).fill(1);
+  for (const t of plan.things) if (!FLAT.has(t.kind) && !SHAPED.has(t.kind) && !spire(t)) for (let dy = -1; dy <= 2; dy++) for (let dx = -3; dx <= 5; dx++) { const x = t.x + dx; const y = t.y + dy; if (x >= 0 && y >= 0 && x < w && y < rows) shade[y * w + x] = 0.8; }
+
+  // What grows or lies on each land, speckled over its blocks.
+  const DOTS = {
+    camp: [0.025, [[255, 255, 255], [255, 216, 74], [255, 150, 190]]],
+    forest: [0.05, [[58, 124, 70], [74, 142, 84]]],
+    lake: [0.03, [[255, 255, 255], [255, 170, 204]]],
+    autumn: [0.11, [[226, 120, 44], [200, 70, 48], [238, 178, 62]]],
+    highland: [0.06, [[150, 150, 158], [176, 176, 184]]],
+    snow: [0.07, [[196, 224, 244], [255, 255, 255]]],
+    alpine: [0.1, [[255, 255, 255], [255, 216, 74], [255, 140, 190], [170, 140, 255]]],
+    grove: [0.05, [[120, 240, 230], [240, 150, 220]]],
+    crystal: [0.05, [[160, 240, 255], [220, 190, 255]]],
+    dusk: [0.06, [[120, 240, 230], [255, 220, 120]]],
+    desert: [0.04, [[250, 232, 180], [206, 170, 110]]],
+  };
+  // A land's own light: the dusk land sits under a darker, purpler sky, and snow glares.
+  const LIGHT = { dusk: [0.74, 0.68, 0.92], grove: [0.92, 0.86, 1], crystal: [0.9, 0.94, 1.05], snow: [1.04, 1.05, 1.08], desert: [1.05, 1.0, 0.9], autumn: [1.05, 0.98, 0.88], forest: [0.9, 0.98, 0.9] };
+
   for (let y = 0; y < rows; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x;
     const land = landAt(x);
     const bx = (x / BLOCK) | 0;
     const by = (y / BLOCK) | 0;
-    const side = made[i] === 1 ? [142, 146, 158] : made[i] === 2 ? [224, 180, 104] : (SIDES[land] || EARTH);
+    const tall = H[i];
+    const side = made[i] === 1 ? [136, 140, 154] : made[i] === 2 ? [222, 174, 96] : made[i] >= 3 ? SPIRE[made[i] - 3][1] : (SIDES[land] || EARTH);
     S[i] = pack(side[0], side[1], side[2]);
-    if (made[i] === 1) C[i] = H[i] > 96 || (land === 'snow' && H[i] > 48) ? pack(250, 252, 255) : pack(168, 172, 184);
-    else if (made[i] === 2) C[i] = pack(240, 204, 124);
-    if (onTrail[i]) continue;
-    // Texture: every block is a slightly different shade, each cell is speckled, and a faint
-    // line marks where one block meets the next.
-    let k = 0.94 + grain(bx, by, 3) * 0.12 + (grain(x, y, 4) - 0.5) * 0.07;
-    if (x % BLOCK === 0 || y % BLOCK === 0) k *= 0.93;
-    C[i] = tone(C[i], k);
+    if (made[i] === 1) C[i] = tall > 96 || (land === 'snow' && tall > 48) ? pack(250, 252, 255) : pack(164, 168, 182);
+    else if (made[i] === 2) C[i] = pack(244, 206, 120);
+    else if (made[i] >= 3) { const c = SPIRE[made[i] - 3][0]; C[i] = pack(c[0], c[1], c[2]); } else if (wet[i]) {
+      // Water: deep blue with a slow pattern of lighter ripples.
+      const ripple = lumps(x / 3 + y / 7, y / 2.2, 15);
+      C[i] = land === 'snow' ? pack(190, 226, 244) : ripple > 0.7 ? pack(150, 214, 240) : ripple > 0.45 ? pack(74, 160, 214) : pack(54, 136, 198);
+    } else if (!onTrail[i]) {
+      // Bare stone shows through on the highest ground of the rough lands.
+      if ((land === 'highland' || land === 'snow') && tall >= 36 && land === 'highland') C[i] = pack(158, 156, 160);
+      const dots = DOTS[land];
+      if (dots && grain(x, y, 20) < dots[0]) { const c = dots[1][Math.floor(grain(x, y, 21) * dots[1].length)]; C[i] = pack(c[0], c[1], c[2]); } else C[i] = vivid(C[i], 1.32, 1.1);
+    }
+    if (onTrail[i]) { C[i] = vivid(C[i], 1.15, 1.08); continue; }
+
+    // Light. The sun is low in the north-west: a block is in shadow when something taller stands
+    // that way, corners where a taller block sits behind or in front are dimmer, and high ground
+    // catches more light than low.
+    let k = shade[i];
+    for (let d = 1; d <= 7; d++) {
+      const xx = x - d * 2;
+      const yy = y - d;
+      if (xx < 0 || yy < 0) break;
+      if (H[yy * w + xx] - tall > d * 5.2) { k *= 0.66; break; }
+    }
+    if ((y + 1 < rows && H[i + w] > tall) || (y > 0 && H[i - w] > tall) || (x > 0 && H[i - 1] > tall)) k *= 0.88;
+    k *= 1 + Math.max(-0.1, Math.min(0.14, tall / 520));
+    // Texture: every block is a slightly different shade, each cell is speckled, and a line marks
+    // where one block meets the next, brighter on the lit edge and darker on the far one.
+    k *= 0.93 + grain(bx, by, 3) * 0.14 + (grain(x, y, 4) - 0.5) * 0.08;
+    if (x % BLOCK === 0 || y % BLOCK === 0) k *= 1.04; else if (x % BLOCK === BLOCK - 1 || y % BLOCK === BLOCK - 1) k *= 0.9;
+    const light = LIGHT[land];
+    const c = tone(C[i], k);
+    C[i] = light ? pack(Math.min(255, (c & 255) * light[0]), Math.min(255, ((c >> 8) & 255) * light[1]), Math.min(255, ((c >> 16) & 255) * light[2])) : c;
+    if (light) S[i] = pack(side[0] * light[0], side[1] * light[1], Math.min(255, side[2] * light[2]));
   }
 
   const heightAt = (x, t) => H[Math.max(0, Math.min(rows - 1, Math.round(t / ART))) * w + Math.max(0, Math.min(w - 1, Math.round(x / ART)))];
-  const standing = plan.things.filter((t) => !FLAT.has(t.kind) && !SHAPED.has(t.kind))
-    .map((t) => ({ x: t.x * ART, z: depthOf(t.y * ART), lift: heightAt(t.x * ART, t.y * ART), art: spritePixels(t.kind, (t.x + t.y) % 3) }))
+  // Some things stand bigger than their drawing: a giant mushroom should tower, a tent should be a tent.
+  const GROW = { bigshroom: 1.9, oak: 1.25, maple: 1.3, pine: 1.3, snowpine: 1.25, cabin: 1.4, tent: 1.4, palm: 1.4, crystal: 1.3, flag: 1.5, boulder: 1.2, cactus: 1.15 };
+  const standing = plan.things.filter((t) => !FLAT.has(t.kind) && !SHAPED.has(t.kind) && !spire(t) && !wet[Math.min(rows - 1, t.y) * w + Math.min(w - 1, t.x)])
+    .map((t) => ({ x: t.x * ART, z: depthOf(t.y * ART), lift: heightAt(t.x * ART, t.y * ART), grow: GROW[t.kind] || 1, art: spritePixels(t.kind, (t.x + t.y) % 3) }))
     .sort((a, b) => a.z - b.z);
   return { nodes, byId, spans, width, w, rows, H, C, S, heightAt, standing, at };
 }
@@ -265,7 +346,7 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
     const seen = standing.filter((s) => { const sx = cx + ((s.x - camX) * STRETCH) / s.z; return sx > -80 && sx < W * PX + 80; });
     let next = 0;
     const plant = (s) => {
-      const scale = (ART * 1.25) / s.z / PX;
+      const scale = (ART * 1.25 * s.grow) / s.z / PX;
       const dw = Math.round(s.art.w * scale);
       const dh = Math.round(s.art.h * scale);
       const left = Math.round((cx + ((s.x - camX) * STRETCH) / s.z) / PX - s.art.ox * scale);
@@ -320,15 +401,15 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
         for (let yy = y; yy < top; yy++, at2 += W) if (!taken[at2]) buf[at2] = c;
         if (face) {
           const side = S[base + a];
-          const seam = a % BLOCK === 0 ? 0.84 : 1;
+          const seam = a % BLOCK === 0 ? 0.78 : 1;
           const grassy = c;
           for (let yy = top; yy < stop; yy++, at2 += W) {
             if (taken[at2]) continue;
             // How far down the side this pixel is, in world height: darker at each block line,
             // lighter just under the lip, and shaded a little more toward the bottom.
             const down = (yy - top) / k;
-            const line = down % STEP < 1.6 ? 0.8 : 1;
-            let px = down < 2.2 ? tone(grassy, 0.86) : tone(side, seam * line * (0.98 - Math.min(0.2, down / 500)) * (0.95 + grain(a, (down / 3) | 0, 6) * 0.1));
+            const line = down % STEP < 1.6 ? 0.72 : 1;
+            let px = down < 2.2 ? tone(grassy, 0.8) : tone(side, seam * line * (0.92 - Math.min(0.3, down / 330)) * (0.93 + grain(a, (down / 3) | 0, 6) * 0.14));
             if (fog) px = pack((px & 255) + (FOG[0] - (px & 255)) * fog, ((px >> 8) & 255) + (FOG[1] - ((px >> 8) & 255)) * fog, ((px >> 16) & 255) + (FOG[2] - ((px >> 16) & 255)) * fog);
             buf[at2] = px;
           }

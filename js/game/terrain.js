@@ -10,14 +10,14 @@ const smooth = (a, b, v) => { const t = Math.max(0, Math.min(1, (v - a) / (b - a
  *   terraces: [{ x0, x1, y0, y1, height, ramp, soft }] in art pixels. `ramp` is how far the slope
  *             runs before x0 and after x1. `soft` makes the near edge a slope too, for a trail
  *             that comes straight up the front.
- *   bumps:    [{ kind: 'peak' | 'pyramid', x, y }] in art pixels
+ *   bumps:    [{ kind: 'peak' | 'pyramid' | 'spire', x, y, tall }] in art pixels
  *   calm:     a grid of 1s where the land must stay smooth (trails and stops), for the hills to avoid
  *   hills:    how tall the rolling hills are, away from calm ground. 0 for none.
  *   step, block: build the land out of blocks `block` cells wide whose tops are `step` apart, the
  *             way a block-building game does. 0 leaves it smooth.
  * Returns a Float32Array of w * h heights.
  */
-export function buildHeights({ w, h, terraces = [], bumps = [], calm = null, hills = 0, step = 0, block = 1 }) {
+export function buildHeights({ w, h, terraces = [], bumps = [], calm = null, hills = 0, hillScale = null, step = 0, block = 1 }) {
   const H = new Float32Array(w * h);
   // Gentle rolls everywhere, so flat ground isn't a sheet of glass.
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) H[y * w + x] = 3 + (Math.sin(x * 0.21 + y * 0.13) + Math.sin(x * 0.07 - y * 0.19)) * 1.6;
@@ -47,10 +47,16 @@ export function buildHeights({ w, h, terraces = [], bumps = [], calm = null, hil
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const i = y * w + x;
       const rise = lumps(x / 38, y / 32, 1) * 0.68 + lumps(x / 15, y / 13, 2) * 0.32;
-      H[i] += hills * rise * smooth(5, 26, far[i]);
+      // Some lands are hillier than others: `hillScale(x)` says by how much.
+      H[i] += hills * (hillScale ? hillScale(x) : 1) * rise * smooth(5, 26, far[i]);
     }
   }
   for (const b of bumps) {
+    if (b.kind === 'spire') {
+      // A crystal spire: a narrow column, a block or two across, flat on top.
+      for (let y = Math.max(0, b.y - 3); y <= Math.min(h - 1, b.y + 3); y++) for (let x = Math.max(0, b.x - 3); x <= Math.min(w - 1, b.x + 3); x++) if (Math.hypot(x - b.x, y - b.y) < 3) H[y * w + x] = Math.max(H[y * w + x], b.tall || 84);
+      continue;
+    }
     const r = b.kind === 'peak' ? 15 : 13;
     const tall = b.kind === 'peak' ? 150 : 84;
     for (let y = Math.max(0, b.y - r); y <= Math.min(h - 1, b.y + r); y++) {
@@ -74,7 +80,7 @@ export function buildHeights({ w, h, terraces = [], bumps = [], calm = null, hil
 
 // Smooth random lumps from 0 to 1: the same every time for the same place and layer.
 const hash = (x, y, k) => { let n = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(k, 2147483647); n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
-function lumps(x, y, k) {
+export function lumps(x, y, k) {
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
   const fx = x - x0;
