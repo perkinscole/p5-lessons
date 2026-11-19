@@ -126,6 +126,10 @@ In a lesson, students can add up to 8 extra code files and upload images, using 
 
 Finishing a step plays a short chime and the "Done" mark sparkles. A right answer on a check question chimes too. Submitting a lesson plays a fanfare with confetti while the XP counts up, and new badges and ranks pop in. A badge you give a student, or a rank they reach when you approve work, pops up with its own sound the next time they open Home. Equipping gear on the character page chimes as well. **Display → Play sounds** turns all of it off for a student, and animations are skipped for anyone whose device is set to reduce motion.
 
+## Moving through a lesson
+
+Every step carries a label so students know what it wants: **✏️ Your turn** (do this in your code), **👀 Just read**, or **❓ Answer this**. A student can't move past a check question until they have answered it correctly: the steps after it are greyed out and can't be clicked. A step they haven't finished can still be skipped, but the button says **Skip for now** instead of **Next**. Teachers looking at a lesson are never locked.
+
 ## Feedback and help
 
 **"I'm stuck."** Every lesson has a **✋ I'm stuck: ask for help** button. A student can add a short note, and their request appears within a few seconds on the class page, with a doorbell: their name, the exact step, and the note. On the projected class display it stays private: their character hops and glows, and a small **✋** button in the corner opens the list for you. Press **✓ Helped** to clear it, or the student can press **I figured it out**. The 🔔 button on the display tests the doorbell on that computer.

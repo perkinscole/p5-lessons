@@ -99,6 +99,10 @@ Constraints that follow from this:
 - The sandbox can't open a camera. `createCapture` is replaced with a canvas, and the parent page sends in image frames. Other people's games use `askCamera` to ask the viewer first.
 - `protectLoops` adds a stop check to loops so an infinite loop can't freeze the tab.
 
+### Moving through a lesson
+
+In `js/views/lesson.js`, `gate()` is the first unanswered check question; a student can't open anything past it, and `kindOf(step)` labels each step as something to do or only to read. Answered questions are restored from `quiz_first` when a lesson is reopened. Steps themselves are not locked: an unfinished one can be skipped, because a check that wrongly fails must never trap a student.
+
 ### Celebrations
 
 `js/celebrate.js` holds every chime and reward animation (`chime`, `sparkle`, `confetti`, `pop`, `popBadge`, `celebrateNew`). Use it for any new "you did it" moment rather than playing sounds directly, so the Display sound setting and reduced-motion are respected in one place. Don't give a pop-up card a class that an existing component uses (`badge` restyled it once).

@@ -182,6 +182,20 @@ export async function viewLesson(main, id, previewPath) {
   };
   let furthest = Math.min(Number(work?.step_at) || 0, lesson.steps.length);
   if (furthest > 0) stepIndex = furthest >= lesson.steps.length ? flow.length : Math.max(0, flow.findIndex((x) => x.step && x.n === furthest));
+  // Questions answered on an earlier visit stay answered, so coming back doesn't mean doing them again.
+  quizzes.forEach((q, k) => {
+    const own = k - (warmUp ? 1 : 0);
+    if (own < 0 ? furthest > 0 : (work?.quiz_first || {})[own] !== undefined) answered.add(q);
+  });
+  // A student can't go past a question they haven't answered. Teachers looking at a lesson can.
+  const gate = () => {
+    if (preview) return flow.length;
+    const at = flow.findIndex((x) => x.quiz && !answered.has(x.quiz));
+    return at < 0 ? flow.length : at;
+  };
+  stepIndex = Math.min(stepIndex, gate());
+  // What a step asks for: something to do in the code, or only something to read.
+  const kindOf = (step) => (step.check || step.code !== undefined || step.edits || step.skeleton || step.provides || step.action ? 'do' : 'read');
   let stretchDone = work?.stretch_done || 0;
   let dirty = false;
   const stdPanel = standardsPanel(id, preview);
@@ -393,18 +407,23 @@ export async function viewLesson(main, id, previewPath) {
 
   const drawDots = () => {
     const results = progress();
+    const open = gate();
+    const LOCKED = 'Answer the question first';
     clear(dots);
     flow.forEach((item, i) => {
       const on = i === stepIndex ? 'on' : '';
+      const shut = i > open;
       const go = () => { stepIndex = i; drawStep(); };
       if (item.quiz) {
-        dots.append(h('li', h('button', { class: `quiz ${answered.has(item.quiz) ? 'ok' : ''} ${on}`, 'aria-label': 'Quick check', 'aria-current': on ? 'step' : null, onclick: go }, answered.has(item.quiz) ? '✓' : '?')));
+        dots.append(h('li', h('button', { class: `quiz ${answered.has(item.quiz) ? 'ok' : ''} ${on} ${i === open ? 'next-up' : ''}`, disabled: shut, 'aria-label': shut ? `Quick check, locked. ${LOCKED}` : 'Quick check', title: shut ? LOCKED : 'Quick check', 'aria-current': on ? 'step' : null, onclick: go }, answered.has(item.quiz) ? '✓' : '?')));
         return;
       }
       const passing = item.step.check && results[item.n];
-      dots.append(h('li', h('button', { class: `${passing ? 'ok' : ''} ${on}`, 'aria-label': `Step ${item.n + 1}: ${item.step.title}${passing ? ', done' : ''}`, 'aria-current': on ? 'step' : null, title: item.step.title, onclick: go }, passing ? '✓' : item.n + 1)));
+      const kind = kindOf(item.step);
+      dots.append(h('li', h('button', { class: `${kind} ${passing ? 'ok' : ''} ${on}`, disabled: shut, 'aria-label': `Step ${item.n + 1}: ${item.step.title}${passing ? ', done' : ''}${shut ? `, locked. ${LOCKED}` : ''}`, 'aria-current': on ? 'step' : null, title: shut ? LOCKED : item.step.title, onclick: go }, passing ? '✓' : item.n + 1)));
     });
-    dots.append(h('li', h('button', { class: `${stepIndex === flow.length ? 'on' : ''} finish`, 'aria-label': 'Finish', title: 'Finish', onclick: () => { stepIndex = flow.length; drawStep(); } }, '★')));
+    const shut = open < flow.length;
+    dots.append(h('li', h('button', { class: `${stepIndex === flow.length ? 'on' : ''} finish`, disabled: shut, 'aria-label': shut ? `Finish, locked. ${LOCKED}` : 'Finish', title: shut ? LOCKED : 'Finish', onclick: () => { stepIndex = flow.length; drawStep(); } }, '★')));
   };
 
   const quizPane = (q) => {
@@ -426,6 +445,7 @@ export async function viewLesson(main, id, previewPath) {
           if (firstTry && !answered.has(q)) quizRight++;
           answered.add(q);
           clear(feedback).append(h('p.ok', '✓ ', md(q.why)));
+          { const tag = stepBox.querySelector('.step-kind span'); if (tag) tag.remove(); }
           drawNav();
           drawDots();
           markDirty();
@@ -440,7 +460,7 @@ export async function viewLesson(main, id, previewPath) {
     }, md(text))));
     const qi = ownIndex(q);
     return h('div.stack',
-      h('p.eyebrow', 'Quick check'),
+      h('p.step-kind.answer', '❓ Answer this', !answered.has(q) && !preview && h('span', ' to keep going')),
       q.review && h('p.eyebrow', 'From an earlier lesson'),
       h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
       q.code && h('pre.snippet', h('code', q.code)),
@@ -536,7 +556,10 @@ export async function viewLesson(main, id, previewPath) {
           run();
         },
       }, 'Add the starter code'));
+    const kind = kindOf(s);
+    const nextLabel = () => (kind === 'read' ? 'Got it, next' : !s.check || stepPasses(s, allCode()) ? 'Next' : 'Skip for now');
     stepBox.append(...[
+      h(`p.step-kind.${kind}`, kind === 'do' ? '✏️ Your turn: do this in your code' : '👀 Just read'),
       h('h2', s.title),
       h('div.step-do', h('div.read-row', md(brief), readButton(() => brief))),
       placeBox,
@@ -555,7 +578,7 @@ export async function viewLesson(main, id, previewPath) {
       isStudent && confusingButton(id, `step:${flow[stepIndex].n}`, myFlags),
       h('div.row.step-nav',
         stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
-        h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); run(); } }, 'Next'),
+        h('button.btn.step-next', { class: nextLabel() === 'Skip for now' ? '' : 'primary', onclick: () => { stepIndex++; drawStep(); run(); } }, nextLabel()),
       ),
     ].filter(Boolean));
     drawPlace();
@@ -758,6 +781,8 @@ export async function viewLesson(main, id, previewPath) {
       const ok = stepPasses(item.step, allCode());
       el.className = `step-check ${ok ? 'ok' : 'wait'}`;
       el.textContent = ok ? '✓ Done' : 'Not done yet';
+      const next = stepBox.querySelector('.step-next');
+      if (next) { next.textContent = ok ? 'Next' : 'Skip for now'; next.classList.toggle('primary', ok); }
     }
   }, 350);
   cm.on('change', () => { clearPlace(); markDirty(); onChange(); });

@@ -766,3 +766,12 @@ ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: colum
 .quest-par-bar { width: 70px; height: 8px; background: rgba(0, 0, 0, .35); border: 1px solid var(--line); }
 .quest-par-fill { height: 100%; background: #ffd23f; transition: width .2s linear; }
 .quest-hearts.boosted { filter: drop-shadow(0 0 4px #ffd23f); }
+
+.step-kind { display: inline-block; align-self: flex-start; margin: 0; padding: 3px 10px; border: 2px solid var(--line); border-radius: 3px; font-size: .85rem; font-weight: 700; }
+.step-kind.do { background: var(--sun); color: #2b2350; }
+.step-kind.read { background: var(--paper-2); color: var(--ink-2); }
+.step-kind.answer { background: var(--accent); color: var(--accent-ink); }
+.step-dots button.read { border-style: dashed; }
+.step-dots button:disabled { opacity: .4; cursor: not-allowed; }
+.step-dots button.quiz.next-up:not(.ok) { background: var(--accent); color: var(--accent-ink); animation: help-glow 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .step-dots button.quiz.next-up { animation: none; } }
