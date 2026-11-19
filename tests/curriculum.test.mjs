@@ -589,7 +589,13 @@ test('the map\'s scenery never sits under a stop, a label, or a trail', async ()
   const stops = [{ x: 72, y: 282 }, { x: 180, y: 282 }, { x: 612, y: 102 }, { x: 612, y: 462 }, { x: 936, y: 282 }];
   const trails = [[...Array(41)].map((_, i) => ({ x: 72 + i * 2.7, y: 282 })), [...Array(41)].map((_, i) => ({ x: 180 + i * 10.8, y: 282 - i * 4.5 }))];
   const stages = [{ x0: 0, x1: 500 }, { x0: 500, x1: 900 }, { x0: 900, x1: 1200 }];
-  const plan = planOverworld({ width: 1200, height: 540, stops, trails, stages });
+  // A raised mesa round the top stop, and a sunken canyon round the bottom one.
+  const terraces = [{ level: 2, x0: 562, x1: 662, y0: 56, y1: 146 }, { level: -2, x0: 562, x1: 662, y0: 400, y1: 508 }];
+  const plan = planOverworld({ width: 1200, height: 540, stops, trails, stages, terraces });
+  assert.deepEqual(plan.terraces.map((t) => [t.level, t.wall1 - t.wall0]), [[2, 8], [-2, 8]], 'two levels of height is two tiers of cliff');
+  assert.ok(plan.terraces[0].wall0 === plan.terraces[0].y1, 'a mesa shows its cliff along the bottom');
+  assert.ok(plan.terraces[1].wall1 === plan.terraces[1].y0, 'a canyon shows its wall along the top');
+  for (const t of plan.things) for (const c of plan.terraces) assert.ok(!(t.x >= c.x0 && t.x <= c.x1 && t.y >= c.wall0 && t.y <= c.wall1), `${t.kind} is growing on a cliff face`);
   assert.ok(plan.things.length > 80, `only ${plan.things.length} things were placed`);
   assert.ok(new Set(plan.things.map((t) => t.kind)).size >= 6, 'a mix of things');
   for (const t of plan.things) {
@@ -603,7 +609,7 @@ test('the map\'s scenery never sits under a stop, a label, or a trail', async ()
     for (const line of trails) for (const pt of line) assert.ok(Math.hypot(t.x * 3 - pt.x, t.y * 3 - pt.y) > 8, `${t.kind} is on a trail`);
     assert.ok(t.y * 3 > 46, `${t.kind} is under the stage signs`);
   }
-  assert.deepEqual(planOverworld({ width: 1200, height: 540, stops, trails, stages }).things, plan.things, 'the same picture every time');
+  assert.deepEqual(planOverworld({ width: 1200, height: 540, stops, trails, stages, terraces }).things, plan.things, 'the same picture every time');
   assert.equal(landFor(0), 'camp');
   assert.equal(landFor(6), 'snow');
   assert.equal(landFor(12), landFor(0), 'extra stages go round again');

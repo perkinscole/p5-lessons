@@ -73,8 +73,25 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
   spans[0].x0 = 0;
   spans.forEach((sp, i) => { if (spans[i + 1]) { const mid = (sp.x1 + spans[i + 1].x0) / 2; sp.x1 = mid; spans[i + 1].x0 = mid; } else sp.x1 = width; });
   const lines = edges.map((e) => pointsAlong(place(byId.get(e.from)), place(byId.get(e.to))));
+  // Height: each run of stops on a high road sits on a raised mesa, and each on a low road in a
+  // sunken canyon. The further a lane is from the middle, the higher or deeper it is.
+  const runs = new Map();
+  spans.forEach(({ st }, i) => {
+    const ids = st.kind === 'shared' ? st.lessons : Object.values(st.branches).flat();
+    for (const id of ids) { const n = byId.get(id); if (n.lane) { const key = `${i}:${n.lane}`; if (!runs.has(key)) runs.set(key, []); runs.get(key).push(n); } }
+  });
+  for (const n of nodes) if (n.side && n.lane) runs.set(`side:${n.id}`, [n]);
+  const terraces = [...runs.values()].map((list) => {
+    const xs = list.map((n) => place(n).x);
+    const { y } = place(list[0]);
+    const level = list[0].lane < 0 ? Math.ceil(-list[0].lane) : -Math.ceil(list[0].lane);
+    const deep = Math.abs(level) * 12;
+    return level > 0
+      ? { level, x0: Math.min(...xs) - 50, x1: Math.max(...xs) + 50, y0: y - 46, y1: y + 44 }
+      : { level, x0: Math.min(...xs) - 50, x1: Math.max(...xs) + 50, y0: y - 38 - deep, y1: y + 46 };
+  });
   root.append(svg('rect', { x: 0, y: 0, width, height, class: 'map-ground' }));
-  root.append(svg('image', { href: overworldArt({ width, height, stops: nodes.map(place), trails: lines, stages: spans }), x: 0, y: 0, width, height, class: 'map-art', preserveAspectRatio: 'none', 'aria-hidden': 'true' }));
+  root.append(svg('image', { href: overworldArt({ width, height, stops: nodes.map(place), trails: lines, stages: spans, terraces }), x: 0, y: 0, width, height, class: 'map-art', preserveAspectRatio: 'none', 'aria-hidden': 'true' }));
   // Cloud shadows drift slowly over the land, so the map feels alive without getting busy.
   for (let i = 0; i < Math.ceil(width / 700); i++) {
     root.append(svg('ellipse', { cx: 200 + i * 700, cy: 130 + (i % 3) * 130, rx: 150, ry: 46, class: `map-cloud drift-${i % 3}`, 'aria-hidden': 'true' }));

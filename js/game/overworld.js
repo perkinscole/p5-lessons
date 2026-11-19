@@ -79,9 +79,10 @@ const LOOSE = new Set(['tuft', 'flowers', 'dune']);
  *   stops:  [{ x, y }] in page pixels
  *   trails: lists of points along each trail, in page pixels
  *   stages: [{ x0, x1 }] in page pixels, in trail order
+ *   terraces: [{ x0, x1, y0, y1, level }] in page pixels: raised land (level above 0) or sunken (below)
  * Returns { w, h, landAt(ax), blocked(ax, ay), things: [{ kind, x, y }] } in art pixels.
  */
-export function planOverworld({ width, height, stops, trails, stages, seed = 2026 }) {
+export function planOverworld({ width, height, stops, trails, stages, terraces = [], seed = 2026 }) {
   const w = Math.ceil(width / ART);
   const h = Math.ceil(height / ART);
   const random = makeRandom(seed);
@@ -99,6 +100,16 @@ export function planOverworld({ width, height, stops, trails, stages, seed = 202
   for (const line of trails) for (const pt of line) { block((pt.x - 13) / ART, (pt.y - 13) / ART, (pt.x + 13) / ART, (pt.y + 13) / ART); fill(hard, (pt.x - 9) / ART, (pt.y - 9) / ART, (pt.x + 9) / ART, (pt.y + 9) / ART); }
   block(0, 0, w, 46 / ART);
   fill(hard, 0, 0, w, 46 / ART);
+  // Nothing grows on a cliff face or across the edge of a terrace.
+  const steps = terraces.map((t) => terraceShape(t));
+  for (const t of steps) {
+    for (const grid of [mask, hard]) {
+      fill(grid, t.x0 - 2, t.wall0 - 1, t.x1 + 2, t.wall1 + 2);
+      fill(grid, t.x0 - 2, t.y0 - 1, t.x0 + 2, t.y1 + 1);
+      fill(grid, t.x1 - 2, t.y0 - 1, t.x1 + 2, t.y1 + 1);
+      fill(grid, t.x0 - 2, (t.level > 0 ? t.y0 : t.y1) - 1, t.x1 + 2, (t.level > 0 ? t.y0 : t.y1) + 1);
+    }
+  }
   const blocked = (x, y, loose) => x < 0 || y < 0 || x >= w || y >= h || (loose ? hard : mask)[y * w + x] === 1;
 
   const edges = stages.map((s) => s.x0 / ART);
@@ -145,13 +156,38 @@ export function planOverworld({ width, height, stops, trails, stages, seed = 202
   });
   // Lower things are drawn later, so they overlap the ones behind them.
   things.sort((a, b) => a.y - b.y);
-  return { w, h, landAt, blocked, things, loose: LOOSE };
+  return { w, h, landAt, blocked, things, loose: LOOSE, terraces: steps };
+}
+
+const TIER = 4; // art pixels of cliff for each level of height
+
+/**
+ * A terrace in art pixels. Raised land shows its cliff along the bottom edge, because the map is
+ * seen from a little to the south. Sunken land shows the wall along its top edge for the same reason.
+ * wall0 to wall1 is that band; y0 to y1 is the flat part you could stand on.
+ */
+export function terraceShape(t) {
+  const x0 = Math.round(t.x0 / ART);
+  const x1 = Math.round(t.x1 / ART);
+  const y0 = Math.round(t.y0 / ART);
+  const y1 = Math.round(t.y1 / ART);
+  const tall = Math.abs(t.level) * TIER;
+  return t.level > 0
+    ? { level: t.level, x0, x1, y0, y1, wall0: y1, wall1: y1 + tall }
+    : { level: t.level, x0, x1, y0: y0 + tall, y1, wall0: y0, wall1: y0 + tall };
+}
+
+/** A colour made lighter (above 1) or darker (below 1). */
+function shade(hex, by) {
+  const n = parseInt(hex.slice(1), 16);
+  const part = (v) => Math.max(0, Math.min(255, Math.round(v * by)));
+  return `rgb(${part(n >> 16)}, ${part((n >> 8) & 255)}, ${part(n & 255)})`;
 }
 
 let cache = { key: '', url: '' };
 /** The finished picture as an image address. Drawn once, then reused. */
 export function overworldArt(opts) {
-  const key = `${opts.width}x${opts.height}:${opts.stops.length}:${opts.stages.length}`;
+  const key = `${opts.width}x${opts.height}:${opts.stops.length}:${opts.stages.length}:${(opts.terraces || []).length}`;
   if (cache.key === key) return cache.url;
   const plan = planOverworld(opts);
   const { w, h } = plan;
@@ -183,6 +219,59 @@ export function overworldArt(opts) {
     const ry = 5 + random() * 9;
     g.fillStyle = random() < 0.5 ? 'rgba(255, 255, 255, .07)' : 'rgba(40, 70, 40, .05)';
     g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, 6.3); g.fill();
+  }
+  // Height. High roads run along raised mesas, and low roads through sunken canyons, so a fork
+  // reads as terraces stepping down the map.
+  // Cliffs are stone whatever grows on top, tinted a little toward the land they stand in.
+  const mix = (a, b, k) => { const pa = parseInt(a.slice(1), 16); const pb = parseInt(b.slice(1), 16); const ch = (sh) => Math.round(((pa >> sh) & 255) * (1 - k) + ((pb >> sh) & 255) * k); return `#${((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1)}`; };
+  for (const t of plan.terraces) {
+    const base = LANDS[plan.landAt((t.x0 + t.x1) / 2)].ground[0];
+    const stone = mix('#9b8e7d', base, 0.25);
+    const wide = t.x1 - t.x0;
+    const tall = t.wall1 - t.wall0;
+    // A slow wobble along the edge, so no cliff is a ruled line, and rounded ends.
+    const wobble = (x) => Math.round(Math.sin(x * 0.31 + t.y0) * 0.8 + Math.sin(x * 0.13 + t.x0) * 0.9);
+    const round = (dx) => (dx < 3 ? 3 - dx : 0);
+    for (let x = t.x0; x < t.x1; x++) {
+      const end = round(Math.min(x - t.x0, t.x1 - 1 - x));
+      const o = wobble(x);
+      const light = (x + t.y0) % 7 < 4;
+      if (t.level > 0) {
+        const top = t.y0 + end;
+        const lip = t.y1 + o - end;
+        p(x, top, 1, lip - top, shade(base, 1.07));
+        p(x, top - 1, 1, 1, shade(base, 0.88));
+        p(x, lip - 1, 1, 1, shade(base, 1.2));
+        p(x, lip, 1, tall, shade(stone, light ? 1 : 0.9));
+        p(x, lip, 1, 1, shade(stone, 1.18));
+        p(x, lip + tall - 1, 1, 1, shade(stone, 0.72));
+        p(x, lip + tall, 1, 2, 'rgba(30, 40, 30, .2)');
+      } else {
+        const rim = t.wall0 + o + end;
+        const floor = rim + tall;
+        p(x, rim - 1, 1, 1, shade(base, 1.18));
+        p(x, rim, 1, tall, shade(stone, light ? 0.92 : 0.82));
+        p(x, rim + tall - 1, 1, 1, shade(stone, 0.66));
+        p(x, floor, 1, t.y1 - end - floor, shade(base, 0.88));
+        p(x, floor, 1, 2, 'rgba(20, 30, 20, .22)');
+        p(x, t.y1 - end, 1, 1, shade(base, 1.12));
+      }
+    }
+    // Cracks down the stone, and the dark edge of each side.
+    for (let x = t.x0 + 2; x < t.x1 - 2; x += 3 + Math.floor(random() * 4)) {
+      const o = wobble(x);
+      const from = (t.level > 0 ? t.y1 : t.wall0) + o + 1 + Math.floor(random() * 2);
+      p(x, from, 1, Math.max(1, tall - 2 - Math.floor(random() * 2)), shade(stone, 0.7));
+    }
+    const sideTop = t.level > 0 ? t.y0 + 3 : t.wall0 + 3;
+    const sideEnd = t.level > 0 ? t.wall1 - 2 : t.y1 - 3;
+    p(t.x0 - 1, sideTop, 1, sideEnd - sideTop, shade(stone, 0.75));
+    p(t.x1, sideTop, 1, sideEnd - sideTop, shade(stone, 0.75));
+    // Speckle on the flat part, and grass that hangs over a mesa's edge.
+    const flat0 = t.level > 0 ? t.y0 + 3 : t.wall1 + 3;
+    const flat1 = t.level > 0 ? t.y1 - 3 : t.y1 - 3;
+    for (let k = 0; k < wide * 0.6; k++) p(t.x0 + 2 + Math.floor(random() * (wide - 4)), flat0 + Math.floor(random() * Math.max(1, flat1 - flat0)), 1, 1, shade(base, t.level > 0 ? (random() < 0.5 ? 1.14 : 1) : (random() < 0.5 ? 0.94 : 0.82)));
+    if (t.level > 0) for (let x = t.x0 + 3; x < t.x1 - 3; x += 2 + Math.floor(random() * 5)) p(x, t.y1 + wobble(x), 1, 1 + Math.floor(random() * 2), shade(base, 1.02));
   }
   for (const t of plan.things) SPRITES[t.kind](p, t.x, t.y, random);
   cache = { key, url: canvas.toDataURL('image/png') };
