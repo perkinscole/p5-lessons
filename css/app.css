@@ -367,29 +367,41 @@ button.btn.on { background: var(--sun); color: #2b2350; }
 }
 @keyframes cloud-drift { to { transform: translateX(150px); } }
 @keyframes map-bob { 50% { transform: translateY(-4px); } }
-.stage-plate { fill: var(--card); stroke: var(--line); stroke-width: 3; shape-rendering: crispEdges; }
+.map-svg { --map-ground: #e9ead9; --map-band: rgba(70, 90, 60, .07); --map-line: rgba(70, 90, 60, .16); --map-tree: #a9bda2; --map-trunk: #b9a98c; --map-path: #f6efd9; --map-path-edge: #6b5a48; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']):not([data-theme='contrast']) .map-svg { --map-ground: #22263c; --map-band: rgba(255, 255, 255, .04); --map-line: rgba(200, 210, 255, .1); --map-tree: #3a4a55; --map-trunk: #40384a; --map-path: #cfc7b0; --map-path-edge: #0f1120; } }
+:root[data-theme='dark'] .map-svg { --map-ground: #22263c; --map-band: rgba(255, 255, 255, .04); --map-line: rgba(200, 210, 255, .1); --map-tree: #3a4a55; --map-trunk: #40384a; --map-path: #cfc7b0; --map-path-edge: #0f1120; }
+:root[data-theme='contrast'] .map-svg { --map-ground: var(--paper); --map-band: transparent; --map-line: transparent; --map-tree: transparent; --map-trunk: transparent; --map-path: var(--card); --map-path-edge: var(--ink); }
+.map-ground { fill: var(--map-ground); }
+.map-band { fill: var(--map-band); }
+.map-contour { fill: none; stroke: var(--map-line); stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round; }
+.map-tree polygon { fill: var(--map-tree); }
+.map-trunk { fill: var(--map-trunk); }
+.stage-plate { fill: var(--card); stroke: var(--line); stroke-width: 2; }
 .stage-name { font: 400 21px var(--font-display); fill: var(--ink); }
-.trail-edge { fill: none; stroke: #1b1638; stroke-width: 9; stroke-linejoin: miter; shape-rendering: crispEdges; }
-.trail { fill: none; stroke: #fff6dc; stroke-width: 5; stroke-linejoin: miter; shape-rendering: crispEdges; }
-.trail.extra, .trail-edge.extra { stroke-dasharray: 10 8; }
-.trail.faint { opacity: .3; stroke-width: 3; }
-.trail-edge.faint { display: none; }
-.node-box { fill: var(--card); stroke: var(--line); stroke-width: 3; shape-rendering: crispEdges; }
-.node-shade { fill: #000; opacity: .16; shape-rendering: crispEdges; }
-.node-plate { fill: var(--card); opacity: .94; shape-rendering: crispEdges; }
+.trail-edge { fill: none; stroke: var(--map-path-edge); stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; }
+.trail { fill: none; stroke: var(--map-path); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.trail.extra { stroke-dasharray: 2 12; }
+.trail-edge.extra { stroke-width: 10; opacity: .55; }
+.trail.faint { opacity: .45; stroke-width: 4; }
+.trail-edge.faint { stroke-width: 7; opacity: .25; }
+.node-box { fill: var(--card); stroke: var(--line); stroke-width: 4; }
+.node-ring { fill: none; stroke: var(--accent); stroke-width: 3; opacity: .7; }
+.node-plate { fill: var(--card); opacity: .96; stroke: var(--map-line); stroke-width: 1; }
 .node[class*='clickable'] { cursor: pointer; }
 .node.clickable:hover .node-box { fill: var(--sun); }
 .node.done .node-box { fill: #1d8f58; }
 .node.done .node-mark { fill: #fff; }
 .node.current .node-box { fill: var(--accent); }
 .node.current .node-mark { fill: #fff; }
-.node.offroad { opacity: .68; }
+.node.offroad { opacity: .55; }
 .node-mark { font: 700 15px var(--font-body); fill: var(--ink); }
 .node-name { font: 12px var(--font-body); fill: var(--ink); }
-.me-sprite { filter: drop-shadow(0 0 3px var(--accent)); }
+.me-sprite { filter: url(#map-sticker) drop-shadow(0 0 5px var(--accent)); }
+@media (prefers-reduced-motion: no-preference) { .node-ring { animation: node-ring 1.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; } }
+@keyframes node-ring { 50% { transform: scale(1.12); opacity: .2; } }
 .crowd { cursor: pointer; }
-.crowd rect { fill: var(--ink); }
-.crowd text { fill: var(--paper); font: 700 12px var(--font-body); }
+.crowd rect { fill: var(--accent); stroke: #fff; stroke-width: 2; }
+.crowd text { fill: var(--accent-ink); font: 700 12px var(--font-body); }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: .88rem; align-items: center; }
 .legend span { display: inline-flex; align-items: center; }
 .people { list-style: none; padding: 0; margin: 0; }
