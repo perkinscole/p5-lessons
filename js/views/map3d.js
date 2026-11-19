@@ -358,10 +358,11 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
         sorted.some((s) => s.id === meId) && h('span.pin-you', 'YOU'),
         people.length > 1 && h('button.pin-count', { type: 'button', 'aria-label': `${people.length} people here. Show names.`, onclick: (e) => { e.stopPropagation(); showCrowd(n.id, people); } }, String(people.length))),
       h(clickable ? 'button.pin-tile' : 'div.pin-tile', {
-        type: clickable ? 'button' : null, title: `${lesson.title}: ${lesson.concepts.join(', ')}`, style: n.path ? `border-color:${PATHS[n.path].color}` : null,
+        type: clickable ? 'button' : null, title: `${lesson.title} · about ${lesson.mins} minutes · ${lesson.concepts.join(', ')}`, style: n.path ? `border-color:${PATHS[n.path].color}` : null,
         'aria-label': `${lesson.title}${state === 'done' ? ', done' : state === 'current' ? ', your next lesson' : ''}`,
         onclick: clickable ? () => onNode.go(n.id) : null,
-      }, state === 'done' ? '✓' : n.id === myCurrent ? '▶' : String(lesson.mins)),
+      }, state === 'done' ? '✓' : n.id === myCurrent ? '▶' : ''),
+      h('span.pin-post'),
       h('div.pin-name', name));
     const p = at(n);
     return { el, x: p.x, z: depthOf(p.y), lift: heightAt(p.x, p.y), busy: sorted.length > 0 || state === 'current' };

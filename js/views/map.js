@@ -135,13 +135,14 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
       onkeydown: clickable ? (e) => { if (e.key === 'Enter') onNode.go(n.id); } : null,
     });
     const title = svg('title');
-    title.textContent = `${l.title}: ${l.concepts.join(', ')}`;
+    title.textContent = `${l.title} · about ${l.mins} minutes · ${l.concepts.join(', ')}`;
     g.append(title);
     if (state === 'current') g.append(svg('rect', { x: -BOX - 6, y: -BOX - 6, width: BOX * 2 + 12, height: BOX * 2 + 12, rx: 12, class: 'node-ring' }));
     // A stop is a rounded tile edged in its road's colour.
     g.append(svg('rect', { x: -BOX, y: -BOX, width: BOX * 2, height: BOX * 2, rx: 8, class: 'node-box', style: n.path ? `stroke:${PATHS[n.path].color}` : null }));
     const mark = svg('text', { class: 'node-mark', 'text-anchor': 'middle', y: 6 });
-    mark.textContent = state === 'done' ? '✓' : n.id === myCurrent ? '▶' : l.mins;
+    mark.textContent = state === 'done' ? '✓' : n.id === myCurrent ? '▶' : '';
+    if (state === 'todo') g.append(svg('circle', { r: 5, class: 'node-dot', style: n.path ? `fill:${PATHS[n.path].color}` : null }));
     g.append(mark);
     const shortName = l.title.length > 15 ? `${l.title.slice(0, 14)}…` : l.title;
     g.append(plate(0, BOX + 15, shortName.length * 6.3 + 12, 19, 'node-plate'));
@@ -233,7 +234,6 @@ export function legend() {
     Object.values(PATHS).map((p) => h('span', h('i.road-dot', { style: `background:${p.color}` }), `${p.road}: ${p.genre}`)),
     h('span', h('i.road-dot.shared'), 'Everyone together'),
     h('span', h('i.road-dot.beyond'), 'Beyond the Summit: extra challenges'),
-    h('span.muted', 'Numbers show lesson minutes.'),
   );
 }
 
