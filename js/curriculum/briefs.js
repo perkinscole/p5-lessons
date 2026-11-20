@@ -7,6 +7,7 @@ const RESET = 'Write a function called `resetGame` at the bottom that puts every
 const BRIEFS = {
   // Lesson 1 names each command's parts on screen, since nothing has been explained yet.
   't1/Meet the grid': 'Press **Run**, then **Grid**. Positions are `(x, y)`: `x` counts from the left, and `y` counts **down** from the top.',
+  't1/Where your code lives': 'Find `function draw() {` on line 5 and its closing `}` on line 7. Your drawing code goes **between** them.',
   't1/Add a sun': '`ellipse(x, y, width, height)` draws an oval: where it goes, then how big it is. Add this line below `background`:',
   't1/Add the ground': '`rect(x, y, width, height)` draws a rectangle. Its `x` and `y` are its **top-left corner**. Add ground along the bottom:',
   't1/Add color': '`fill(red, green, blue)` colors the shapes drawn after it. Each number is 0 to 255. Make the sun yellow and the ground green.',

@@ -8,6 +8,7 @@ import { ratingBox, confusingButton, helpBox } from './feedback.js';
 import { chime, sparkle, pop, countUp, markCelebrated, correct, incorrect, splash, popBadge, popRank, flyXP, gainXP } from '../celebrate.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
+import { todayFor } from '../curriculum/today.js';
 import { loadMe, badgeChip } from './student.js';
 import { statsFor, XP, isDone } from '../game/rules.js';
 import { openSpritePicker } from './sprites.js';
@@ -853,6 +854,38 @@ export async function viewLesson(main, id, previewPath) {
     ));
   }
 
+  // "Today": what this lesson builds and the few ideas it turns on. Shown once when a student first
+  // opens the lesson, and again whenever they press Key ideas. Kept short on purpose.
+  const openToday = () => {
+    const today = todayFor(id);
+    let demo = null;
+    let answer = '';
+    try { answer = buildSolution(id, path); } catch (_) { /* no finished version to show */ }
+    // Only a finished version that runs with nothing but its own code: no sprites, camera or model to load.
+    const showable = answer && !/SPRITES\.|ml5\.|createCapture|loadSound|loadImage/.test(answer);
+    modal((close) => {
+      const frame = h('div.today-frame');
+      if (showable) {
+        demo = createPlayer(() => {});
+        frame.append(demo.el);
+        demo.run(answer, {}, filesThrough(id, path));
+      }
+      return h('div.stack.today',
+        h('p.eyebrow', `Today · ${lesson.mins} minutes`),
+        h('h2', lesson.title),
+        h('div.today-top',
+          showable && h('figure.today-demo', frame, h('figcaption.muted.small', 'A finished one. Yours will look different.')),
+          h('div.stack',
+            h('h3', 'You will build'),
+            h('p.today-build', today ? today.build : lesson.hook),
+            h('h3', 'Key ideas'),
+            today
+              ? h('dl.ideas', today.ideas.map((x) => h('div', h('dt', x.term), h('dd', x.means))))
+              : h('p.concepts', lesson.concepts.map((c) => h('span.tag', c))))),
+        h('div.row.end', h('button.btn.primary.big', { onclick: close }, 'Start')));
+    }, { wide: true, onClose: () => { if (demo) demo.destroy(); } });
+  };
+
   const head = h('header.lesson-head');
   const drawHead = () => {
     const stage = stageOf(id);
@@ -864,6 +897,7 @@ export async function viewLesson(main, id, previewPath) {
       ),
       h('div.row.lesson-actions',
         status,
+        h('button.btn', { onclick: openToday, title: 'What this lesson builds, and its key ideas' }, '💡 Key ideas'),
         isStudent && canEdit(MAIN) && h('button.btn', { onclick: cleanCopy }, 'Reset code'),
         h('button.btn', { onclick: openPicker }, 'Sprites'),
         h('button.btn', { onclick: openSounds }, 'Sounds'),
@@ -968,6 +1002,8 @@ export async function viewLesson(main, id, previewPath) {
   drawFileBar();
   cm.refresh();
   run();
+  // A student's first look at a lesson starts with what they are about to build and learn.
+  if (isStudent && !work) openToday();
 
   const beforeUnload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
   window.addEventListener('beforeunload', beforeUnload);

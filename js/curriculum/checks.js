@@ -4,12 +4,15 @@ const Q = (after, q, options, answer, why, code) => ({ after, q, options, answer
 
 export const CHECKS = {
   t1: [
-    Q(1, 'What goes between the numbers inside the parentheses?', ['A semicolon', 'A comma', 'Nothing'], 1, 'Commas split the numbers. A semicolon ends the line.', 'ellipse(340, 60, 70, 70);'),
-    Q(1, 'Which mark is missing from this line?', ['A comma', 'A )', 'A ;'], 1, 'Every ( needs a matching ).', 'rect(0, 320, 400, 80;'),
-    Q(3, 'Where does this square appear?', ['Bottom right', 'Top left', 'Center'], 1, 'x and y both start at 0, the top left corner.', 'rect(0, 0, 50, 50);'),
+    Q(2, 'What goes between the numbers inside the parentheses?', ['A semicolon', 'A comma', 'Nothing'], 1, 'Commas split the numbers. A semicolon ends the line.', 'ellipse(340, 60, 70, 70);'),
+    Q(2, 'Which mark is missing from this line?', ['A comma', 'A )', 'A ;'], 1, 'Every ( needs a matching ).', 'rect(0, 320, 400, 80;'),
+    Q(4, 'Where does this square appear?', ['Bottom right', 'Top left', 'Center'], 1, 'x and y both start at 0, the top left corner.', 'rect(0, 0, 50, 50);'),
     Q(0, 'Which way does a bigger `y` move a shape?', ['Up', 'Down', 'Right'], 1, 'y counts down from the top. Turn on Grid to see it.'),
-    Q(2, 'In this line, which number is the width?', ['340', '60', '70'], 2, 'The order is x, y, width, height.', 'ellipse(340, 60, 70, 30);'),
-    Q(4, 'Where does a `rect` start drawing?', ['Its center', 'Its bottom edge', 'Its top-left corner'], 2, 'x and y are the top-left corner.'),
+    Q(3, 'In this line, which number is the width?', ['340', '60', '70'], 2, 'The order is x, y, width, height.', 'ellipse(340, 60, 70, 30);'),
+    Q(5, 'Where does a `rect` start drawing?', ['Its center', 'Its bottom edge', 'Its top-left corner'], 2, 'x and y are the top-left corner.'),
+    // Added later. Saved answers are stored by position in this list, so new questions go at the end.
+    Q(1, 'Which line closes `draw()`?', ['Line 1', 'Line 2', 'Line 3'], 2, 'The `}` on line 3 closes the function that `{` opened on line 1.', 'function draw() {\n  background(0);\n}'),
+    Q(1, 'Where does new drawing code for `draw()` go?', ['Above `function draw() {`', 'Between its `{` and `}`', 'After its closing `}`'], 1, 'Only code between the braces belongs to draw().'),
   ],
   t2: [
     Q(1, 'What color is this square?', ['Green', 'Blue', 'Red'], 2, 'The first number in fill is red.', 'fill(255, 0, 0);\nrect(10, 10, 20, 20);'),

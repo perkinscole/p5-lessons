@@ -531,16 +531,16 @@ test('the feedback report names files and steps the way students see them, with 
   const entry = {
     lesson_id: 't1', started: 3, finished: 1, count: 3, average: 4, stars: [0, 0, 1, 1, 1], confusing: {}, steps: {}, comments: [],
     hardest: ['making the sun'], better: ['more pictures'],
-    flags: { 'step:2': { count: 2, reasons: { unclear: 2 }, notes: ['where does the | sun line go'] }, 'quiz:1': { count: 1, reasons: { hard: 1 }, notes: [] } },
-    help: { 2: 1, 5: 1 }, quiz: { 0: { tries: 3, missed: 2 } },
+    flags: { 'step:3': { count: 2, reasons: { unclear: 2 }, notes: ['where does the | sun line go'] }, 'quiz:1': { count: 1, reasons: { hard: 1 }, notes: [] } },
+    help: { 3: 1, 6: 1 }, quiz: { 0: { tries: 3, missed: 2 } },
   };
   assert.equal(sourceFile('m6'), 'js/curriculum/mind.js');
-  assert.deepEqual(troubleSteps(entry).map((s) => [s.index, s.flags, s.help]), [[2, 2, 1], [5, 0, 1]]);
+  assert.deepEqual(troubleSteps(entry).map((s) => [s.index, s.flags, s.help]), [[3, 2, 1], [6, 0, 1]]);
   assert.equal(quizRows(entry)[0].rate, 2 / 3);
   const text = buildReport([entry, { ...entry, lesson_id: 'zz' }], { className: 'Period 3', students: 3, date: '2026-11-18' });
   assert.match(text, /File: `js\/curriculum\/trunk\.js`/);
-  assert.match(text, /\| 3 \| Add a sun \| 2 \| the instructions were unclear 2 \| 1 \|/);
-  assert.match(text, /- Step 3: "where does the \| sun line go"/);
+  assert.match(text, /\| 4 \| Add a sun \| 2 \| the instructions were unclear 2 \| 1 \|/);
+  assert.match(text, /- Step 4: "where does the \| sun line go"/);
   assert.match(text, /67% \(2\/3\)/);
   assert.match(text, /### "What would make this lesson better\?"\n\n- more pictures/);
   assert.match(text, /student names removed/);
@@ -735,4 +735,36 @@ test('no two animations in the stylesheet share a name', async () => {
   // A later one silently replaces an earlier one. That once sent the character on the character page sliding off its stage.
   const names = [...readFileSync(new URL('../css/app.css', import.meta.url), 'utf8').matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]);
   assert.deepEqual(names.filter((n, i) => names.indexOf(n) !== i), []);
+});
+
+// The "Today" card ----------------------------------------------------------------------------------
+test('Base Camp lessons say what they build and define a few key ideas, briefly', async () => {
+  const { todayFor, todayLessons } = await import('../js/curriculum/today.js');
+  const camp = [...STAGES.find((s) => s.id === 'camp').lessons, ...SIDE_TRAILS.map((t) => t.id)];
+  for (const id of camp) assert.ok(todayFor(id), `${id} has a Today entry`);
+  const words = (t) => t.trim().split(/\s+/).length;
+  for (const id of todayLessons()) {
+    assert.ok(getLesson(id), `${id} is a real lesson`);
+    const { build, ideas } = todayFor(id);
+    assert.ok(words(build) <= 18 && /[.!]$/.test(build), `${id}: say what is built in one short sentence`);
+    assert.ok(ideas.length >= 2 && ideas.length <= 5, `${id}: two to five key ideas, not ${ideas.length}`);
+    assert.equal(new Set(ideas.map((x) => x.term)).size, ideas.length, `${id}: an idea is listed twice`);
+    for (const x of ideas) {
+      assert.ok(x.term && words(x.term) <= 4, `${id}: "${x.term}" is not a short term`);
+      assert.ok(words(x.means) <= 20, `${id}: "${x.term}" takes ${words(x.means)} words to explain`);
+    }
+  }
+  assert.equal(todayFor('zz9'), null);
+});
+
+test('lesson 1 teaches where code lives before asking for any code, and checks it', () => {
+  const t1 = getLesson('t1');
+  const braces = t1.steps.findIndex((s) => s.title === 'Where your code lives');
+  const firstCode = t1.steps.findIndex((s) => s.code || s.edits);
+  assert.ok(braces >= 0 && braces < firstCode, 'the braces step comes before the first line students add');
+  const brief = briefOf(t1.steps[braces]).brief;
+  assert.match(brief, /\{/, 'the instruction students see names the opening brace');
+  assert.match(brief, /\}/, 'and the closing one');
+  assert.match(brief, /between/);
+  assert.ok(checksFor('t1').filter((q) => q.after === braces).length >= 2, 'two check questions follow it');
 });

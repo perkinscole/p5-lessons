@@ -936,3 +936,19 @@ button.pin-stop:hover img, button.pin-stop:focus-visible img { filter: drop-shad
 @keyframes hike { from { left: 0; } to { left: 270px; } }
 @keyframes hike-hop { from { transform: translateY(0); } to { transform: translateY(-12px); } }
 @media (prefers-reduced-motion: reduce) { .loading-hiker { animation: none; left: 135px; } }
+
+/* The "Today" card: what a lesson builds and its key ideas. */
+.today h2 { font-size: 2rem; }
+.today h3 { font: 700 .8rem var(--font-body); letter-spacing: .05em; text-transform: uppercase; color: var(--ink-2); margin: 0; }
+.today-top { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.today-top > .stack { flex: 1 1 280px; gap: 8px; }
+.today-demo { margin: 0; flex: 0 0 220px; }
+.today-frame { width: 220px; height: 220px; background: #14141f; border: 2px solid var(--line); }
+/* The game is drawn at its full 400 dots and shrunk to fit, so the whole picture shows. */
+.today-frame { overflow: hidden; box-sizing: content-box; }
+.today-frame .player { width: 400px; height: 400px; transform: scale(.55); transform-origin: 0 0; }
+.today-build { font-size: 1.15rem; font-weight: 700; margin: 0 0 6px; }
+.ideas { margin: 0; display: grid; gap: 8px; }
+.ideas div { border-left: 4px solid var(--sun); padding-left: 10px; }
+.ideas dt { font: 700 1rem var(--font-code); }
+.ideas dd { margin: 0; }

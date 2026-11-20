@@ -2,7 +2,7 @@
 import { lesson } from './engine.js';
 
 lesson({
-  id: 't1', title: 'Hello, Canvas', mins: 40, concepts: ['coordinates', 'function calls', 'color'],
+  id: 't1', title: 'Hello, Canvas', mins: 40, concepts: ['coordinates', 'code blocks', 'function calls', 'color'],
   hook: 'Every game you have ever played is a grid of tiny dots. Today you learn to tell the computer exactly where to put them, and you draw your first scene.',
   starter: `function setup() {
   createCanvas(400, 400);
@@ -18,8 +18,15 @@ function draw() {
       say: 'Press **Run**. The blue square is your **canvas**, 400 dots wide and 400 tall. Press **Grid** above your code to see the numbers, and move your mouse over the canvas to read any spot.\n\nPositions are written `(x, y)`. `x` counts dots from the left. `y` counts dots from the **top**, so bigger `y` means lower down. Most people expect the opposite, so keep this one in mind.',
     },
     {
+      title: 'Where your code lives', mins: 4,
+      say: 'Find `function draw() {` on line 5 and its closing `}` on line 7. Your drawing code goes **between** them.\n\nA **function** is a named set of instructions. The `{` opens it and the `}` closes it, like the front and back covers of a book. Everything between them belongs to that function. Those lines are pushed in two spaces so you can see what belongs where.\n\nThis sketch has two functions. `setup()` runs once, at the start. `draw()` runs over and over to paint the picture.\n\nEvery `{` needs its own `}`. If one goes missing, or a line lands outside them, nothing runs.',
+      show: `function draw() {   { opens it
+  background(...);  inside
+}                   } closes it`,
+    },
+    {
       title: 'How a line of code is built', mins: 5,
-      say: 'Every drawing line is built the same way: a **name**, then `( )` holding numbers split by **commas**, then a `;` to end it.\n\nCode between `{` and `}` belongs to the function just above it, so `background` belongs to `draw()`. Every `{` needs a `}`, and every `(` needs a `)`. The lines inside are pushed in with spaces so you can see what belongs where.\n\nComputers are picky about these marks. One missing comma or bracket, and nothing runs.',
+      say: 'Every drawing line is built the same way: a **name**, then `( )` holding numbers split by **commas**, then a `;` to end it.\n\nEvery `(` needs a `)`, just as every `{` needs a `}`.\n\nComputers are picky about these marks. One missing comma or bracket, and nothing runs.',
       show: `background(135, 206, 235);
 
 background  the name
@@ -62,7 +69,7 @@ rect(0, 320, 400, 80);`,
       check: /fill\s*\(/,
     },
     {
-      title: 'Draw a character', mins: 10,
+      title: 'Draw a character', mins: 8,
       say: 'Now build a character out of shapes: at least **three more** shapes, standing on the ground. Try a `rect` for a body, an `ellipse` for a head, and `line(x1, y1, x2, y2)` for arms.\n\nGuess the numbers, press Run, and adjust. That loop of guess, run, and fix is how programmers actually work.',
       reveal: true,
       code: `  rect(180, 240, 40, 80);
@@ -74,7 +81,7 @@ rect(0, 320, 400, 80);`,
       hint: 'You need 5 or more shapes in total, counting the sun and the ground.',
     },
     {
-      title: 'Read the error', mins: 5,
+      title: 'Read the error', mins: 3,
       say: 'Your code works, so there is no error yet. Make one on purpose: delete the `)` from one of your lines and press Run. Read the message under your game: it names the line and what is missing. Put the `)` back.\n\nErrors do not mean you failed. They are the computer asking you a question, and you will see them every day from now on.',
     },
   ],
