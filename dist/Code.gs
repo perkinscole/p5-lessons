@@ -1016,8 +1016,10 @@ function createAssignments_(me, classId, items, opts) {
   if (!link) throw new Error('Import this course from Google Classroom first.');
   if (!Array.isArray(items) || !items.length || items.length > 30) throw new Error('Choose up to 30 lessons.');
   const publish = !!(opts && opts.publish);
-  const appUrl = String(ScriptApp.getService().getUrl() || '');
   const out = { created: 0, skipped: [], failed: [] };
+  // Assignments go under one "Pixel Trail" topic when this script is allowed to manage topics.
+  const topicId = classroomTopic_(link.course_id);
+  out.topic = !!topicId;
   items.forEach((it) => {
     const [slot] = cleanSlots_([it]);
     const title = text_(it.title, 150).trim();
@@ -1029,10 +1031,13 @@ function createAssignments_(me, classId, items, opts) {
     if (rows_('GradeSync').some((g) => g.class_id === classId && g.lesson_id === slot.key)) { out.skipped.push(`${title}: already in Classroom`); return; }
     try {
       const body = {
-        title, description: text_(it.description, 1000), workType: 'ASSIGNMENT', state: publish ? 'PUBLISHED' : 'DRAFT', maxPoints: points,
+        title, description: description_(it.description), workType: 'ASSIGNMENT', state: publish ? 'PUBLISHED' : 'DRAFT', maxPoints: points,
         ...(due ? dueParts_(due) : {}),
       };
-      if (/^https:\/\//.test(appUrl)) body.materials = [{ link: { url: appUrl, title: 'Open Pixel Trail' } }];
+      if (topicId) body.topicId = topicId;
+      // The link opens this stop for whoever clicks it: the lesson on their own road.
+      const stop = stopUrl_(slot.key);
+      if (stop) body.materials = [{ link: { url: stop, title: 'Open this lesson in Pixel Trail' } }];
       const created = Classroom.Courses.CourseWork.create(body, link.course_id);
       withLock_(() => insert_('GradeSync', {
         class_id: classId, lesson_id: slot.key, coursework_id: String(created.id), link: created.alternateLink || '', due, pushed_at: '', sent: {}, title, points,
@@ -1040,6 +1045,65 @@ function createAssignments_(me, classId, items, opts) {
       out.created++;
     } catch (e) {
       out.failed.push(`${title}: ${text_(e && e.message, 160)}`);
+    }
+  });
+  return out;
+}
+
+/** A description for Classroom: plain text, line breaks kept, nothing that could be read as markup. */
+const DESCRIPTION_MAX = 8000;
+function description_(value) {
+  return String(value === null || value === undefined ? '' : value).replace(/\r/g, '').replace(/[<>]/g, '').replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, DESCRIPTION_MAX);
+}
+
+/** The app's address with a stop on the end, or '' when the address isn't a web link. */
+function stopUrl_(key) {
+  const base = String(ScriptApp.getService().getUrl() || '');
+  if (!/^https:\/\//.test(base)) return '';
+  return `${base}${base.indexOf('?') >= 0 ? '&' : '?'}stop=${encodeURIComponent(key)}`;
+}
+
+/**
+ * The id of the course's "Pixel Trail" topic, made if it isn't there. Returns '' when the script
+ * hasn't been given the Classroom topics permission, or Classroom says no: a topic is a nicety, and
+ * assignments must still be created without one.
+ */
+const TOPIC_NAME = 'Pixel Trail';
+function classroomTopic_(courseId) {
+  try {
+    const found = allPages_((t) => Classroom.Courses.Topics.list(courseId, pageOpts_(t)), 'topic').find((x) => x.name === TOPIC_NAME);
+    if (found) return String(found.topicId);
+    return String(Classroom.Courses.Topics.create({ name: TOPIC_NAME }, courseId).topicId || '');
+  } catch (e) {
+    console.warn(`TOPIC_SKIPPED: ${e && e.message}`);
+    return '';
+  }
+}
+
+/**
+ * Put fresh descriptions on assignments this app already made, for ones created before descriptions
+ * said anything about the trail or the standards. Only the description changes: never the name,
+ * points, due date, or anyone's grade.
+ */
+function updateAssignments_(me, classId, items) {
+  ownerOnly_(me);
+  ownedClass_(me, classId);
+  const link = linkFor_(classId);
+  if (!link) throw new Error('Import this course from Google Classroom first.');
+  if (!Array.isArray(items) || !items.length || items.length > 40) throw new Error('Choose up to 40 lessons.');
+  const syncs = rows_('GradeSync').filter((g) => g.class_id === classId);
+  const out = { updated: 0, skipped: [], failed: [] };
+  items.forEach((it) => {
+    const [slot] = cleanSlots_([it]);
+    const sync = syncs.find((g) => g.lesson_id === slot.key);
+    const text = description_(it.description);
+    if (!sync) { out.skipped.push(`${slot.key}: not in Classroom yet`); return; }
+    if (!text) { out.failed.push(`${sync.title || slot.key}: nothing to write`); return; }
+    try {
+      Classroom.Courses.CourseWork.patch({ description: text }, link.course_id, sync.coursework_id, { updateMask: 'description' });
+      out.updated++;
+    } catch (e) {
+      out.failed.push(`${sync.title || slot.key}: ${text_(e && e.message, 160)}`);
     }
   });
   return out;
@@ -1249,6 +1313,7 @@ const TEACHER_ROUTES = {
   gradeSyncStatus: gradeSyncStatus_,
   pushGrades: pushGrades_,
   createAssignments: createAssignments_,
+  updateAssignments: updateAssignments_,
   listTeams: listTeams_,
   saveTeams: saveTeams_,
   classAlerts: classAlerts_,

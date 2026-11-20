@@ -110,6 +110,15 @@ On your Classes page, press **Import from Google Classroom** to bring in courses
 
 A class's **Classroom grades** tab makes named assignments in that section's Classroom: tick lessons, edit their names, set points and an optional due date, and post them now or save them as drafts. Each assignment matches a lesson number in the gradebook, so one covers all four roads. After grading in the app, **Send grades** sends every approved score that changed, scaled to the assignment's points. Then press Return in Classroom. The **Assignments** tab shows every Classroom assignment and each student's status. **Keeping up** flags students who are behind the pace for your term dates, have gone quiet, have work to fix, or have missing Classroom work. You can turn on an email on school mornings, sent only when someone needs a check-in.
 
+Each assignment the app creates carries:
+
+- **A description** that says where the stop is on the trail, what the lesson is and teaches, how long it takes, how to hand it in, and the Massachusetts standards it addresses, quoted word for word and split into "assessed" and "also practiced". At a fork, where each road has its own lesson, it lists all four lessons and names the roads each standard applies to. Open **What the assignment will say** under any lesson to read it before you create anything.
+- **A link** that opens that lesson for whoever clicks it, on their own road. A student who hasn't reached the lesson yet is sent to their journey map.
+
+**Update descriptions on existing assignments** rewrites the description on assignments the app made earlier. It changes nothing else: not the name, points, due date, or any grade.
+
+Optionally, assignments can be filed under a **Pixel Trail** topic in Classroom. That needs one more permission. To turn it on, add `"https://www.googleapis.com/auth/classroom.topics"` to the `oauthScopes` list in `appsscript.json`, run any function once in the editor to approve it, and publish a new version. Do this outside class time: until you approve the new permission the app will not open for anyone. Without it, everything above still works and assignments are simply created with no topic.
+
 After updating to this version, open the Apps Script editor, run any function once, and approve the new Classroom and email permissions. Then publish a new version. Your Workspace admin may need to allow the Classroom API.
 
 ## Display and project files

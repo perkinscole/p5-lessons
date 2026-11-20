@@ -1,5 +1,6 @@
 // Teacher screens for group projects, and for sending grades to Google Classroom.
 import { h, clear, toast, attempt, confirmBox } from '../ui.js';
+import { lessonSlots } from '../curriculum/classroom.js';
 import { app } from '../main.js';
 import { allLessons, getLesson } from '../curriculum/engine.js';
 import { STAGES, PATHS, PATH_IDS } from '../curriculum/graph.js';
@@ -99,27 +100,8 @@ export async function groupsTab(cls, students, reload) {
 
 const todayText = () => new Date().toLocaleDateString('en-CA');
 
-/** Lesson numbers, as in the gradebook. Roads share numbers, so a road number lists each road's lesson. */
-export function lessonSlots() {
-  const slots = [];
-  let n = 0;
-  for (const st of STAGES) {
-    const shared = st.kind === 'shared';
-    const count = shared ? st.lessons.length : st.branches[PATH_IDS[0]].length;
-    for (let i = 0; i < count; i++) {
-      n++;
-      const ids = shared ? [st.lessons[i]] : PATH_IDS.map((p) => st.branches[p][i]);
-      slots.push({
-        key: `L${n}`, n, ids, beyond: !!st.beyond,
-        title: shared ? getLesson(ids[0]).title : `${st.name} ${i + 1}`,
-        detail: shared ? '' : [...new Set(ids.map((id) => getLesson(id).title))].join(' · '),
-        description: shared ? getLesson(ids[0]).hook
-          : `Each road has its own lesson here. ${PATH_IDS.map((p, k) => `${PATHS[p].road}: ${getLesson(ids[k]).title}`).join('. ')}.`,
-      });
-    }
-  }
-  return slots;
-}
+// Which lessons each assignment covers, and its description, live in curriculum/classroom.js.
+export { lessonSlots };
 
 export async function sendGradesTab(cls, reload) {
   const slots = lessonSlots();
@@ -157,7 +139,9 @@ export async function sendGradesTab(cls, reload) {
     picks.push({ slot, box, name });
     return h('tr',
       h('td', box),
-      h('th', { scope: 'row' }, name, lessonLine),
+      h('th', { scope: 'row' }, name, lessonLine,
+        // Exactly what students and families will read in Classroom.
+        h('details.small', h('summary', 'What the assignment will say'), h('pre.assignment-text', { translate: 'no' }, slot.description))),
       h('td.num', ''), h('td', ''),
       h('td.num', st.approved ? `${st.approved} approved` : ''),
       h('td', ''));
@@ -182,11 +166,26 @@ export async function sendGradesTab(cls, reload) {
       key: p.slot.key, ids: p.slot.ids, title: p.name.value.trim(), points: Number(points.value), due: due.value, description: p.slot.description,
     })), { publish: publish.checked }));
     if (!r) { drawCreate(); return; }
-    toast(`Created ${r.created} assignment${r.created === 1 ? '' : 's'} in Classroom.`);
+    toast(`Created ${r.created} assignment${r.created === 1 ? '' : 's'} in Classroom${r.created && r.topic ? ', under the Pixel Trail topic' : ''}.`);
     if (r.skipped.length || r.failed.length) clear(createOut).append(...[...r.skipped, ...r.failed].map((x) => h('p.warn.small', x)));
     else reload();
   };
   drawCreate();
+
+  // Assignments made before descriptions covered the trail and the standards can be brought up to date.
+  const made = slots.filter((x) => status.get(x.key).synced);
+  const refreshOut = h('div.stack.tight');
+  const refresh = made.length > 0 && h('button.btn.small', { type: 'button', onclick: async () => {
+    const sure = await confirmBox(`Update the description on ${made.length} assignment${made.length === 1 ? '' : 's'}?`,
+      'Each one gets the current description: where the stop is on the trail, what the lesson teaches, how to do it, and its standards. Names, points, due dates, and grades are not touched.', 'Update');
+    if (!sure) return;
+    refresh.disabled = true;
+    const r = await attempt(() => app.store.updateAssignments(cls.id, made.map(({ key, ids, description }) => ({ key, ids, description }))));
+    refresh.disabled = false;
+    if (!r) return;
+    toast(`Updated ${r.updated} description${r.updated === 1 ? '' : 's'} in Classroom.`);
+    clear(refreshOut).append(...[...r.skipped, ...r.failed].map((x) => h('p.warn.small', x)));
+  } }, `Update descriptions on ${made.length} existing assignment${made.length === 1 ? '' : 's'}`);
 
   const waiting = data.items.filter((i) => i.synced).reduce((a, i) => a + i.waiting, 0);
   const unmade = data.items.filter((i) => !i.synced && i.approved).length;
@@ -221,7 +220,9 @@ export async function sendGradesTab(cls, reload) {
         h('label.field.small', h('span', 'Points each'), points),
         h('label.field.small', h('span', 'Due date (optional)'), due),
         h('label.check', publish, h('span', 'Post now (otherwise saved as drafts in Classroom)'))),
-      h('div.row', create), createOut),
+      h('div.row', create), createOut,
+      refresh && h('div.row', refresh), refreshOut,
+      h('p.muted.small', 'Each assignment carries a description (the stop on the trail, what the lesson teaches, how to do it, and its Massachusetts standards) and a link that opens that lesson for each student on their own road.')),
     h('section.card.stack',
       h('h2', 'Getting grades into PowerSchool'),
       h('ol.steps',

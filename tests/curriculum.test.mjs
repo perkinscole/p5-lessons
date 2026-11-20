@@ -2,7 +2,7 @@
 // Every lesson must build into working code that passes its own checks.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PATH_IDS, STAGES, SIDE_TRAILS, sequence, coreSequence, mapLayout, previousGameLesson } from '../js/curriculum/graph.js';
+import { PATHS, PATH_IDS, STAGES, SIDE_TRAILS, sequence, coreSequence, mapLayout, previousGameLesson } from '../js/curriculum/graph.js';
 import { ALIGNMENT } from '../js/curriculum/alignment.js';
 import { checksFor } from '../js/curriculum/checks.js';
 import { recentAchievements } from '../js/game/rules.js';
@@ -681,4 +681,51 @@ test('every lesson stop on the 3D map gets a building that suits its road and la
   assert.notEqual(stopKind({ lane: -1.5, land: 'forest', k: 0 }), stopKind({ lane: -1.5, land: 'forest', k: 1 }), 'neighbours differ');
   assert.equal(stopKind({ lane: 0, land: 'camp', k: 0 }), 'tent');
   assert.equal(stopKind({ lane: 0, land: 'snow', k: 1, summit: true }), 'shrine', 'the Summit is special');
+});
+
+test('every Classroom assignment describes its stop on the trail and quotes its standards exactly', async () => {
+  const { lessonSlots, slotStandards, lessonForStop, DESCRIPTION_MAX } = await import('../js/curriculum/classroom.js');
+  const slots = lessonSlots();
+  const core = slots.filter((s) => !s.beyond).length;
+  assert.ok(core >= 10 && core <= 15);
+  assert.deepEqual(slots.map((s) => s.key), slots.map((_, i) => `L${i + 1}`));
+  for (const slot of slots) {
+    const text = slot.description;
+    const where = `${slot.key} (${slot.title})`;
+    assert.ok(text.length > 300 && text.length < DESCRIPTION_MAX, `${where}: ${text.length} characters`);
+    assert.ok(!/undefined|null|NaN|\[object/.test(text), `${where}: something was left blank`);
+    assert.ok(!/[<>]/.test(text), `${where}: the server would strip this`);
+    assert.ok(text.startsWith(`Pixel Trail · ${slot.stage} · Lesson ${slot.n}`), `${where}: says where it is on the trail`);
+    assert.equal(text.includes(`of ${core}`), !slot.beyond, `${where}: core lessons count toward the ${core}`);
+    assert.ok(text.includes('Press "Submit lesson"'), `${where}: says how to hand it in`);
+    // Every lesson at the stop is named, with its own hook.
+    for (const id of slot.ids) { const l = getLesson(id); assert.ok(text.includes(l.title) && text.includes(l.hook), `${where}: ${id} is described`); }
+    assert.equal(text.includes('Do the one on your road.'), slot.ids.length > 1, where);
+    // Every standard any lesson here addresses is listed, word for word, and no others.
+    const want = new Set(slot.ids.flatMap((id) => [...(ALIGNMENT[id]?.anchor || []), ...(ALIGNMENT[id]?.support || [])]));
+    const listed = slotStandards(slot);
+    assert.deepEqual(new Set(listed.map((s) => s.code)), want, `${where}: its standards`);
+    for (const s of listed) {
+      const official = STANDARDS.find((x) => x.code === s.code).text;
+      assert.ok(text.includes(`${s.code}`) && text.includes(official), `${where}: ${s.code} is quoted exactly`);
+      assert.equal(s.assessed, slot.ids.some((id) => (ALIGNMENT[id]?.anchor || []).includes(s.code)), `${where}: ${s.code} assessed or practiced`);
+      // At a fork, each road is named under what it really does with the standard: never both, never neither.
+      if (slot.ids.length > 1) slot.ids.forEach((id, k) => {
+        const road = PATHS[PATH_IDS[k]].road;
+        const anchors = (ALIGNMENT[id]?.anchor || []).includes(s.code);
+        const supports = (ALIGNMENT[id]?.support || []).includes(s.code);
+        assert.equal(s.roads.includes(road), anchors, `${where}: ${s.code} assessed on ${road}`);
+        assert.equal(s.practiced.includes(road), supports && !anchors, `${where}: ${s.code} practiced on ${road}`);
+      });
+      else assert.deepEqual([s.roads, s.practiced], [[], []]);
+    }
+    assert.equal(text.includes('Massachusetts Digital Literacy and Computer Science standards'), want.size > 0, where);
+  }
+  // A link opens the lesson on the student's own road, or nothing if they have no road yet.
+  const fork = slots.find((s) => s.ids.length > 1);
+  PATH_IDS.forEach((p, k) => assert.equal(lessonForStop(fork.key, p), fork.ids[k]));
+  assert.equal(lessonForStop(fork.key, null), null);
+  assert.equal(lessonForStop('L1', null), 't1');
+  assert.equal(lessonForStop('L999', 'arcade'), null);
+  assert.equal(lessonForStop('<script>', 'arcade'), null);
 });

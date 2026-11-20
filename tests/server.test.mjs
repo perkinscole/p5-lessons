@@ -491,7 +491,12 @@ test('named assignments are made ahead, and grades go to them scaled to their po
   assert.equal(data.created[0].maxPoints, 100);
   assert.ok(data.created[0].dueDate && data.created[0].dueTime);
   assert.equal(data.created[1].dueDate, undefined, 'due date is optional');
-  assert.equal(data.created[0].materials[0].link.url, 'https://script.test/exec');
+  // The link opens that stop, and without the topics permission the assignment is still made, with no topic.
+  assert.equal(data.created[0].materials[0].link.url, 'https://script.test/exec?stop=L1');
+  assert.equal(data.created[1].materials[0].link.url, 'https://script.test/exec?stop=L6');
+  assert.equal(made.topic, false);
+  assert.equal(data.created[0].topicId, undefined);
+  assert.equal(data.created[0].description, 'Draw a scene.');
   assert.equal(t('createAssignments', r.class_id, [item], {}).skipped.length, 1, 'no second copy');
   const drafts = t('createAssignments', r.class_id, [{ key: 'L2', ids: ['t3'], title: 'It Moves!', points: 10 }], {});
   assert.equal(drafts.created, 1);
@@ -1133,4 +1138,45 @@ test('student view: a teacher can be a pretend student that no class ever sees',
   // Starting over clears its work.
   assert.equal(teacher('previewReset').student.id, s.student.id);
   assert.equal(teacher('asStudent', 'myWorks', []).length, 0);
+});
+
+test('Classroom assignments: descriptions, the topic, and bringing old ones up to date', () => {
+  const data = { courses: [{ id: 'c1', name: 'CS 7' }], rosters: { c1: [{ userId: 'g1', profile: { emailAddress: 'ava@school.test', name: { givenName: 'Ava', familyName: 'Lee' } } }] }, topicsAllowed: true };
+  const server = createServer({ owner: OWNER, classroom: data });
+  const t = server.as(OWNER);
+  t('listClasses');
+  server.sheets.get('Teachers').appendRow([OTHER, 'Other', '2026-01-01']);
+  const [r] = t('importCourses', ['c1']);
+  const long = `Pixel Trail · Base Camp · Lesson 1 of 15\n\nHello, Canvas\nDraw   a scene.\r\n\n\n\nStandards\n• 6-8.CT.d.6: Use an iterative approach <b>bold</b>\n${'x'.repeat(9000)}`;
+  const first = t('createAssignments', r.class_id, [{ key: 'L1', ids: ['t1'], title: 'Hello, Canvas', points: 100, description: long }], {});
+  assert.equal(first.created, 1);
+  assert.equal(first.topic, true);
+  const work = data.created[0];
+  // Line breaks survive, so the description reads as written. Markup and runs of blank lines don't.
+  assert.ok(work.description.startsWith('Pixel Trail · Base Camp · Lesson 1 of 15\n\nHello, Canvas\nDraw a scene.\n\nStandards\n• 6-8.CT.d.6: Use an iterative approach bbold/b'));
+  assert.equal(work.description.length, 8000);
+  assert.ok(!/[<>\r]/.test(work.description));
+  // One "Pixel Trail" topic per course, made once and reused.
+  assert.equal(work.topicId, 'topic-1');
+  t('createAssignments', r.class_id, [{ key: 'L2', ids: ['t3'], title: 'It Moves!', points: 100, description: 'Second.' }], {});
+  assert.equal(data.created[1].topicId, 'topic-1');
+  assert.deepEqual(data.topics.c1.map((x) => x.name), ['Pixel Trail']);
+
+  // Updating: owner only, only assignments this app made, and only the description changes.
+  const fresh = [{ key: 'L1', ids: ['t1'], description: 'New words\nabout the trail.' }, { key: 'L9', ids: ['c1'], description: 'Never made.' }, { key: 'L2', ids: ['t3'], description: '   ' }];
+  for (const who of ['ava@school.test', OTHER]) assert.equal(server.raw(who, 'updateAssignments', [r.class_id, fresh]).ok, false, who);
+  assert.equal(server.raw(OWNER, 'updateAssignments', [r.class_id, [{ key: 'bad', ids: ['t1'], description: 'x' }]]).ok, false);
+  const before = { ...data.created[0] };
+  const up = t('updateAssignments', r.class_id, fresh);
+  assert.equal(up.updated, 1);
+  assert.equal(up.skipped.length, 1, 'one was never made in Classroom');
+  assert.equal(up.failed.length, 1, 'an empty description is not written over a real one');
+  assert.equal(data.created[0].description, 'New words\nabout the trail.');
+  assert.equal(data.created[1].description, 'Second.');
+  for (const f of ['title', 'maxPoints', 'state', 'topicId', 'id']) assert.equal(data.created[0][f], before[f], `${f} was not touched`);
+  // If Classroom refuses one, the rest still go through and the refusal is reported.
+  data.created[1].courseId = 'somewhere-else';
+  const partly = t('updateAssignments', r.class_id, [{ key: 'L2', ids: ['t3'], description: 'x' }, { key: 'L1', ids: ['t1'], description: 'Again.' }]);
+  assert.equal(partly.updated, 1);
+  assert.match(partly.failed[0], /It Moves!/);
 });

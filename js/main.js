@@ -18,6 +18,8 @@ import { viewProject } from './views/project.js';
 import { viewQuest } from './views/quest.js';
 import { applySettings, openSettings } from './settings.js';
 import { initLanguage } from './translate.js';
+import { lessonForStop } from './curriculum/classroom.js';
+import { PATH_IDS } from './curriculum/graph.js';
 import { openBugReport, noteError } from './views/bugs.js';
 
 // On Apps Script the page has google.script. Anywhere else it runs as a browser-only demo.
@@ -82,6 +84,23 @@ async function signOut() {
   app.session = null;
   go('/');
   render();
+}
+
+/** The stop named in the page's address (?stop=L7), or ''. Apps Script hides the address, so it has to be asked for. */
+function stopFromLink() {
+  return new Promise((resolve) => {
+    const done = (v) => resolve(/^L\d{1,2}$/.test(String(v || '')) ? String(v) : '');
+    try {
+      const url = window.google?.script?.url;
+      if (url && url.getLocation) {
+        // If Google never answers, carry on to Home after a moment instead of waiting.
+        const giveUp = setTimeout(() => done(''), 1500);
+        url.getLocation((loc) => { clearTimeout(giveUp); done(loc && loc.parameter && loc.parameter.stop); });
+        return;
+      }
+    } catch (_) { /* fall through to the page's own address */ }
+    try { done(new URLSearchParams(location.search).get('stop')); } catch (_) { done(''); }
+  });
 }
 
 let renderToken = 0;
@@ -166,6 +185,16 @@ applySettings();
   window.__ptBooted = true; // Index.html's startup check reads these two.
   document.getElementById('app').append(h('p.muted.boot', 'Loading Pixel Trail...'));
   app.session = await attempt(() => store.session()) || null;
+  // A link from a Classroom assignment opens that stop: the lesson on this student's own road.
+  if (app.session && !location.hash.slice(1)) {
+    const stop = await stopFromLink();
+    if (stop) {
+      const student = app.session.role === 'student';
+      const id = lessonForStop(stop, student ? app.session.student.path : PATH_IDS[0]);
+      if (id) location.hash = `#/lesson/${id}`;
+      else if (student) toast('Choose your road first, then open the assignment again.');
+    }
+  }
   await render();
   window.__ptStarted = true;
 })();

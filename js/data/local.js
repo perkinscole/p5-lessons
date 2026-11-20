@@ -505,6 +505,17 @@ export function createLocalStore() {
           title: sync?.title || '', points: sync?.points ?? null, link: sync?.link || '', due: sync?.due || '' };
       }) };
     },
+    async updateAssignments(classId, items) {
+      const out = { updated: 0, skipped: [], failed: [] };
+      for (const it of items) {
+        const sync = (db.gradeSync || {})[`${classId}/${it.key}`];
+        if (!sync) { out.skipped.push(`${it.key}: not in Classroom yet`); continue; }
+        sync.description = String(it.description || '');
+        out.updated++;
+      }
+      save();
+      return out;
+    },
     async createAssignments(classId, items, { publish } = {}) {
       const out = { created: 0, skipped: [], failed: [] };
       db.gradeSync = db.gradeSync || {};
@@ -512,7 +523,7 @@ export function createLocalStore() {
         const k = `${classId}/${it.key}`;
         if (db.gradeSync[k]) { out.skipped.push(`${it.title}: already in Classroom`); continue; }
         if (!String(it.title || '').trim()) { out.failed.push(`${it.key}: needs a name`); continue; }
-        db.gradeSync[k] = { title: it.title.trim(), points: Number(it.points) || 100, due: it.due || '', link: 'https://classroom.google.com', state: publish ? 'PUBLISHED' : 'DRAFT', sent: {} };
+        db.gradeSync[k] = { title: it.title.trim(), description: String(it.description || ''), points: Number(it.points) || 100, due: it.due || '', link: 'https://classroom.google.com', state: publish ? 'PUBLISHED' : 'DRAFT', sent: {} };
         out.created++;
       }
       save();
