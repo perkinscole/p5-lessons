@@ -9,6 +9,7 @@ import { chime, sparkle, pop, countUp, markCelebrated, correct, incorrect, splas
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { todayFor } from '../curriculum/today.js';
+import { openBugReport } from './bugs.js';
 import { loadMe, badgeChip } from './student.js';
 import { statsFor, XP, isDone } from '../game/rules.js';
 import { openSpritePicker } from './sprites.js';
@@ -476,7 +477,7 @@ export async function viewLesson(main, id, previewPath) {
     }, md(text))));
     const qi = ownIndex(q);
     return h('div.stack',
-      h('p.step-kind.answer', '❓ Answer this', !answered.has(q) && !preview && h('span', ' to keep going')),
+      h('p.step-kind.answer', h('b', '❓ Answer this', !answered.has(q) && !preview && h('span', ' to keep going')), h('small', 'Quick check')),
       q.review && h('p.eyebrow', 'From an earlier lesson'),
       h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
       q.code && h('pre.snippet', h('code', q.code)),
@@ -618,7 +619,9 @@ export async function viewLesson(main, id, previewPath) {
     if (getSettings().autoRead) speak(brief);
     const passing = s.check && stepPasses(s, allCode());
     const display = s.show !== undefined ? s.show : s.code;
-    const codeBlock = display !== undefined && h('pre.snippet', h('code', display.replace(/^\n+/, '').replace(/\n+$/, '')));
+    const codeBlock = display !== undefined && h('div.snippet-wrap',
+      h('p.snippet-label', s.code || s.edits ? 'Add this code' : 'Look at this'),
+      h('pre.snippet', h('code', display.replace(/^\n+/, '').replace(/\n+$/, ''))));
     let revealArea = codeBlock;
     if (codeBlock && s.reveal) {
       revealArea = h('div', h('button.btn', { onclick: (e) => e.target.replaceWith(codeBlock) }, 'Stuck? Show me an example'));
@@ -643,7 +646,7 @@ export async function viewLesson(main, id, previewPath) {
     const kind = kindOf(s);
     const nextLabel = () => (kind === 'read' ? 'Got it, next' : !s.check || stepPasses(s, allCode()) ? 'Next' : 'Skip for now');
     stepBox.append(...[
-      h(`p.step-kind.${kind}`, kind === 'do' ? '✏️ Your turn: do this in your code' : '👀 Just read'),
+      h(`p.step-kind.${kind}`, h('b', kind === 'do' ? '✏️ Your turn' : '👀 Just read'), h('small', `Step ${flow[stepIndex].n + 1} of ${lesson.steps.length}`)),
       h('h2', s.title),
       h('div.step-do', h('div.read-row', md(brief), readButton(() => brief))),
       placeBox,
@@ -878,12 +881,31 @@ export async function viewLesson(main, id, previewPath) {
           h('div.stack',
             h('h3', 'You will build'),
             h('p.today-build', today ? today.build : lesson.hook),
+            today && h('p.muted', lesson.hook),
             h('h3', 'Key ideas'),
             today
               ? h('dl.ideas', today.ideas.map((x) => h('div', h('dt', x.term), h('dd', x.means))))
               : h('p.concepts', lesson.concepts.map((c) => h('span.tag', c))))),
+        isStudent && standardsPanel(id, false),
         h('div.row.end', h('button.btn.primary.big', { onclick: close }, 'Start')));
     }, { wide: true, onClose: () => { if (demo) demo.destroy(); } });
+  };
+
+  // Tools a student needs now and then, kept in one menu so the page is not a wall of buttons.
+  // A step that needs one of them shows its own button at the moment it is needed.
+  const moreMenu = () => {
+    const menu = h('details.more-menu');
+    const item = (label, action) => h('button.btn', { type: 'button', onclick: () => { menu.open = false; action(); } }, label);
+    menu.append(
+      h('summary.btn', 'More ▾'),
+      h('div.more-list',
+        isStudent && canEdit(MAIN) && item('Reset code', cleanCopy),
+        item('Sprites', openPicker),
+        item('Sounds', openSounds),
+        musicAllowed() && item('Music', openMusic),
+        isStudent && !approved && item(work?.shared ? 'In the Arcade ✓' : 'Share to Arcade', toggleShare),
+        item('🐞 Report a problem', openBugReport)));
+    return menu;
   };
 
   const head = h('header.lesson-head');
@@ -893,20 +915,15 @@ export async function viewLesson(main, id, previewPath) {
       h('div.lesson-title',
         h('p.eyebrow', stage.name, lesson.path ? ` · ${PATHS[lesson.path].road}` : '', isBeyond(id) ? ' · Extra challenge' : '', ` · ${lesson.mins} minutes`),
         h('h1', lesson.title),
-        standardChips(id, stdPanel),
+        // Standards sit behind Key ideas for students. A teacher previewing keeps them in view.
+        preview && standardChips(id, stdPanel),
       ),
       h('div.row.lesson-actions',
         status,
-        h('button.btn', { onclick: openToday, title: 'What this lesson builds, and its key ideas' }, '💡 Key ideas'),
-        isStudent && canEdit(MAIN) && h('button.btn', { onclick: cleanCopy }, 'Reset code'),
-        h('button.btn', { onclick: openPicker }, 'Sprites'),
-        h('button.btn', { onclick: openSounds }, 'Sounds'),
-        musicAllowed() && h('button.btn', { onclick: openMusic }, 'Music'),
-        isStudent && !approved && h('button.btn', { onclick: toggleShare }, work?.shared ? 'In the Arcade ✓' : 'Share to Arcade'),
         preview && h('select.path-pick', { 'aria-label': 'Road to preview', onchange: (e) => go(`/lesson/${id}/${e.target.value}`) }, Object.values(PATHS).map((p) => h('option', { value: p.id, selected: p.id === path }, p.road))),
         preview && h('button.btn', { onclick: () => { openFile(MAIN); cm.setValue(buildSolution(id, path)); for (const [n, t] of Object.entries(filesThrough(id, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript')); drawFileBar(); run(); toast('Showing the answer key.'); } }, 'Show answer key'),
-        gridButton,
-        h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run'),
+        h('button.btn.key-ideas', { onclick: openToday, title: 'What this lesson builds, and its key ideas' }, '💡 Key ideas'),
+        moreMenu(),
       ),
     );
   };
@@ -979,8 +996,7 @@ export async function viewLesson(main, id, previewPath) {
     work?.status === 'approved' && feedback && h('div.approved', h('strong', 'Approved! '), work.grade?.feedback || '', work.grade ? ` Score: ${work.grade.total} of ${work.grade.max_total}.` : ''),
     h('div.panes',
       h('aside.steps',
-        h('details.hook', h('summary', 'Why this lesson?'), h('p', lesson.hook), h('p.concepts', lesson.concepts.map((c) => h('span.tag', c)))),
-        stdPanel,
+        preview && stdPanel,
         dots,
         stepBox,
         stuck && stuck.el,
@@ -991,6 +1007,7 @@ export async function viewLesson(main, id, previewPath) {
         ondrop: (e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); e.stopPropagation(); addUploads([...e.dataTransfer.files]); } },
       }, teamBar, fileBar, editorHost),
       h('section.game-pane', { 'aria-label': 'Your game' },
+        h('div.run-bar', h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run'), gridButton),
         h('div.game-frame', player.el),
         consoleBox,
       ),

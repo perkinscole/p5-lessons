@@ -952,3 +952,71 @@ button.pin-stop:hover img, button.pin-stop:focus-visible img { filter: drop-shad
 .ideas div { border-left: 4px solid var(--sun); padding-left: 10px; }
 .ideas dt { font: 700 1rem var(--font-code); }
 .ideas dd { margin: 0; }
+
+/* The lesson page, second look. One job per area: the step on the left says what to do, the code
+   is in the middle, and the game with its Run button is on the right. Bright blocks of color mark
+   what kind of step this is, so a student can find their place at a glance. */
+:root { --step-do: #ffb703; --step-read: #5cc8ff; --step-ask: #ff7ab6; --go: #18c07a; --go-edge: #0a7a4b; }
+
+/* Inside a lesson the top bar keeps only the way home, XP and who is signed in. */
+body.in-workspace .navs a.nav:not([href='#/']) { display: none; }
+body.in-workspace .tb-bug, body.in-workspace .tb-out { display: none; }
+
+.lesson-head { padding: 6px 14px; }
+.lesson-head h1 { font-size: 1.55rem; }
+.lesson-actions { gap: 8px; align-items: center; }
+.btn.key-ideas { background: var(--sun); color: #2b2350; }
+.more-menu { position: relative; }
+.more-menu > summary { list-style: none; cursor: pointer; }
+.more-menu > summary::-webkit-details-marker { display: none; }
+.more-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; display: flex; flex-direction: column; gap: 6px; min-width: 190px; padding: 10px; background: var(--card); border: 3px solid var(--line); box-shadow: 4px 4px 0 var(--line); }
+.more-list .btn { justify-content: flex-start; box-shadow: none; white-space: nowrap; }
+
+.panes { grid-template-columns: minmax(350px, 31%) 1fr minmax(320px, 420px); }
+.steps { background: var(--paper-2); gap: 10px; padding: 12px 12px 30px; }
+
+/* Progress: small, in one place, and out of the way of the instruction. */
+.step-dots { gap: 3px; }
+.step-dots button { width: 24px; height: 24px; font-size: .7rem; }
+
+/* The instruction card. */
+.step-body { background: var(--card); border: 3px solid var(--line); border-radius: 4px; box-shadow: 4px 4px 0 var(--line); padding: 0 14px 14px; gap: 12px; }
+.step-body > .stack { gap: 12px; }
+.step-body > h2:first-child, .step-body > .stack > h2:first-child { margin-top: 14px; }
+.step-kind { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; align-self: stretch; margin: 0 -14px; padding: 8px 14px; border: 0; border-bottom: 3px solid var(--line); border-radius: 0; color: #2b2350; }
+.step-kind b { font: 400 1.25rem var(--font-display); letter-spacing: .02em; }
+.step-kind small { font: 700 .8rem var(--font-body); opacity: .85; white-space: nowrap; }
+.step-kind.do { background: var(--step-do); color: #2b2350; }
+.step-kind.read { background: var(--step-read); color: #2b2350; }
+.step-kind.answer { background: var(--step-ask); color: #2b2350; }
+.step-body h2 { font-size: 1.7rem; }
+.step-do { font-size: 1.2rem; line-height: 1.45; }
+.quiz-q { font-size: 1.2rem; line-height: 1.4; }
+
+/* Code to add: large, labelled, and set apart from the sentence above it. */
+.snippet-wrap { display: flex; flex-direction: column; }
+.snippet-label { margin: 0; align-self: flex-start; padding: 3px 10px; background: var(--sun); color: #2b2350; border: 2px solid var(--line); border-bottom: 0; border-radius: 4px 4px 0 0; font: 700 .78rem var(--font-body); letter-spacing: .04em; text-transform: uppercase; }
+.snippet { font-size: .9rem; line-height: 1.6; padding: 12px 12px; border: 2px solid var(--line); border-radius: 0 4px 4px 4px; }
+.snippet-wrap > .snippet { border-left: 6px solid var(--sun); }
+
+/* Why? and Hint read as buttons to press, not as more text. */
+.step-body details.hint > summary { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 2px solid var(--line); border-radius: 999px; background: var(--paper-2); font-weight: 700; cursor: pointer; list-style: none; }
+.step-body details.hint > summary::-webkit-details-marker { display: none; }
+.step-body details.hint > summary::before { content: '＋'; }
+.step-body details.hint[open] > summary::before { content: '－'; }
+.step-body details.hint[open] > summary { margin-bottom: 8px; }
+
+/* Moving on is the biggest thing on the card. */
+.step-nav { margin-top: 6px; gap: 8px; align-items: stretch; }
+.step-nav .step-next, .step-nav .btn.primary { flex: 1; font-size: 1.15rem; padding: 12px 16px; }
+.step-nav .btn.primary { background: var(--go); color: #06301e; border-color: var(--line); }
+.quiz-option { font-size: 1.05rem; padding: 12px 14px; border-width: 3px; box-shadow: 3px 3px 0 var(--line); }
+
+/* Run sits over the game, as wide as the game, where a student is already looking. */
+.run-bar { display: flex; gap: 8px; align-items: stretch; width: 100%; max-width: 400px; align-self: center; }
+.run-bar .btn.run { flex: 1; font: 400 1.7rem var(--font-display); letter-spacing: .03em; padding: 8px 14px; background: var(--go); color: #06301e; border: 3px solid var(--line); box-shadow: 0 5px 0 var(--go-edge); }
+.run-bar .btn.run:hover { transform: translateY(-1px); box-shadow: 0 6px 0 var(--go-edge); }
+.run-bar .btn.run:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--go-edge); }
+.run-bar .btn:not(.run) { font-size: .85rem; }
+
+:root[data-theme='contrast'] { --step-do: #ffd000; --step-read: #9fe0ff; --step-ask: #ffb0d3; }

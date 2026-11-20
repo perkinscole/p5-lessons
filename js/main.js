@@ -60,7 +60,7 @@ function topbar() {
   return h('header.topbar',
     h('a.brand', { href: '#/', translate: 'no' }, 'Pixel Trail'),
     h('nav.navs', { 'aria-label': 'Main' }, links),
-    h('div.who', s.role === 'student' && xpPurse(), h('button.btn.small', { onclick: openSettings }, 'Display'), h('button.btn.small', { onclick: openBugReport, title: 'Report a problem', 'aria-label': 'Report a problem' }, '🐞'), h('span.who-name', { translate: 'no' }, who), store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
+    h('div.who', s.role === 'student' && xpPurse(), h('button.btn.small', { onclick: openSettings }, 'Display'), h('button.btn.small.tb-bug', { onclick: openBugReport, title: 'Report a problem', 'aria-label': 'Report a problem' }, '🐞'), h('span.who-name', { translate: 'no' }, who), store.mode === 'local' && h('button.btn.small.tb-out', { onclick: signOut }, 'Sign out')),
   );
 }
 
