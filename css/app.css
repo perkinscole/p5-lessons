@@ -924,3 +924,15 @@ button.pin-stop:hover img, button.pin-stop:focus-visible img { filter: drop-shad
 
 .submitted-note { margin: 0; font-weight: 700; color: #1f7a3d; }
 :root[data-theme='dark'] .submitted-note { color: #7fe0a0; }
+
+/* Loading: a hiker hopping along a dotted trail. Used when the app starts and between pages. */
+.loading { display: grid; justify-items: center; gap: 10px; padding: 9vh 16px; text-align: center; }
+.boot-screen { min-height: 70vh; align-content: center; }
+.loading-word { margin: 0; font: 400 3rem/1 var(--font-display); color: var(--ink); }
+.loading-text { margin: 0; color: var(--ink-2); font-weight: 700; }
+.loading-trail { position: relative; width: 300px; height: 64px; background: radial-gradient(circle, var(--line) 0 4px, transparent 5px) 0 100% / 30px 14px repeat-x; }
+/* A square hiker with two eyes and a yellow pack. */
+.loading-hiker { position: absolute; left: 0; bottom: 16px; width: 30px; height: 34px; background: radial-gradient(circle, var(--line) 0 2.5px, transparent 3px) 8px 9px / 12px 8px no-repeat, radial-gradient(circle, var(--line) 0 2.5px, transparent 3px) 19px 9px / 12px 8px no-repeat, linear-gradient(90deg, #f4cf49 0 7px, transparent 7px), var(--accent, #c43f29); border: 3px solid var(--line); border-radius: 3px; box-shadow: 4px 4px 0 rgba(0, 0, 0, .18); animation: hike 2.4s steps(9) infinite, hike-hop .267s ease-in-out infinite alternate; }
+@keyframes hike { from { left: 0; } to { left: 270px; } }
+@keyframes hike-hop { from { transform: translateY(0); } to { transform: translateY(-12px); } }
+@media (prefers-reduced-motion: reduce) { .loading-hiker { animation: none; left: 135px; } }

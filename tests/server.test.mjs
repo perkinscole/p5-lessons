@@ -936,7 +936,7 @@ test('reliability: one student action reads a few rows, however many students th
   const kid = server.as(kids[1]);
   kid('saveWork', 't1', { code: 'a', assets: {} });
   kid('saveWork', 't2', { code: 'a', assets: {} });
-  for (const [method, args, most] of [['session', [], 100], ['saveWork', ['t2', { code: 'b', assets: {}, step_at: 2 }], 200], ['submitWork', ['t1', { code: 'b', assets: {} }], 200], ['myWorks', [], 200], ['myHelp', [], 100]]) {
+  for (const [method, args, most] of [['session', [], 100], ['saveWork', ['t2', { code: 'b', assets: {}, step_at: 2 }], 200], ['submitWork', ['t1', { code: 'b', assets: {} }], 200], ['myWorks', [], 200], ['myWorks', [[]], 200], ['myHelp', [], 100]]) {
     server.cellsRead();
     kid(method, ...args);
     const cells = server.cellsRead();
@@ -999,6 +999,39 @@ test('reliability: a routine save finds its row without searching, and a first s
   const mine = ari('myWorks').filter((w) => w.lesson_id === 't2');
   assert.equal(mine.length, 1);
   assert.equal(mine[0].code, 'three');
+});
+
+test('reliability: a page can ask for a student\'s lessons without their code, and gets code only where it asks', () => {
+  const { server, teacher, bea, ari, cls, beaWork } = setup();
+  bea('saveWork', 't2', { code: 'BEA TWO', assets: { a: 1 }, files: { 'extra.js': 'let x;' }, step_at: 4 });
+  // Other students' rows in between, so Bea's rows are not next to each other.
+  teacher('addStudents', cls.id, Array.from({ length: 40 }, (_, i) => `Filler ${i}, f${i}@school.test`));
+  for (let i = 0; i < 40; i++) server.as(`f${i}@school.test`)('saveWork', 't1', { code: `F${i}`, assets: {} });
+  bea('saveWork', 't3', { code: 'BEA THREE', assets: {} });
+
+  const light = bea('myWorks', []);
+  assert.deepEqual(light.map((w) => w.lesson_id).sort(), ['t1', 't2', 't3']);
+  for (const w of light) { assert.equal(w.full, false); assert.equal(w.code, undefined); assert.equal(w.files, undefined); assert.equal(w.student_id, light[0].student_id); }
+  const t1 = light.find((w) => w.lesson_id === 't1');
+  assert.equal(t1.id, beaWork.id);
+  assert.equal(t1.status, 'approved');
+  assert.equal(t1.reflection, 'BEA REFLECTION');
+  assert.equal(t1.grade.feedback, 'PRIVATE FEEDBACK');
+  assert.equal(light.find((w) => w.lesson_id === 't2').step_at, 4);
+
+  const some = bea('myWorks', ['t2', 'zz']);
+  const t2 = some.find((w) => w.lesson_id === 't2');
+  assert.equal(t2.code, 'BEA TWO');
+  assert.deepEqual(t2.files, { 'extra.js': 'let x;' });
+  assert.notEqual(t2.full, false);
+  assert.equal(some.find((w) => w.lesson_id === 't3').full, false);
+
+  // Asked the old way, everything still comes whole.
+  const all = bea('myWorks');
+  assert.deepEqual(all.map((w) => w.code).sort(), ['BEA CODE', 'BEA THREE', 'BEA TWO']);
+  // And never anyone else's.
+  assert.ok(!JSON.stringify(light).includes('ARI SECRET') && !JSON.stringify(light).includes('F1'));
+  assert.equal(ari('myWorks', []).length, 1);
 });
 
 test('reliability: the class board is built once and shared, and changes still show', () => {

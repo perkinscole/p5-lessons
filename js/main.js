@@ -1,5 +1,5 @@
 // App shell and router.
-import { h, clear, attempt, toast } from './ui.js';
+import { h, clear, attempt, toast, loading } from './ui.js';
 import { createLocalStore } from './data/local.js';
 import { createAppsScriptStore } from './data/appsscript.js';
 import { avatarURL, defaultAvatar } from './game/avatar.js';
@@ -103,6 +103,16 @@ function stopFromLink() {
   });
 }
 
+// What kind of user opened the app here last, and their class. No names: only enough to ask early for the right things.
+const BOOT_KEY = 'pixeltrail.boot';
+function bootHint() { try { return JSON.parse(localStorage.getItem(BOOT_KEY) || 'null'); } catch (_) { return null; } }
+function rememberBoot(session) {
+  try {
+    if (session && session.role && !session.preview) localStorage.setItem(BOOT_KEY, JSON.stringify({ role: session.role, class: session.class ? session.class.id : '' }));
+    else if (!session) localStorage.removeItem(BOOT_KEY);
+  } catch (_) { /* Then the first page just takes one more trip. */ }
+}
+
 let renderToken = 0;
 
 export async function render() {
@@ -125,7 +135,7 @@ export async function render() {
   }
   if (!view) { go('/'); return; }
 
-  const main = h('main.page', h('p.muted', 'Loading...'));
+  const main = h('main.page', loading());
   clear(root).append(store.mode === 'local' ? demoBanner() : '', app.session.preview ? previewBanner() : '', topbar(), main);
   try {
     const content = await view(main, ...match.slice(1));
@@ -183,8 +193,17 @@ applySettings();
 
 (async function start() {
   window.__ptBooted = true; // Index.html's startup check reads these two.
-  document.getElementById('app').append(h('p.muted.boot', 'Loading Pixel Trail...'));
-  app.session = await attempt(() => store.session()) || null;
+  // Index.html already shows the loading screen. Ask for who is signed in, and in the same trip
+  // for what Home will need, guessed from last time on this device. A wrong guess costs nothing:
+  // the answers are just not used.
+  const first = attempt(() => store.session());
+  const hint = bootHint();
+  if (hint && hint.role === 'student' && store.mode === 'appsscript' && !/^#\/lesson\//.test(location.hash)) {
+    store.myWorks([]).catch(() => {});
+    if (hint.class) store.classBoard(hint.class).catch(() => {});
+  }
+  app.session = await first || null;
+  rememberBoot(app.session);
   // A link from a Classroom assignment opens that stop: the lesson on this student's own road.
   if (app.session && !location.hash.slice(1)) {
     const stop = await stopFromLink();

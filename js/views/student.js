@@ -31,10 +31,15 @@ export function freshUnlocks(student, stats) {
 export class SessionEnded extends Error {}
 
 /** Everything a student screen needs about the signed-in student. */
-export async function loadMe() {
+/**
+ * Everything a student page needs. `withCode` lists the lessons whose code the page will use (the
+ * lesson page asks for its own and the one it continues from). Other lessons arrive without code,
+ * marked `full: false`, which is much quicker.
+ */
+export async function loadMe(withCode = []) {
   // Start everything at once using the class we already know, so it all travels as one trip.
   const known = app.session?.class?.id;
-  const [, works, knownBoard] = await Promise.all([refreshSession(), app.store.myWorks(), known ? app.store.classBoard(known) : null]);
+  const [, works, knownBoard] = await Promise.all([refreshSession(), app.store.myWorks(withCode), known ? app.store.classBoard(known) : null]);
   if (app.session?.role !== 'student') throw new SessionEnded();
   const { student, class: cls } = app.session;
   const board = known === cls.id ? knownBoard : await app.store.classBoard(cls.id);

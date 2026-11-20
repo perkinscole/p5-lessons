@@ -81,6 +81,11 @@ export function md(text) {
   return box;
 }
 
+/** What a page shows while its data is on the way: a little hiker hopping along the trail. */
+export function loading(text = 'Loading…') {
+  return h('div.loading', { role: 'status' }, h('div.loading-trail', { 'aria-hidden': 'true' }, h('span.loading-hiker')), h('p.loading-text', text));
+}
+
 export function toast(message, kind = 'info') {
   const t = h(`div.toast.${kind}`, message);
   document.getElementById('toasts').append(t);

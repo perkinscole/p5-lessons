@@ -112,7 +112,9 @@ export async function viewLesson(main, id, previewPath) {
   if (isStudent) {
     let flagList;
     let helpNow;
-    [me, team, flagList, helpNow] = await Promise.all([loadMe(), app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {}),
+    // This page uses the code of this lesson and of the one it continues from, on any road.
+    const needCode = [...new Set([id, ...PATH_IDS.map((p) => previousGameLesson(id, p))].filter(Boolean))];
+    [me, team, flagList, helpNow] = await Promise.all([loadMe(needCode), app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {}),
       app.store.myFlags(id).catch(() => []), app.store.myHelp().catch(() => ({ open: false }))]);
     myFlags = new Map(flagList.map((f) => [f.target, f.reason]));
     helpOpen = !!helpNow.open;
@@ -128,6 +130,8 @@ export async function viewLesson(main, id, previewPath) {
       if (!me.done.has(id) && id !== current) { toast('Finish the lesson before this one first.'); go('/map'); return null; }
     }
     work = me.works.find((w) => w.lesson_id === id) || null;
+    // Never open the editor on a lesson whose code did not arrive: an empty editor would be saved over real work.
+    if (me.works.some((w) => needCode.includes(w.lesson_id) && w.full === false)) throw new Error('Your code did not load. Reload the page to try again.');
     if (work) {
       code = work.code;
       assets = work.assets || {};

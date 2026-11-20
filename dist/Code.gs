@@ -481,6 +481,54 @@ function metaWorks_() {
   return rows;
 }
 
+/**
+ * A student's lessons. With `withCode` (a list of lesson ids), only those come with their code and
+ * files; the rest are the details alone (`full: false`), read together in a couple of trips. Home
+ * and the map never need the code, and reading every lesson's code one row at a time was the
+ * slowest part of opening them. Without a list, every lesson comes whole, as it always did.
+ */
+function myWorks_(me, withCode) {
+  const list = myWorkList_(me.student.id);
+  const grades = rows_('Grades');
+  const graded = (w) => ({ ...w, grade: gradeFor_(w.id, grades) });
+  if (!Array.isArray(withCode)) return list.map((w) => fullWork_(w)).map(graded);
+  const want = new Set(withCode.map(String));
+  const light = new Map(metaRows_(list.filter((w) => !want.has(w.lesson_id)).map((w) => w._row)).map((r) => [r._row, r]));
+  return list.map((w) => {
+    if (want.has(w.lesson_id)) return fullWork_(w);
+    const r = light.get(w._row);
+    // Rows are found and read a moment apart. If one changed hands in between, read it properly.
+    if (!r || r.student_id !== me.student.id || r.lesson_id !== w.lesson_id) return fullWork_(w);
+    const { _row, ...rest } = r;
+    return { ...rest, full: false };
+  }).map(graded);
+}
+
+/** The details of these Works rows, without their code. Rows near each other are read together. */
+function metaRows_(rowNumbers) {
+  const sorted = [...rowNumbers].sort((a, b) => a - b);
+  const sh = sheet_('Works');
+  const tailAt = SCHEMA.Works.length - WORK_TAIL.length + 1;
+  const out = [];
+  for (let i = 0; i < sorted.length;) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] - sorted[j] <= 150) j++;
+    const first = sorted[i];
+    const count = sorted[j] - first + 1;
+    const meta = sh.getRange(first, 1, count, WORK_META.length).getValues();
+    const tail = sh.getRange(first, tailAt, count, WORK_TAIL.length).getValues();
+    for (let k = i; k <= j; k++) {
+      const at = sorted[k] - first;
+      const o = { _row: sorted[k] };
+      WORK_META.forEach((f, c) => { o[f] = decode_(f, meta[at][c]); });
+      WORK_TAIL.forEach((f, c) => { o[f] = decode_(f, tail[at][c]); });
+      out.push(o);
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
 function fullWork_(row) {
   const full = readRow_('Works', row._row);
   const doc = JSON.parse(unpackChunks_(full, WORK_CELLS) || '{"code":"","assets":{},"files":{}}');
@@ -2343,10 +2391,7 @@ const STUDENT_ROUTES = {
   teamFor: teamFor_,
   takeKeyboard: takeKeyboard_,
   passKeyboard: passKeyboard_,
-  myWorks: (me) => {
-    const grades = rows_('Grades');
-    return myWorkList_(me.student.id).map((w) => fullWork_(w)).map((w) => ({ ...w, grade: gradeFor_(w.id, grades) }));
-  },
+  myWorks: myWorks_,
   saveWork: (me, lessonId, patch) => saveMyWork_(me, lessonId, patch),
   submitWork: (me, lessonId, patch) => saveMyWork_(me, lessonId, patch, { status: 'submitted', submitted_at: now_() }),
   setShared: (me, lessonId, shared) => withLock_(() => {
