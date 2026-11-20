@@ -120,7 +120,7 @@ The teacher's history with this picture: a busy blocky side-view world hid the c
 
 ### The class display's race
 
-`racePanel` in `js/views/project.js` draws today's lesson as a hill of blocks: each step is one block higher (`--rise`), with its number and name on the block's face, and the finish is the top. The teacher asked for names to show at all times and for the parts to grow and shrink around the students, so: a block's width follows the names standing on it (`roomFor`, never narrower than the longest word, `widestWord`), long names wrap, and `fitTrail` searches for the largest character height (`--ph`) at which nothing runs out of height. Don't bring back a size at which names hide. Who asked for help still only shows as a hop and a glow.
+`racePanel` in `js/views/project.js` draws today's lesson as a hill of blocks: each step is one block higher (`--rise`), with its number and name on the block's face, and the finish is the top. The teacher asked for names to show at all times and for the parts to grow and shrink around the students, so: a block's width follows the names standing on it (`roomFor`, never narrower than the longest word, `widestWord`), long names wrap, and `fitTrail` searches for the largest character height (`--ph`) at which nothing runs out of height. Don't bring back a size at which names hide. The race shows the lesson most students are on unless the teacher picks one in **Set up today** (`plan.lesson`, cleaned by `cleanPlan_`); a picked lesson places every student who has work on it, and the question and standards follow it. Who asked for help still only shows as a hop and a glow.
 
 ### Celebrations
 

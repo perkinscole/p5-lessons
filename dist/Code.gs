@@ -1280,6 +1280,8 @@ function cleanPlan_(p) {
     focus: text_(p.focus, 300),
     standards: (Array.isArray(p.standards) ? p.standards : []).map(String).filter((c) => /^6-8\.[A-Z]+\.[a-e]\.\d$/.test(c)).slice(0, 3),
     timer_end: when && !Number.isNaN(Date.parse(when)) ? new Date(when).toISOString() : '',
+    // The lesson the class display shows, when the teacher picks one. Blank means automatic.
+    lesson: /^[a-z]\d{1,2}$/.test(String(p.lesson || '')) ? String(p.lesson) : '',
   };
 }
 

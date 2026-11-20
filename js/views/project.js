@@ -3,7 +3,7 @@
 import { h, clear, modal, toast, attempt } from '../ui.js';
 import { app, go } from '../main.js';
 import { readButton } from '../settings.js';
-import { getLesson } from '../curriculum/engine.js';
+import { getLesson, allLessons } from '../curriculum/engine.js';
 import { PATHS, STAGES, stageOf, isSideTrail, sequence } from '../curriculum/graph.js';
 import { alignmentFor, coverage, standardByCode } from '../curriculum/alignment.js';
 import { bigQuestionFor } from '../curriculum/big.js';
@@ -19,7 +19,7 @@ let needsHelp = new Set();
 
 const todayKey = () => new Date().toLocaleDateString('en-CA');
 const shortCode = (code) => code.replace('6-8.', '');
-const emptyPlan = () => ({ day: todayKey(), question: '', focus: '', standards: [], timer_end: '' });
+const emptyPlan = () => ({ day: todayKey(), question: '', focus: '', standards: [], timer_end: '', lesson: '' });
 /** A saved plan only counts on the day it was made. */
 const currentPlan = (saved) => (saved && saved.day === todayKey() ? { ...emptyPlan(), ...saved } : emptyPlan());
 
@@ -99,7 +99,7 @@ const personChip = (s) => h('div.pj-person', { translate: 'no', class: needsHelp
  * The lesson most of the class is on, as a race: each step is a stop, and each student stands at
  * the furthest step they have reached. Students who submit it today cross the finish.
  */
-function racePanel(board, lessons, focus) {
+function racePanel(board, lessons, focus, picked) {
   const main = lessons[0];
   if (!main) return h('section.pj-panel.pj-race-panel', h('h2', 'Today'), h('p.pj-sub', 'Nobody has started yet. Open Home to begin.'));
   const lesson = getLesson(main.id);
@@ -114,7 +114,8 @@ function racePanel(board, lessons, focus) {
   for (const s of board) {
     const w = s.works.find((x) => x.lesson_id === main.id);
     const handedIn = w && (w.status === 'submitted' || w.status === 'approved');
-    if (standingOn(s) === main.id) {
+    if (picked && w) at.get(handedIn ? 'finish' : Math.min(Number(w.step_at) || 0, last)).push(s);
+    else if (standingOn(s) === main.id) {
       if (!w) at.get('start').push(s);
       else if (handedIn) at.get('finish').push(s);
       else at.get(Math.min(Number(w.step_at) || 0, last)).push(s);
@@ -171,6 +172,12 @@ function openSetup(plan, lessons, onSave) {
   const focus = h('textarea', { rows: 3, maxlength: 300, value: plan.focus, placeholder: 'Optional. One item per line, shown above the race.' });
   const endValue = plan.timer_end ? new Date(plan.timer_end) : null;
   const pad = (n) => String(n).padStart(2, '0');
+  // Which lesson the race shows. Left on automatic, it is the one most students are on.
+  const inUse = new Set(lessons.map((l) => l.id));
+  const lessonPick = h('select', { translate: 'no' },
+    h('option', { value: '' }, 'Automatic: the lesson most students are on'),
+    h('optgroup', { label: 'Students are on' }, lessons.map((l) => h('option', { value: l.id, selected: plan.lesson === l.id }, `${getLesson(l.id).title} · ${l.n}`))),
+    h('optgroup', { label: 'Every lesson' }, allLessons().filter((l) => !inUse.has(l.id) && !isSideTrail(l.id)).map((l) => h('option', { value: l.id, selected: plan.lesson === l.id }, l.title))));
   const end = h('input', { type: 'time', value: endValue ? `${pad(endValue.getHours())}:${pad(endValue.getMinutes())}` : '' });
   const setIn = (mins) => { const d = new Date(Date.now() + mins * 60000); end.value = `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
   const taught = coverage().filter((c) => c.anchor.length || c.support.length);
@@ -187,7 +194,7 @@ function openSetup(plan, lessons, onSave) {
         d.setHours(hh, mm, 0, 0);
         timer = d.toISOString();
       }
-      const next = { day: todayKey(), question: q.value.trim(), focus: focus.value.trim(), standards: picks.map((p) => p.value).filter(Boolean), timer_end: timer };
+      const next = { day: todayKey(), question: q.value.trim(), focus: focus.value.trim(), standards: picks.map((p) => p.value).filter(Boolean), timer_end: timer, lesson: lessonPick.value };
       close();
       onSave(next);
     },
@@ -195,6 +202,7 @@ function openSetup(plan, lessons, onSave) {
   h('h2', 'Set up today'),
   h('label.field', h('span', 'Class ends at'), end),
   h('div.row', [30, 45, 60].map((m) => h('button.btn.small', { type: 'button', onclick: () => setIn(m) }, `${m} min from now`))),
+  h('label.field', h('span', 'Lesson to show'), lessonPick),
   h('label.field', h('span', 'What to work on'), focus),
   h('label.field', h('span', 'Question of the day'), q),
   h('div.field', h('span', 'Standards for today'), picks),
@@ -263,10 +271,13 @@ export async function viewProject(main, classId) {
   }
 
   function draw() {
-    const lessons = lessonsInUse(board);
+    const found = lessonsInUse(board);
+    // The teacher's choice goes first, so the race, the question, and the standards all follow it.
+    const picked = !!plan.lesson && !!getLesson(plan.lesson);
+    const lessons = picked ? [found.find((l) => l.id === plan.lesson) || { id: plan.lesson, n: 0 }, ...found.filter((l) => l.id !== plan.lesson)] : found;
     const custom = plan.focus.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 3);
     clear(panels).append(
-      racePanel(board, lessons, custom),
+      racePanel(board, lessons, custom, picked),
       questionPanel(lessons),
       h('section.pj-panel.pj-feed-panel', h('h2', 'Recent achievements'), achievements(board)),
       standardsPanel(lessons),

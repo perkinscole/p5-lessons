@@ -210,6 +210,9 @@ test('a daily plan is the teacher\'s alone, and bad input is cleaned', () => {
   teacher('saveClassPlan', cls.id, { day: '2026-11-08', question: 'Second', timer_end: '2026-11-08T15:00:00Z' });
   const plan = teacher('getClassPlan', cls.id);
   assert.equal(plan.question, 'Second');
+  assert.equal(plan.lesson, '');
+  assert.equal(teacher('saveClassPlan', cls.id, { day: '2026-11-08', lesson: 'c3' }).lesson, 'c3');
+  assert.equal(teacher('saveClassPlan', cls.id, { day: '2026-11-08', lesson: '=EVIL()' }).lesson, '');
   assert.equal(plan.timer_end, '2026-11-08T15:00:00.000Z');
 });
 
