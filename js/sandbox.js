@@ -97,6 +97,23 @@ const safeInline = (t) => t.replace(/<\/script/gi, '<\\/script').replace(/<!--/g
 // A coordinate grid students can switch on over a 2D game: lines every 50, numbers every 100, and
 // the mouse position. The lesson page turns it on with a message. It sits above the canvas and
 // never touches the student's drawing.
+// The game is drawn at its own size and shown as large as its frame allows, so a student can make
+// the game panel bigger or smaller. p5 reads the shown size when it works out mouseX and mouseY.
+const FIT_CANVAS = `
+(function () {
+  function fit() {
+    var s = window.p5 && p5.instance, c = s && s.canvas;
+    if (!c || !s.width || !s.height) return;
+    var k = Math.min(window.innerWidth / s.width, window.innerHeight / s.height);
+    var w = Math.floor(s.width * k) + 'px', t = Math.floor(s.height * k) + 'px';
+    if (c.style.width !== w) c.style.setProperty('width', w, 'important');
+    if (c.style.height !== t) c.style.setProperty('height', t, 'important');
+  }
+  window.addEventListener('resize', fit);
+  setInterval(fit, 200);
+})();
+`;
+
 const GRID_OVERLAY = `
 (function () {
   var on = false, layer = null, tip = null, k = 1, box = null;
@@ -216,6 +233,7 @@ window.SPRITES = new Proxy(${JSON.stringify(assets || {})}, { get(t, k) {
     }
   };
 })();
+${FIT_CANVAS}
 ${GRID_OVERLAY}
 window.addEventListener('error', function (e) {
   parent.postMessage({ pt: 'error', message: e.message, line: e.lineno }, '*');

@@ -43,8 +43,37 @@ function topbar() {
   const s = app.session;
   const hash = location.hash.slice(1) || '/';
   const link = (href, label) => h('a.nav', { href: `#${href}`, 'aria-current': (href === '/' ? hash === '/' : hash.startsWith(href)) ? 'page' : null }, label);
+  // A student's top bar is a few named places. Tools and Arcade open short lists, so the Music Maker
+  // and the games are easy to find without a row of nine links. Inside a lesson, a tool opens over
+  // the lesson (`app.lessonTools`) so the student stays where they are.
+  const menu = (label, items) => {
+    const list = items.filter(Boolean);
+    const el = h('details.nav-menu');
+    el.append(
+      h('summary.nav', { 'aria-current': list.some((x) => hash.startsWith(x.href)) ? 'page' : null }, `${label} ▾`),
+      h('div.nav-list', list.map((x) => h('a.nav-item', {
+        href: `#${x.href}`,
+        onclick: (e) => {
+          el.open = false;
+          const here = x.tool && app.lessonTools && app.lessonTools[x.tool];
+          if (here) { e.preventDefault(); here(); }
+        },
+      }, x.label))));
+    return el;
+  };
   const links = s.role === 'student'
-    ? [link('/', 'Home'), link('/map', 'Journey'), link('/character', 'Character'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds'), link('/arcade', 'Arcade'), s.class?.world_mode && link('/quest', 'Quest')]
+    ? [link('/', 'Home'), link('/map', 'Journey'),
+      menu('Tools', [
+        { href: '/sprites', label: '🎨 Sprites', tool: 'sprites' },
+        { href: '/sounds', label: '🔊 Sounds', tool: 'sounds' },
+        s.class?.music_open && { href: '/sounds', label: '🎵 Music Maker', tool: 'music' },
+        { href: '/character', label: '🧍 My character' },
+        { href: '/standards', label: '📋 Standards' },
+      ]),
+      menu('Arcade', [
+        { href: '/arcade', label: '🕹️ Class Arcade' },
+        s.class?.world_mode && { href: '/quest', label: '⚔️ Trail Quest' },
+      ])]
     : [link('/', 'Classes'), link('/curriculum', 'Lessons'), link('/standards', 'Standards'), link('/sprites', 'Sprites'), link('/sounds', 'Sounds'),
       store.setPreview && h('button.btn.small', { onclick: () => studentView(true), title: 'Use the app as a student would' }, '👀 Student view')];
   const who = s.role === 'student'
@@ -179,6 +208,11 @@ window.addEventListener('app-busy', (e) => {
     busyNote.remove();
     busyNote = null;
   }
+});
+
+// A menu closes when something outside it is pressed.
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('details.nav-menu[open], details.more-menu[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; });
 });
 
 // Handle in-app links here, so they always stay inside the frame Apps Script serves the app in.

@@ -1020,3 +1020,67 @@ body.in-workspace .tb-bug, body.in-workspace .tb-out { display: none; }
 .run-bar .btn:not(.run) { font-size: .85rem; }
 
 :root[data-theme='contrast'] { --step-do: #ffd000; --step-read: #9fe0ff; --step-ask: #ffb0d3; }
+
+/* Menus in the top bar: a few named places, each opening a short list. */
+body.in-workspace .navs a.nav:not([href='#/']) { display: revert; }
+.nav-menu { position: relative; }
+.nav-menu > summary { list-style: none; cursor: pointer; }
+.nav-menu > summary::-webkit-details-marker { display: none; }
+.nav-menu[open] > summary { background: rgba(255, 255, 255, .13); }
+.nav-menu > summary[aria-current='page'] { background: var(--sun); color: #2b2350; font-weight: 700; }
+.nav-list { position: absolute; left: 0; top: calc(100% + 8px); z-index: 30; display: flex; flex-direction: column; gap: 4px; min-width: 200px; padding: 8px; background: var(--card); color: var(--ink); border: 3px solid var(--line); box-shadow: 4px 4px 0 var(--line); }
+.nav-list .nav-item { display: block; width: 100%; text-align: left; padding: 9px 12px; font: 700 1rem var(--font-body); color: var(--ink); background: none; border: 0; border-radius: 3px; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.nav-list .nav-item:hover, .nav-list .nav-item:focus-visible { background: var(--sun); color: #2b2350; }
+
+/* Steps run across the top, under the lesson's name, so the instruction card has the whole panel. */
+.step-track { padding: 6px 14px; background: var(--paper-2); border-bottom: 2px solid var(--line); overflow-x: auto; }
+.step-track .step-dots { flex-wrap: nowrap; gap: 5px; align-items: center; }
+.step-track .step-dots button { width: 30px; height: 30px; font-size: .8rem; flex: none; }
+.step-track .step-dots li + li::before { content: ''; display: inline-block; width: 8px; height: 3px; margin-right: 5px; background: var(--line); vertical-align: middle; opacity: .5; }
+.step-track .step-dots li { display: flex; align-items: center; }
+
+/* Answers: each choice its own bright color, so they read as buttons and as different. */
+.quiz-option { color: #1b1640; font-weight: 700; border-color: var(--line); }
+.quiz-option.c0 { background: #6ea8ff; }
+.quiz-option.c1 { background: #ffb347; }
+.quiz-option.c2 { background: #c9a0ff; }
+.quiz-option.c3 { background: #5fd6c8; }
+.quiz-option:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
+.quiz-option.c0:hover:not(:disabled) { background: #6ea8ff; }
+.quiz-option.c1:hover:not(:disabled) { background: #ffb347; }
+.quiz-option.c2:hover:not(:disabled) { background: #c9a0ff; }
+.quiz-option.c3:hover:not(:disabled) { background: #5fd6c8; }
+.quiz-option code { background: rgba(255, 255, 255, .6); color: #1b1640; }
+.quiz-option.right { background: #37d67a; color: #06301e; }
+.quiz-option.right::before { content: '✓ '; }
+.quiz-option.wrong { background: var(--paper-2); color: var(--ink-2); text-decoration: line-through; opacity: .7; }
+
+/* A question to read before the code to add is shown. */
+.read-first { display: flex; flex-direction: column; gap: 10px; padding: 0 12px 12px; border: 3px solid var(--line); border-radius: 4px; background: var(--paper-2); }
+.read-first-tag { margin: 0 -12px; padding: 6px 12px; background: var(--step-ask); color: #2b2350; border-bottom: 3px solid var(--line); font: 400 1.05rem var(--font-display); letter-spacing: .02em; }
+.read-first .quiz-q { font-size: 1.1rem; }
+.read-first-note { margin: 0; font-size: .88rem; color: var(--ink-2); }
+.read-first-done { margin: 0; padding: 8px 12px; border-left: 6px solid var(--go); background: var(--paper-2); font-weight: 700; }
+
+/* Panels a student can resize. */
+.split { display: none; }
+.console { flex: 1 1 var(--h-console, 120px); min-height: var(--h-console, 120px); }
+.game-frame { flex: none; max-width: none; aspect-ratio: auto; }
+.run-bar { max-width: none; }
+@media (min-width: 1051px) {
+  .panes { grid-template-columns: var(--w-steps, minmax(350px, 31%)) 10px minmax(0, 1fr) 10px var(--w-game, minmax(320px, 420px)); }
+  .steps { border-right: 0; }
+  .game-pane { border-left: 0; overflow: hidden; }
+  .split { display: flex; align-items: center; justify-content: center; background: var(--line); touch-action: none; }
+  .split.down { cursor: col-resize; }
+  .split.across { cursor: row-resize; height: 10px; align-self: stretch; flex: none; border-radius: 3px; }
+  .split span { display: block; border-radius: 2px; background: var(--paper); opacity: .7; }
+  .split.down span { width: 3px; height: 36px; }
+  .split.across span { width: 36px; height: 3px; }
+  .split:hover, .split:focus-visible, .split.dragging { background: var(--accent); outline: none; }
+}
+@media (max-width: 1050px) { .panes { grid-template-columns: 1fr; } }
+.read-first .quiz-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); }
+.read-first .quiz-option { text-align: center; padding: 10px 8px; }
+.read-first-done { display: flex; gap: 8px; }
+.read-first-done p { margin: 0; }

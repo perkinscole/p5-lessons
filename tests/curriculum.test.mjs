@@ -768,3 +768,22 @@ test('lesson 1 teaches where code lives before asking for any code, and checks i
   assert.match(brief, /between/);
   assert.ok(checksFor('t1').filter((q) => q.after === braces).length >= 2, 'two check questions follow it');
 });
+
+test('a "read first" question sits on a step that shows code to add', () => {
+  let found = 0;
+  for (const l of allLessons()) {
+    const firsts = checksFor(l.id).filter((q) => q.before);
+    found += firsts.length;
+    const seen = new Set();
+    for (const q of firsts) {
+      const step = l.steps[q.after];
+      assert.ok(step, `${l.id}: "${q.q}" names a step that exists`);
+      const shown = step.show !== undefined ? step.show : step.code;
+      assert.ok(typeof shown === 'string' && !step.reveal && !step.skeleton, `${l.id}: "${q.q}" is on a step whose code is shown`);
+      assert.ok(q.code, `${l.id}: "${q.q}" shows a line to read`);
+      assert.ok(!seen.has(q.after), `${l.id}: only one read-first question per step`);
+      seen.add(q.after);
+    }
+  }
+  assert.ok(found >= 8, 'Base Camp uses read-first questions');
+});

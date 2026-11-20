@@ -1,40 +1,44 @@
 // Checks for learning: short questions built into each lesson's walkthrough.
 // after: show this question once the step at that position (counting from 0) is finished.
 const Q = (after, q, options, answer, why, code) => ({ after, q, options, answer, why, code });
+// A "read first" question: shown on that step's own card, and the step's code stays hidden until it
+// is answered. Use it for a question about a line like the one the step adds, answerable from the
+// step's instruction.
+const first = (step, ...rest) => ({ ...Q(step, ...rest), before: true });
 
 export const CHECKS = {
   t1: [
     Q(2, 'What goes between the numbers inside the parentheses?', ['A semicolon', 'A comma', 'Nothing'], 1, 'Commas split the numbers. A semicolon ends the line.', 'ellipse(340, 60, 70, 70);'),
     Q(2, 'Which mark is missing from this line?', ['A comma', 'A )', 'A ;'], 1, 'Every ( needs a matching ).', 'rect(0, 320, 400, 80;'),
-    Q(4, 'Where does this square appear?', ['Bottom right', 'Top left', 'Center'], 1, 'x and y both start at 0, the top left corner.', 'rect(0, 0, 50, 50);'),
+    first(4, 'Where does this square appear?', ['Bottom right', 'Top left', 'Center'], 1, 'x and y both start at 0, the top left corner.', 'rect(0, 0, 50, 50);'),
     Q(0, 'Which way does a bigger `y` move a shape?', ['Up', 'Down', 'Right'], 1, 'y counts down from the top. Turn on Grid to see it.'),
-    Q(3, 'In this line, which number is the width?', ['340', '60', '70'], 2, 'The order is x, y, width, height.', 'ellipse(340, 60, 70, 30);'),
+    first(3, 'In this line, which number is the width?', ['340', '60', '70'], 2, 'The order is x, y, width, height.', 'ellipse(340, 60, 70, 30);'),
     Q(5, 'Where does a `rect` start drawing?', ['Its center', 'Its bottom edge', 'Its top-left corner'], 2, 'x and y are the top-left corner.'),
     // Added later. Saved answers are stored by position in this list, so new questions go at the end.
     Q(1, 'Which line closes `draw()`?', ['Line 1', 'Line 2', 'Line 3'], 2, 'The `}` on line 3 closes the function that `{` opened on line 1.', 'function draw() {\n  background(0);\n}'),
     Q(1, 'Where does new drawing code for `draw()` go?', ['Above `function draw() {`', 'Between its `{` and `}`', 'After its closing `}`'], 1, 'Only code between the braces belongs to draw().'),
   ],
   t2: [
-    Q(1, 'What color is this square?', ['Green', 'Blue', 'Red'], 2, 'The first number in fill is red.', 'fill(255, 0, 0);\nrect(10, 10, 20, 20);'),
+    first(0, 'What color is this square?', ['Green', 'Blue', 'Red'], 2, 'The first number in fill is red.', 'fill(255, 0, 0);\nrect(10, 10, 20, 20);'),
     Q(1, 'Which shape ends up on top?', ['The one drawn last', 'The one drawn first', 'The biggest one'], 0, 'Later shapes paint over earlier ones.'),
     Q(3, 'What color is `fill(0)`?', ['White', 'Black', 'Red'], 1, 'One number is a gray. 0 is black.'),
   ],
   t3: [
     Q(0, 'How often does `draw()` run?', ['Once', 'Only when you click', 'About 60 times a second'], 2, 'setup() runs once. draw() keeps repeating.'),
     Q(1, 'In this line, what is the variable\'s name?', ['let', 'score', '0'], 1, '`let` makes the box, `score` names it, and 0 goes in it.', 'let score = 0;'),
-    Q(3, 'After this runs, what is `x`?', ['7', '5', '2'], 0, '= means "becomes." x becomes 5 + 2.', 'let x = 5;\nx = x + 2;'),
+    first(3, 'After this runs, what is `x`?', ['7', '5', '2'], 0, '= means "becomes." x becomes 5 + 2.', 'let x = 5;\nx = x + 2;'),
   ],
   t4: [
-    Q(1, 'The mouse is at x = 100. Where is this circle?', ['x = 100', 'x = 120', 'x = 80'], 1, 'The computer works out 100 + 20.', 'ellipse(mouseX + 20, 200, 30, 30);'),
-    Q(2, 'When does this code run?', ['All the time', 'Only while the mouse is pressed', 'Only once'], 1, 'if runs its code only when the condition is true.', 'if (mouseIsPressed) {\n  fill(0);\n}'),
+    first(1, 'The mouse is at x = 100. Where is this circle?', ['x = 100', 'x = 120', 'x = 80'], 1, 'The computer works out 100 + 20.', 'ellipse(mouseX + 20, 200, 30, 30);'),
+    first(2, 'When does this code run?', ['All the time', 'Only while the mouse is pressed', 'Only once'], 1, 'if runs its code only when the condition is true.', 'if (mouseIsPressed) {\n  fill(0);\n}'),
     Q(2, 'What is wrong with this code?', ['Nothing', 'The { is never closed', 'It needs a comma'], 1, 'Every { needs a matching }.', 'if (mouseX > 200) {\n  fill(255, 0, 0);'),
   ],
   t5: [
-    Q(1, 'If `speedX` is 3, what is it after this line?', ['3', '0', '-3'], 2, 'Multiplying by -1 flips the direction.', 'speedX = speedX * -1;'),
+    first(1, 'If `speedX` is 3, what is it after this line?', ['3', '0', '-3'], 2, 'Multiplying by -1 flips the direction.', 'speedX = speedX * -1;'),
     Q(3, 'The ball is 40 wide. Why check `width - 20`?', ['So its edge touches the wall', 'To make it faster', 'To make it smaller'], 0, 'ballX is the center. The edge is 20 away.'),
   ],
   t6: [
-    Q(2, 'When is this condition true?', ['When either part is true', 'When both parts are true', 'Never'], 1, '&& means and. Every part must be true.', 'if (starY > 350 && starX > 100) {'),
+    first(2, 'When is this condition true?', ['When either part is true', 'When both parts are true', 'Never'], 1, '&& means and. Every part must be true.', 'if (starY > 350 && starX > 100) {'),
     Q(4, 'When is this condition true?', ['Only if both are true', 'Never', 'If either one is true'], 2, '|| means or.', 'if (lives <= 0 || score >= 20) {'),
   ],
   p1: [

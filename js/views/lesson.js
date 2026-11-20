@@ -18,6 +18,27 @@ import { reviewFor } from '../curriculum/review.js';
 import { onSettings, getSettings, readButton, speak, stopSpeaking } from '../settings.js';
 import { alignmentFor, standardByCode } from '../curriculum/alignment.js';
 
+/** Code for reading, colored the way the editor colors it. */
+function snippet(text) {
+  const code = h('code');
+  const pre = h('pre.snippet.cm-s-default', code);
+  const CM = window.CodeMirror;
+  if (!CM || !CM.StringStream) { code.textContent = text; return pre; }
+  const mode = CM.getMode({ indentUnit: 2 }, 'javascript');
+  const state = CM.startState(mode);
+  text.split('\n').forEach((line, i) => {
+    if (i) code.append('\n');
+    const stream = new CM.StringStream(line);
+    while (!stream.eol()) {
+      const style = mode.token(stream, state);
+      const piece = stream.current();
+      stream.start = stream.pos;
+      code.append(style ? h('span', { class: style.split(' ').map((c) => `cm-${c}`).join(' ') }, piece) : piece);
+    }
+  });
+  return pre;
+}
+
 export function makeEditor(parent, value, opts = {}) {
   // Tab indents, so Esc then Tab is how keyboard users leave the editor.
   let leaving = false;
@@ -176,10 +197,17 @@ export async function viewLesson(main, id, previewPath) {
   // The walkthrough: steps with short questions woven in, one screen at a time.
   const warmUp = reviewFor(id, path);
   const quizzes = [...(warmUp ? [warmUp] : []), ...checksFor(id)];
-  const flow = [...(warmUp ? [{ quiz: warmUp }] : []), ...lesson.steps.flatMap((step, i) => [{ step, n: i }, ...quizzes.filter((q) => q.after === i).map((quiz) => ({ quiz }))])];
+  const flow = [...(warmUp ? [{ quiz: warmUp }] : []), ...lesson.steps.flatMap((step, i) => {
+    const mine = quizzes.filter((q) => q.after === i);
+    // A "read first" question sits on its step's card and must be answered before the code shows.
+    const ask = mine.find((q) => q.before);
+    return [{ step, n: i, ask }, ...mine.filter((q) => q !== ask).map((quiz) => ({ quiz }))];
+  })];
   const answered = new Set(work && work.quiz_total === quizzes.length && quizzes.length ? quizzes : []);
   let quizRight = work?.quiz_right || 0;
   let stepIndex = 0;
+  // Still to answer before this step's code is shown.
+  const pending = (item) => !!(item && item.ask && !preview && !answered.has(item.ask));
   // The furthest step reached is saved, so the class display can show it and the lesson reopens there.
   const stepNumberAt = (i) => {
     if (i >= flow.length) return lesson.steps.length;
@@ -196,7 +224,7 @@ export async function viewLesson(main, id, previewPath) {
   // A student can't go past a question they haven't answered. Teachers looking at a lesson can.
   const gate = () => {
     if (preview) return flow.length;
-    const at = flow.findIndex((x) => x.quiz && !answered.has(x.quiz));
+    const at = flow.findIndex((x) => (x.quiz && !answered.has(x.quiz)) || (x.ask && !answered.has(x.ask)));
     return at < 0 ? flow.length : at;
   };
   stepIndex = Math.min(stepIndex, gate());
@@ -442,16 +470,12 @@ export async function viewLesson(main, id, previewPath) {
 
   // Right answers in a row on the first try, for a little extra cheer.
   let streak = 0;
-  const quizPane = (q) => {
+  // The answer buttons for a question, shared by a question on its own card and one on a step.
+  const quizButtons = (q, onRight) => {
     let firstTry = !answered.has(q);
+    const qi = ownIndex(q);
     const feedback = h('div.quiz-feedback', { 'aria-live': 'polite' });
-    const nav = h('div.row.step-nav');
-    const drawNav = () => clear(nav).append(...[
-      stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
-      (answered.has(q) || preview) && h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); } }, 'Next'),
-    ].filter(Boolean));
-    drawNav();
-    const buttons = h('div.quiz-options', q.options.map((text, i) => h('button.quiz-option', {
+    const buttons = h('div.quiz-options', q.options.map((text, i) => h(`button.quiz-option.c${i % 4}`, {
       onclick: (e) => {
         if (qi >= 0 && quizFirst[qi] === undefined) { quizFirst[qi] = i === q.answer; markDirty(); }
         if (i === q.answer) {
@@ -461,8 +485,7 @@ export async function viewLesson(main, id, previewPath) {
           if (firstTry && !answered.has(q)) quizRight++;
           answered.add(q);
           clear(feedback).append(h('p.ok', '✓ ', md(q.why)));
-          { const tag = stepBox.querySelector('.step-kind span'); if (tag) tag.remove(); }
-          drawNav();
+          onRight();
           drawDots();
           markDirty();
         } else {
@@ -475,15 +498,40 @@ export async function viewLesson(main, id, previewPath) {
         }
       },
     }, md(text))));
-    const qi = ownIndex(q);
+    return { buttons, feedback, qi };
+  };
+  const quizPane = (q) => {
+    const nav = h('div.row.step-nav');
+    const drawNav = () => clear(nav).append(...[
+      stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
+      (answered.has(q) || preview) && h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); } }, 'Next'),
+    ].filter(Boolean));
+    drawNav();
+    const { buttons, feedback, qi } = quizButtons(q, () => {
+      const tag = stepBox.querySelector('.step-kind span');
+      if (tag) tag.remove();
+      drawNav();
+    });
     return h('div.stack',
       h('p.step-kind.answer', h('b', '❓ Answer this', !answered.has(q) && !preview && h('span', ' to keep going')), h('small', 'Quick check')),
       q.review && h('p.eyebrow', 'From an earlier lesson'),
       h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
-      q.code && h('pre.snippet', h('code', q.code)),
+      q.code && snippet(q.code),
       buttons, feedback,
       isStudent && qi >= 0 && confusingButton(id, `quiz:${qi}`, myFlags),
       nav);
+  };
+  // A question about a line like the one a step is about to add. The code to type stays hidden
+  // until it is answered, so the line is read before it is copied.
+  const readFirst = (item) => {
+    const q = item.ask;
+    const { buttons, feedback } = quizButtons(q, () => setTimeout(() => { if (flow[stepIndex] === item) drawStep(); }, 900));
+    return h('div.read-first',
+      h('p.read-first-tag', '🔎 Read it first'),
+      h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
+      q.code && snippet(q.code),
+      buttons, feedback,
+      h('p.read-first-note', 'Answer to see the code to add.'));
   };
 
   const finishPane = () => {
@@ -539,7 +587,7 @@ export async function viewLesson(main, id, previewPath) {
   function drawPlace() {
     clear(placeBox);
     const item = flow[stepIndex];
-    const place = item && item.step ? placeOf(item.step) : null;
+    const place = item && item.step && !pending(item) ? placeOf(item.step) : null;
     if (!place) return;
     placeBox.append(h('span.place-text', '📍 ', PLACE_TEXT[place.how](place.line)), canEdit(MAIN) && h('button.btn.small', { onclick: () => showPlace(place) }, 'Show me'));
   }
@@ -597,7 +645,7 @@ export async function viewLesson(main, id, previewPath) {
   }
   /** Start type-along for this step, once, if it is the kind of step it suits. */
   function maybeTypeAlong(n, step) {
-    if (!TYPE_ALONG.has(id) || !isStudent || approved || typedSteps.has(n) || !canEdit(MAIN)) return;
+    if (!TYPE_ALONG.has(id) || !isStudent || approved || typedSteps.has(n) || !canEdit(MAIN) || pending(flow[stepIndex])) return;
     if (typeof step.code !== 'string' || step.reveal || step.skeleton) return;
     const place = placeOf(step);
     if (!place || place.how === 'replace') return;
@@ -614,21 +662,23 @@ export async function viewLesson(main, id, previewPath) {
     stopSpeaking();
     if (stepIndex >= flow.length) { stepBox.append(finishPane()); return; }
     if (flow[stepIndex].quiz) { stepBox.append(quizPane(flow[stepIndex].quiz)); return; }
-    const s = flow[stepIndex].step;
+    const item = flow[stepIndex];
+    const s = item.step;
+    const wait = pending(item);
     const { brief, more } = briefOf(s);
     if (getSettings().autoRead) speak(brief);
     const passing = s.check && stepPasses(s, allCode());
     const display = s.show !== undefined ? s.show : s.code;
     const codeBlock = display !== undefined && h('div.snippet-wrap',
       h('p.snippet-label', s.code || s.edits ? 'Add this code' : 'Look at this'),
-      h('pre.snippet', h('code', display.replace(/^\n+/, '').replace(/\n+$/, ''))));
+      snippet(display.replace(/^\n+/, '').replace(/\n+$/, '')));
     let revealArea = codeBlock;
     if (codeBlock && s.reveal) {
       revealArea = h('div', h('button.btn', { onclick: (e) => e.target.replaceWith(codeBlock) }, 'Stuck? Show me an example'));
     }
     const lastSkeleton = s.skeleton && s.skeleton[s.skeleton.length - 1].code.trim().split('\n')[0];
     const skeletonArea = s.skeleton && h('div.stack.tight',
-      h('pre.snippet', h('code', s.skeleton.map((e) => e.code).join('\n\n'))),
+      snippet(s.skeleton.map((e) => e.code).join('\n\n')),
       canEdit(MAIN) && h('button.btn.primary', {
         disabled: mainCode().includes(lastSkeleton),
         onclick: (e) => {
@@ -649,23 +699,25 @@ export async function viewLesson(main, id, previewPath) {
       h(`p.step-kind.${kind}`, h('b', kind === 'do' ? '✏️ Your turn' : '👀 Just read'), h('small', `Step ${flow[stepIndex].n + 1} of ${lesson.steps.length}`)),
       h('h2', s.title),
       h('div.step-do', h('div.read-row', md(brief), readButton(() => brief))),
+      wait && readFirst(item),
+      item.ask && !wait && !preview && h('p.read-first-done', '✓ ', md(item.ask.why)),
       placeBox,
-      skeletonArea || '',
-      revealArea || '',
+      !wait && (skeletonArea || ''),
+      !wait && (revealArea || ''),
       s.provides && !approved && h('button.btn.primary', { disabled: extraDocs.has(s.provides.name), onclick: () => addProvided(s.provides) }, extraDocs.has(s.provides.name) ? `${s.provides.name} added ✓` : 'Add the finished file'),
-      s.provides && h('details.hint', h('summary', 'Peek inside'), h('pre.snippet', h('code', s.provides.code))),
+      s.provides && h('details.hint', h('summary', 'Peek inside'), snippet(s.provides.code)),
       s.action === 'sprites' && h('button.btn.primary', { onclick: openPicker }, 'Open Sprites'),
       s.action === 'sounds' && h('button.btn.primary', { onclick: openSounds }, 'Open Sounds'),
       s.action === 'music' && h('button.btn.primary', { onclick: openMusic }, 'Open Music Maker'),
       s.action === 'share' && h('button.btn.primary', { onclick: toggleShare }, 'Share to Arcade'),
       s.action === 'teachable' && h('a.btn.primary', { href: 'https://teachablemachine.withgoogle.com/train/image', target: '_blank', rel: 'noopener noreferrer' }, 'Open Teachable Machine ↗'),
-      s.hint && !passing && h('details.hint', h('summary', 'Hint'), md(s.hint)),
+      s.hint && !passing && !wait && h('details.hint', h('summary', 'Hint'), md(s.hint)),
       more && h('details.hint', h('summary', 'Why?'), md(more), readButton(() => more, 'Read the explanation aloud')),
       s.check && h('p.step-check', { class: passing ? 'ok' : 'wait' }, passing ? '✓ Done' : 'Not done yet'),
       isStudent && confusingButton(id, `step:${flow[stepIndex].n}`, myFlags),
       h('div.row.step-nav',
         stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
-        h('button.btn.step-next', { class: nextLabel() === 'Skip for now' ? '' : 'primary', onclick: () => { stepIndex++; drawStep(); run(); } }, nextLabel()),
+        !wait && h('button.btn.step-next', { class: nextLabel() === 'Skip for now' ? '' : 'primary', onclick: () => { stepIndex++; drawStep(); run(); } }, nextLabel()),
       ),
     ].filter(Boolean));
     // After the page has drawn, so the editor is on screen to take the cursor.
@@ -900,9 +952,6 @@ export async function viewLesson(main, id, previewPath) {
       h('summary.btn', 'More ▾'),
       h('div.more-list',
         isStudent && canEdit(MAIN) && item('Reset code', cleanCopy),
-        item('Sprites', openPicker),
-        item('Sounds', openSounds),
-        musicAllowed() && item('Music', openMusic),
         isStudent && !approved && item(work?.shared ? 'In the Arcade ✓' : 'Share to Arcade', toggleShare),
         item('🐞 Report a problem', openBugReport)));
     return menu;
@@ -942,11 +991,11 @@ export async function viewLesson(main, id, previewPath) {
     if (document.hidden || document.querySelector('.backdrop, .fx-splash')) { lastActive = Date.now(); return; }
     const idle = (Date.now() - lastActive) / 1000;
     const item = flow[stepIndex];
-    const todo = item && item.step && kindOf(item.step) === 'do' && !(item.step.check && stepPasses(item.step, allCode()));
+    const todo = item && item.step && !pending(item) && kindOf(item.step) === 'do' && !(item.step.check && stepPasses(item.step, allCode()));
     if (idle > 25 && nudged < 1) {
       nudged = 1;
       // What to look at depends on the step: where the code goes, an answer to pick, or the way on.
-      const targets = !item ? ['.btn.primary.big'] : item.quiz ? (answered.has(item.quiz) ? ['.step-nav .btn.primary'] : ['.step-kind', '.quiz-options']) : todo ? ['.step-kind', '.step-place', '.snippet'] : ['.step-nav .step-next'];
+      const targets = !item ? ['.btn.primary.big'] : item.quiz ? (answered.has(item.quiz) ? ['.step-nav .btn.primary'] : ['.step-kind', '.quiz-options']) : pending(item) ? ['.read-first-tag', '.quiz-options'] : todo ? ['.step-kind', '.step-place', '.snippet'] : ['.step-nav .step-next'];
       targets.forEach((sel) => { const el = stepBox.querySelector(sel); if (el) el.classList.add(NUDGE); });
     }
     if (idle > 50 && nudged < 2 && todo) {
@@ -990,14 +1039,69 @@ export async function viewLesson(main, id, previewPath) {
 
   const stuck = isStudent && !approved ? helpBox(id, () => Math.min(stepNumberAt(stepIndex), lesson.steps.length - 1), helpOpen) : null;
   const feedback = work?.grade?.feedback || (work?.status === 'returned');
+  // Panels a student can resize: drag a divider, or focus it and use the arrow keys. Double-click
+  // puts it back. Sizes are kept in this browser only.
+  const SIZES = 'pixeltrail.panes';
+  let sizes = {};
+  try { sizes = JSON.parse(localStorage.getItem(SIZES) || '{}') || {}; } catch (_) { /* private mode */ }
+  const keepSizes = () => { try { localStorage.setItem(SIZES, JSON.stringify(sizes)); } catch (_) { /* this visit only */ } };
+  const runBar = h('div.run-bar', h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run'), gridButton);
+  const gameFrame = h('div.game-frame', player.el);
+  const fitGame = () => {
+    const box = gamePane.getBoundingClientRect();
+    if (!box.width) return;
+    const pad = 24;
+    const consoleH = Math.max(60, Number(sizes.console) || 120);
+    const stacked = window.matchMedia('(max-width: 1050px)').matches;
+    const room = stacked ? box.width - pad : Math.min(box.width - pad, box.height - pad - runBar.offsetHeight - consoleH - 30);
+    const side = Math.max(160, Math.floor(room));
+    gameFrame.style.width = gameFrame.style.height = `${side}px`;
+    runBar.style.maxWidth = `${side}px`;
+  };
+  function applySizes() {
+    const panes = page.querySelector('.panes');
+    ['steps', 'game'].forEach((k) => (sizes[k] ? panes.style.setProperty(`--w-${k}`, `${sizes[k]}px`) : panes.style.removeProperty(`--w-${k}`)));
+    consoleBox.style.setProperty('--h-console', `${Math.max(60, Number(sizes.console) || 120)}px`);
+    fitGame();
+    cm.refresh();
+  }
+  const splitter = (key, label, across, measure) => {
+    const set = (v) => { sizes[key] = Math.round(v); applySizes(); };
+    const el = h(`div.split.${across ? 'across' : 'down'}`, {
+      role: 'separator', tabindex: 0, 'aria-label': label, 'aria-orientation': across ? 'horizontal' : 'vertical', title: 'Drag to resize. Double-click to reset.',
+      onpointerdown: (e) => { e.preventDefault(); el.setPointerCapture(e.pointerId); el.classList.add('dragging'); },
+      onpointermove: (e) => { if (el.classList.contains('dragging')) set(measure(e)); },
+      onpointerup: () => { el.classList.remove('dragging'); keepSizes(); },
+      onpointercancel: () => { el.classList.remove('dragging'); },
+      ondblclick: () => { delete sizes[key]; applySizes(); keepSizes(); },
+      onkeydown: (e) => {
+        const step = { ArrowLeft: -24, ArrowUp: 24, ArrowRight: 24, ArrowDown: -24 }[e.key];
+        if (!step) return;
+        e.preventDefault();
+        const r = el.getBoundingClientRect();
+        set(measure({ clientX: r.left + r.width / 2 + (across ? 0 : step), clientY: r.top + r.height / 2 - (across ? step : 0) }));
+        keepSizes();
+      },
+    }, h('span'));
+    return el;
+  };
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const panesBox = () => page.querySelector('.panes').getBoundingClientRect();
+  const splitSteps = splitter('steps', 'Resize the steps panel', false, (e) => { const b = panesBox(); return clamp(e.clientX - b.left, 260, b.width - 620); });
+  const splitGame = splitter('game', 'Resize the game panel', false, (e) => { const b = panesBox(); return clamp(b.right - e.clientX, 240, b.width - 620); });
+  const splitConsole = splitter('console', 'Resize the messages under the game', true, (e) => { const b = gamePane.getBoundingClientRect(); return clamp(b.bottom - e.clientY - 12, 60, b.height - 260); });
+  const gamePane = h('section.game-pane', { 'aria-label': 'Your game' }, runBar, gameFrame, splitConsole, consoleBox);
+  const watchSize = window.ResizeObserver ? new ResizeObserver(() => fitGame()) : null;
+  if (watchSize) watchSize.observe(gamePane);
+
   const page = h('div.workspace',
     head,
     work?.status === 'returned' && h('div.returned', h('strong', 'Your teacher asked for changes. '), work.grade?.feedback || ''),
     work?.status === 'approved' && feedback && h('div.approved', h('strong', 'Approved! '), work.grade?.feedback || '', work.grade ? ` Score: ${work.grade.total} of ${work.grade.max_total}.` : ''),
+    h('nav.step-track', { 'aria-label': 'Steps in this lesson' }, dots),
     h('div.panes',
       h('aside.steps',
         preview && stdPanel,
-        dots,
         stepBox,
         stuck && stuck.el,
       ),
@@ -1006,16 +1110,17 @@ export async function viewLesson(main, id, previewPath) {
         ondragover: (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); },
         ondrop: (e) => { if (e.dataTransfer?.files?.length) { e.preventDefault(); e.stopPropagation(); addUploads([...e.dataTransfer.files]); } },
       }, teamBar, fileBar, editorHost),
-      h('section.game-pane', { 'aria-label': 'Your game' },
-        h('div.run-bar', h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run'), gridButton),
-        h('div.game-frame', player.el),
-        consoleBox,
-      ),
+      splitGame,
+      gamePane,
     ),
   );
+  page.querySelector('.panes').insertBefore(splitSteps, page.querySelector('.code-pane'));
+  applySizes();
 
   clear(main).append(page);
   document.body.classList.add('in-workspace');
+  // The top bar's Tools menu opens these here, so a student stays in the lesson.
+  app.lessonTools = { sprites: openPicker, sounds: openSounds, music: musicAllowed() ? openMusic : null };
   drawFileBar();
   cm.refresh();
   run();
@@ -1033,6 +1138,8 @@ export async function viewLesson(main, id, previewPath) {
     ['pointerdown', 'keydown', 'wheel'].forEach((ev) => window.removeEventListener(ev, active, true));
     window.removeEventListener('beforeunload', beforeUnload);
     document.body.classList.remove('in-workspace');
+    if (watchSize) watchSize.disconnect();
+    delete app.lessonTools;
     saveSoon.cancel();
     if (dirty) await persist();
     if (team && driving) app.store.passKeyboard(id).catch(() => {});
