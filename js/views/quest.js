@@ -62,6 +62,9 @@ const SPRITES = {
 const SOLO_KEYS = { ArrowLeft: '0l', a: '0l', ArrowRight: '0r', d: '0r', ArrowUp: '0u', w: '0u', ArrowDown: '0d', s: '0d', ' ': '0dash' };
 const DUO_KEYS = { a: '0l', d: '0r', w: '0u', s: '0d', ' ': '0dash', ArrowLeft: '1l', ArrowRight: '1r', ArrowUp: '1u', ArrowDown: '1d', Enter: '1dash' };
 const MARKS = ['#ffd23f', '#5cd3ff'];
+// Arriving in a room: how long nothing can hurt you, and how long enemies wait before moving.
+const ARRIVE_SAFE = 2;
+const ARRIVE_HOLD = 0.8;
 
 /**
  * Play one run on `canvas`.
@@ -89,7 +92,7 @@ export function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd, fr
   const players = team.map((m, i) => {
     const powers = powersFor(m.avatar);
     const x = world.start.x + i * 16;
-    return { ...m, n: i, powers, x, y: world.start.y, hearts: powers.hearts, shield: 0, relics: [], down: 0, safe: 1, dashT: 0, dashCd: 0, bolt: 0, star: 0, fx: 1, fy: 0, pet: { x: x - 12, y: world.start.y } };
+    return { ...m, n: i, powers, x, y: world.start.y, hearts: powers.hearts, shield: 0, relics: [], down: 0, safe: ARRIVE_SAFE, dashT: 0, dashCd: 0, bolt: 0, star: 0, fx: 1, fy: 0, pet: { x: x - 12, y: world.start.y } };
   });
   const shots = [];
   const sparks = [];
@@ -146,8 +149,10 @@ export function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd, fr
     roomTime = 0;
     players.forEach((pl, i) => {
       pl.x = world.start.x + (i && !isSolid(tileAt(world.start.x + 16, world.start.y)) ? 16 : 0); pl.y = world.start.y; pl.pet.x = pl.x - 12; pl.pet.y = pl.y;
-      pl.safe = 1; pl.shield = pl.powers.shield; pl.dashT = 0;
+      pl.safe = ARRIVE_SAFE; pl.shield = pl.powers.shield; pl.dashT = 0;
       if (pl.down > 0) { pl.down = 0; pl.hearts = 1; }
+      // Clearing a room earns a heart back, so one bad room doesn't end the next one at the door.
+      else if (pl.hearts < pl.powers.hearts) pl.hearts += 1;
     });
     trail.push(DOWN);
     say(early > 0 ? `Fast! +${bonus}${streak > 1 ? ` · streak x${Math.min(3, streak)}` : ''}` : `Room ${depth}`);
@@ -314,6 +319,8 @@ export function startRun({ canvas, seed, team, ghosts, seconds, onHud, onEnd, fr
     const fast = world.speed;
     for (const e of world.enemies) {
       if (e.dead) continue;
+      // Nothing moves or spits for a beat after you arrive, so you can read the room.
+      if (roomTime < ARRIVE_HOLD) continue;
       e.hit = false;
       const pl = nearest(e);
       const d = Math.hypot(pl.x - e.x, pl.y - e.y) || 1;
@@ -539,7 +546,7 @@ export async function viewQuest() {
               h('li', 'Dash with Space to slip past enemies and over spikes.'),
               h('li', 'Beat the ⚡ bar for a speed bonus. Fast rooms in a row pay more.'),
               h('li', '⚡ ⭐ 💣 boosts are strong but short. Relics last the whole run.'),
-              h('li', 'Lose all your hearts and the run ends. You keep your coins.')))),
+              h('li', 'Each door gives a heart back. Lose them all and the run ends. You keep your coins.')))),
         h('section.card.stack',
           h('h2', 'Best runs'),
           s.board.length ? h('ol.quest-board', s.board.map((b) => h('li', { class: b.id === student.id ? 'me' : '' },

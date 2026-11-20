@@ -59,19 +59,35 @@ const columnOf = (id) => {
   return st.beyond ? 'beyond' : st.id;
 };
 
-/** Use the largest character size at which every student is visible, on the trail and in the race. */
+/**
+ * Make the characters as big as they can be with every student and every name still showing.
+ * The size is one number (--ph, the character's height), searched for rather than picked from a few.
+ */
 function fitTrail(root) {
-  for (const [box, part] of [['.pj-race', '.pj-racers']]) {
-    const el = root.querySelector(box);
-    if (!el) continue;
-    for (const size of ['large', 'medium', 'small', 'tiny']) {
-      el.classList.remove('large', 'medium', 'small', 'tiny');
-      el.classList.add(size);
-      if (![...el.querySelectorAll(part)].some((st) => st.scrollHeight > st.clientHeight + 1)) break;
-    }
+  const el = root.querySelector('.pj-race');
+  if (!el) return;
+  const vh = window.innerHeight / 100;
+  const parts = [...el.querySelectorAll('.pj-racers')];
+  const fits = (size) => {
+    el.style.setProperty('--ph', `${size}px`);
+    // Only height can run out: a name wraps and a row breaks before anything is too wide.
+    return !parts.some((st) => st.scrollHeight > st.clientHeight + 1);
+  };
+  let low = 3.2 * vh;
+  let high = 17 * vh;
+  if (fits(high) || !fits(low)) return;
+  for (let i = 0; i < 7; i++) {
+    const mid = (low + high) / 2;
+    if (fits(mid)) low = mid; else high = mid;
   }
+  fits(low);
 }
 
+// How wide a stop wants to be: room for each name there, since names are what take the width.
+// Blocks further up the hill have less sky above them, so they get a little more width to make up for it.
+const roomFor = (people, rise) => 3 + (1 + 0.7 * rise) * people.reduce((a, s) => a + Math.min(9, Math.max(5, String(s.display_name).length)) + 2, 0);
+// A block is never narrower than the longest word of a name standing on it, so no name is cut off.
+const widestWord = (people) => Math.max(6.4, ...people.map((s) => 2.5 + 1.15 * Math.max(...String(s.display_name).split(/\s+/).map((w) => w.length)))).toFixed(1);
 const sameDay = (iso) => !!iso && new Date(iso).toLocaleDateString('en-CA') === todayKey();
 // A student who asked for help just bounces and glows a little. Who it is and what they wrote stay
 // off the projector: the teacher opens the list from the small ✋ button.
@@ -117,16 +133,18 @@ function racePanel(board, lessons, focus) {
       h('h2', `Today: ${lesson.title}`),
       h('span.pj-sub', `${working} working · ${at.get('finish').length} submitted · ${at.get('start').length} not started`)),
     focus.length > 0 && h('ul.pj-race-focus', focus.map((x) => h('li', x))),
-    // The race happens inside its stage's scenery: Base Camp's tents, the forest, the summit.
-    // A crowded stop gets a wider column, so the characters can stay big.
-    h('div.pj-race.pj-scene', { style: `grid-template-columns:${stops.map((st) => `minmax(9.5vh, ${1.5 + 1.5 * at.get(st.key).length}fr)`).join(' ')};${stageSceneStyle(columnOf(main.id))}` },
-      stops.map((st) => {
+    // The race climbs a hill of blocks inside its stage's scenery: each step is one block higher,
+    // and the finish is the top. A crowded stop gets a wider block, so characters and names stay big.
+    h('div.pj-race.pj-scene', { style: `grid-template-columns:${stops.map((st, i) => `minmax(${widestWord(at.get(st.key))}vh, ${roomFor(at.get(st.key), i / (stops.length - 1)).toFixed(1)}fr)`).join(' ')};${stageSceneStyle(columnOf(main.id))}` },
+      stops.map((st, i) => {
         const here = at.get(st.key);
         const busy = typeof st.key === 'number' && here.length > 0 && here.length === busiest;
-        return h('div.pj-stop', { class: `${typeof st.key === 'number' ? '' : st.key} ${busy ? 'busy' : ''}` },
-          h('div.pj-stop-mark', st.mark),
-          h('div.pj-stop-label', st.label),
-          h('div.pj-racers', here.map(personChip)));
+        return h('div.pj-stop', { class: `${typeof st.key === 'number' ? '' : st.key} ${busy ? 'busy' : ''}`, style: `--rise:${(i / (stops.length - 1)).toFixed(3)}` },
+          h('div.pj-racers', here.map(personChip)),
+          h('div.pj-block',
+            h('div.pj-block-top'),
+            h('div.pj-stop-mark', st.mark),
+            h('div.pj-stop-label', st.label)));
       })),
     others.length > 0 && h('div.pj-others', h('strong', 'On other lessons:'),
       others.map((s) => h('span.pj-other', { class: needsHelp.has(s.id) ? 'needs-help' : '' }, h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 2), alt: '' }), `${s.display_name} · ${where(s)}`))),
