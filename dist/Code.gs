@@ -138,16 +138,64 @@ const reply_ = (data) => JSON.stringify({ ok: true, data: data === undefined ? n
 function whoAmI_() {
   const email = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
   if (!email) return { role: null, email: '' };
+  // Who someone is hardly ever changes, and looking it up costs three trips to the Sheet on every
+  // request from every student. So it is remembered for a few minutes, and forgotten the moment
+  // that person's row is written or anyone is removed (whoForget_, whoEpoch_).
+  const known = whoCached_(email);
+  if (known) return known;
   const owner = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
   let teacher = rows_('Teachers').find((t) => t.email === email);
   if (!teacher && email === owner) {
     teacher = { email, display_name: email.split('@')[0], created_at: now_() };
     withLock_(() => { if (!rows_('Teachers').some((t) => t.email === email)) insert_('Teachers', teacher); });
   }
-  if (teacher) return { role: 'teacher', email, teacher };
+  if (teacher) return whoRemember_(email, { role: 'teacher', email, teacher });
   const at = findRows_('Students', 'email', email)[0];
-  if (at) return { role: 'student', email, student: readRow_('Students', at) };
+  if (at) return whoRemember_(email, { role: 'student', email, student: readRow_('Students', at) });
+  // Someone not on a roster is never remembered, so being added works at once.
   return { role: null, email };
+}
+
+const WHO_SECONDS = 120;
+const whoKey_ = (email) => `who:${sheetId_}:${email}`;
+/** Changes whenever a student or teacher row is removed, which moves the rows below it. */
+function whoEpoch_(bump) {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (bump) cache.put('who_epoch', uuid_(), 21600);
+    return cache.get('who_epoch') || '0';
+  } catch (_) {
+    return null;
+  }
+}
+function whoCached_(email) {
+  try {
+    const key = whoKey_(email);
+    const got = CacheService.getScriptCache().getAll(['who_epoch', key]);
+    if (!got[key]) return null;
+    const hit = JSON.parse(got[key]);
+    return hit.epoch === (got.who_epoch || '0') && hit.me && hit.me.email === email ? hit.me : null;
+  } catch (_) {
+    return null;
+  }
+}
+function whoRemember_(email, me) {
+  try {
+    const epoch = whoEpoch_(false);
+    if (epoch !== null) CacheService.getScriptCache().put(whoKey_(email), JSON.stringify({ epoch, me }), WHO_SECONDS);
+  } catch (_) { /* The cache is only a shortcut. */ }
+  return me;
+}
+function whoForget_(email) {
+  try { CacheService.getScriptCache().remove(whoKey_(String(email || '').trim().toLowerCase())); } catch (_) { /* Then it lapses by itself. */ }
+}
+/** Called by every write to a tab. People and groups are remembered in the cache, so their tabs clear it. */
+function wrote_(name, row, removed) {
+  if (name === 'Students' || name === 'Teachers') {
+    if (removed || !row || !row.email) whoEpoch_(true);
+    else whoForget_(row.email);
+  }
+  if (name === 'Teams') { try { CacheService.getScriptCache().remove(`teams_none:${sheetId_}`); } catch (_) { /* It lapses by itself. */ } }
 }
 
 function sessionFor_(me) {
@@ -165,6 +213,9 @@ function sessionFor_(me) {
 // Storage -----------------------------------------------------------------------------------------
 
 let spreadsheet_ = null;
+// The id of the Sheet in use, so nothing remembered about one Sheet is ever used with another.
+let sheetId_ = '';
+const tabs_ = {};
 
 const BUSY_ = 'BUSY: Pixel Trail is very busy right now. Your work is safe. Trying again...';
 
@@ -179,6 +230,7 @@ function db_() {
   let id = props.getProperty('DATA_SHEET_ID');
   if (id) {
     spreadsheet_ = openSheet_(id);
+    sheetId_ = id;
     return spreadsheet_;
   }
   // No id has ever been saved: this is the very first run. The lock stops two first visitors each making one.
@@ -188,10 +240,12 @@ function db_() {
     id = props.getProperty('DATA_SHEET_ID');
     if (id) {
       spreadsheet_ = openSheet_(id);
+      sheetId_ = id;
       return spreadsheet_;
     }
     const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.create('Pixel Trail Data');
     rememberSheet_(ss.getId());
+    sheetId_ = ss.getId();
     spreadsheet_ = ss;
     return ss;
   } finally {
@@ -234,6 +288,14 @@ function parseList_(text) {
 
 function sheet_(name) {
   const ss = db_();
+  // Asked for many times in one request; the answer can't change within it.
+  if (tabs_[name] && tabs_.of === ss) return tabs_[name];
+  if (tabs_.of !== ss) { Object.keys(tabs_).forEach((k) => delete tabs_[k]); tabs_.of = ss; }
+  const made = sheetNow_(ss, name);
+  tabs_[name] = made;
+  return made;
+}
+function sheetNow_(ss, name) {
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
@@ -279,12 +341,13 @@ function rows_(name, cols) {
 }
 
 const toCells_ = (name, obj) => SCHEMA[name].map((f) => (f.startsWith('data') && obj[f] !== undefined ? obj[f] : encode_(f, obj[f])));
-const insert_ = (name, obj) => sheet_(name).appendRow(toCells_(name, obj));
+const insert_ = (name, obj) => { sheet_(name).appendRow(toCells_(name, obj)); wrote_(name, obj, false); };
 
 function update_(name, row) {
   const cols = SCHEMA[name];
   const sh = sheet_(name);
   sh.getRange(row._row, 1, 1, cols.length).setValues([toCells_(name, row)]);
+  wrote_(name, row, false);
 }
 
 function readRow_(name, rowNumber) {
@@ -312,16 +375,36 @@ function myWorkList_(studentId) {
   const vals = sheet_('Works').getRange(first, 3, found[found.length - 1] - first + 1, 2).getValues();
   return found.map((r) => ({ _row: r, lesson_id: decode_('lesson_id', vals[r - first][0]), status: decode_('status', vals[r - first][1]) }));
 }
-/** One student's saved lesson, whole, or null when they haven't started it. */
+/**
+ * One student's saved lesson, whole, or null when they haven't started it.
+ *
+ * Finding the row is the slow part of a save, and a save holds the lock everyone shares. So the row
+ * number is remembered, and checked every time: the row is read (which a save needs anyway) and only
+ * trusted if it really is this student's lesson. A wrong or missing memory just means a search.
+ */
 function myWorkRow_(studentId, lessonId) {
+  const key = `wr:${sheetId_}:${studentId}:${lessonId}`;
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (_) { cache = null; }
+  try {
+    const at = cache ? Number(cache.get(key)) : 0;
+    if (at >= 2 && at <= sheet_('Works').getLastRow()) {
+      const row = readRow_('Works', at);
+      if (row.student_id === studentId && row.lesson_id === lessonId) return row;
+    }
+  } catch (_) { /* Search for it instead. */ }
   const hit = myWorkList_(studentId).find((w) => w.lesson_id === lessonId);
-  return hit ? readRow_('Works', hit._row) : null;
+  if (!hit) return null;
+  try { if (cache) cache.put(key, String(hit._row), 21600); } catch (_) { /* Only a shortcut. */ }
+  return readRow_('Works', hit._row);
 }
 
 /** Delete bottom-up so earlier row numbers stay valid. */
 function deleteRows_(name, predicate, cols) {
   const sh = sheet_(name);
-  rows_(name, cols || SCHEMA[name].slice(0, 3)).filter(predicate).map((r) => r._row).sort((a, b) => b - a).forEach((r) => sh.deleteRow(r));
+  const doomed = rows_(name, cols || SCHEMA[name].slice(0, 3)).filter(predicate).map((r) => r._row).sort((a, b) => b - a);
+  doomed.forEach((r) => sh.deleteRow(r));
+  if (doomed.length) wrote_(name, null, true);
 }
 
 /** Split long text across cells, and join it back. Each piece is marked so it can't act as a formula. */
@@ -337,13 +420,13 @@ function unpackChunks_(row, count) {
   return out;
 }
 
-function withLock_(fn) {
+function withLock_(fn, waitMs) {
   const lock = LockService.getScriptLock();
   const asked = Date.now();
   try {
-    lock.waitLock(20000);
+    lock.waitLock(waitMs || 20000);
   } catch (_) {
-    console.warn('LOCK_TIMEOUT: waited 20 s for a turn to save');
+    console.warn(`LOCK_TIMEOUT: waited ${(waitMs || 20000) / 1000} s for a turn to save`);
     throw new Error(BUSY_);
   }
   // Shows in Apps Script's Executions log, so a pilot can see saves queuing up before they fail.
@@ -1514,7 +1597,14 @@ function cleanFiles_(files) {
 const TEAM_HOLD_MS = 180000;
 const ROAD_OF_ = { p: 'platformer', a: 'adventure', s: 'arcade', m: 'mind' };
 const EMPTY_DOC_ = '{"code":"","assets":{},"files":{}}';
-const teamOf_ = (studentId, lessonId) => rows_('Teams').find((t) => t.lesson_id === lessonId && (t.members || []).includes(studentId));
+/** The group a student is in for a lesson, if any. Most classes have no groups, and that is remembered so a save doesn't read the tab to find out. */
+function teamOf_(studentId, lessonId) {
+  const key = `teams_none:${sheetId_}`;
+  try { if (CacheService.getScriptCache().get(key) === '1') return undefined; } catch (_) { /* Read the tab. */ }
+  const teams = rows_('Teams');
+  if (!teams.length) { try { CacheService.getScriptCache().put(key, '1', 600); } catch (_) { /* Only a shortcut. */ } }
+  return teams.find((t) => t.lesson_id === lessonId && (t.members || []).includes(studentId));
+}
 const MAIN_FILE_ = 'sketch.js';
 /** Who is editing each file right now: { 'sketch.js': studentId }. Holds lapse after TEAM_HOLD_MS. */
 function holdersNow_(team) {
@@ -1791,7 +1881,9 @@ function saveMyWork_(me, lessonId, patch, extra) {
     [...WORK_META, ...WORK_TAIL].forEach((f) => { out[f] = row[f]; });
     const saved = JSON.parse(written);
     return { ...out, code: saved.code, assets: saved.assets, files: saved.files, team_lost: lostTurn };
-  });
+    // A routine autosave steps aside quickly when the app is busy and tries again later, leaving the
+    // lock for the things someone is waiting on, like a submit.
+  }, extra ? 20000 : 6000);
 }
 
 // Backups and recovery ---------------------------------------------------------------------------
@@ -2043,6 +2135,9 @@ function dataCombine_(me, link, go) {
       sh.getRange(sh.getLastRow() + 1, 1, rows.length, SCHEMA[name].length).setValues(rows);
     });
     plan.set.forEach((x) => sheet_(x.name).getRange(x.row, 1, 1, SCHEMA[x.name].length).setValues([x.vals]));
+    // Rows were written without the usual helpers, so nothing remembered about people or groups is kept.
+    wrote_('Students', null, true);
+    wrote_('Teams', null, true);
     if (first) props.setProperty('COMBINED', JSON.stringify(done.concat(key).slice(-30)));
     return plan.counts;
   });
@@ -2228,7 +2323,10 @@ const STUDENT_ROUTES = {
   saveSong: saveSong_,
   deleteSong: deleteSong_,
   updateProfile: (me, patch) => withLock_(() => {
-    const s = { ...me.student };
+    // Read again inside the lock: the row must be the one in the Sheet now, not one remembered.
+    const at = findRows_('Students', 'email', me.email)[0];
+    if (!at) throw new Error('You are not on a class list any more. Ask your teacher.');
+    const s = readRow_('Students', at);
     if (patch.avatar !== undefined) {
       if (JSON.stringify(patch.avatar).length > 2000) throw new Error('That character is too big.');
       s.avatar = patch.avatar;

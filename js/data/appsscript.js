@@ -19,7 +19,7 @@ function send(method, args) {
 
 // Every trip to Apps Script costs about a second, whatever it carries, and the whole class shares
 // one account's limit. queue.js sends one trip at a time and retries quietly when Google is busy.
-const { call, direct } = createQueue(send, {
+const { call, once, direct } = createQueue(send, {
   onBusy: (on) => window.dispatchEvent(new CustomEvent('app-busy', { detail: on })),
 });
 
@@ -32,6 +32,7 @@ const cache = new Map();
 let generation = 0;
 // Checked every few seconds, so they skip the cache both ways: never reused, and never clearing it.
 const LIVE = new Set(['helpRequests', 'myHelp', 'translate']);
+const ONCE = new Set(['saveWork']);
 // Student view: a teacher's calls are run on the server as their pretend student.
 let preview = false;
 const PREVIEW_OWN = new Set(['previewStart', 'previewReset', 'translate']);
@@ -47,7 +48,8 @@ function cachedFor(sent, sentArgs, kind, label) {
   if (!READS.has(kind)) {
     generation++;
     cache.clear();
-    return call(method, ...args).finally(() => { generation++; cache.clear(); });
+    // An autosave that meets a busy server gives way at once; the lesson page saves again shortly.
+    return (ONCE.has(kind) ? once : call)(method, ...args).finally(() => { generation++; cache.clear(); });
   }
   const key = `${label} ${JSON.stringify(args)}`;
   const hit = cache.get(key);

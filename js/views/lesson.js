@@ -386,8 +386,10 @@ export async function viewLesson(main, id, previewPath) {
       status.textContent = 'All saved';
       status.classList.remove('bad');
     } catch (e) {
-      status.textContent = "Couldn't save. Check your connection.";
-      status.classList.add('bad');
+      // A busy server is not the student's problem: say it calmly and keep trying.
+      const busy = /busy/i.test(e.message || '');
+      status.textContent = busy ? 'Saving again in a moment…' : "Couldn't save. Check your connection.";
+      status.classList.toggle('bad', !busy);
       console.error(e);
       saveSoon(); // Try again, so a busy moment can't lose a student's work.
     }

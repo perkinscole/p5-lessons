@@ -729,3 +729,10 @@ test('every Classroom assignment describes its stop on the trail and quotes its 
   assert.equal(lessonForStop('L999', 'arcade'), null);
   assert.equal(lessonForStop('<script>', 'arcade'), null);
 });
+
+test('no two animations in the stylesheet share a name', async () => {
+  const { readFileSync } = await import('node:fs');
+  // A later one silently replaces an earlier one. That once sent the character on the character page sliding off its stage.
+  const names = [...readFileSync(new URL('../css/app.css', import.meta.url), 'utf8').matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]);
+  assert.deepEqual(names.filter((n, i) => names.indexOf(n) !== i), []);
+});

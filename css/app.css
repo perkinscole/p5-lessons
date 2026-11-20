@@ -627,7 +627,7 @@ body.projecting .page { max-width: none; padding: 0; }
 .pj-stop.busy .pj-stop-mark { background: var(--accent); color: var(--accent-ink); }
 .pj-stop.start .pj-stop-mark { opacity: .8; }
 .pj-stop-label { font-size: 1.3vh; max-width: 100%; max-height: 3.1vh; overflow: hidden; font-weight: 700; line-height: 1.1; text-align: center; color: var(--ink); background: var(--card); border: 1px solid var(--line); padding: 1px 4px; letter-spacing: -.02em; }
-.pj-racers { position: relative; z-index: 1; flex: 1; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-wrap: wrap-reverse; align-content: flex-start; align-items: flex-end; justify-content: center; gap: .3vh 0; padding: .6vh 0 0 1.6vh; margin-bottom: -1.5vh; }
+.pj-racers { position: relative; z-index: 1; flex: 1; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-wrap: wrap-reverse; align-content: flex-start; align-items: flex-end; justify-content: center; gap: .3vh 0; padding: .6vh 0 1vh 1.6vh; }
 .pj-person { margin: 0 calc(var(--ph) * -.05); max-width: 100%; }
 .pj-person img { height: var(--ph); max-width: none; filter: drop-shadow(0 .4vh .2vh rgba(0, 0, 0, .3)); }
 /* Names never hide. They shrink with the characters, but not below a size the back row can read. */
@@ -906,14 +906,14 @@ button.pin-stop:hover img, button.pin-stop:focus-visible img { filter: drop-shad
 @media (prefers-reduced-motion: no-preference) {
   .critter.roam img { animation: roam 9s steps(24) infinite; }
   .critter.hop img { animation: hop 3s steps(6) infinite; }
-  .critter.bob img { animation: bob 4s ease-in-out infinite; }
+  .critter.bob img { animation: critter-bob 4s ease-in-out infinite; }
   .critter.flit img { animation: flit 5s steps(10) infinite; }
   .critter.twinkle img { animation: twinkle 3s ease-in-out infinite; }
   .map3d-sky .flock { animation: flock 40s ease-in-out infinite; }
 }
 @keyframes roam { 0% { transform: translateX(0) scaleX(1); } 46% { transform: translateX(160%) scaleX(1); } 50% { transform: translateX(160%) scaleX(-1); } 96% { transform: translateX(0) scaleX(-1); } 100% { transform: translateX(0) scaleX(1); } }
 @keyframes hop { 0%, 60%, 100% { transform: translate(0, 0); } 15% { transform: translate(20%, -45%); } 30% { transform: translate(40%, 0); } 45% { transform: translate(60%, -45%); } }
-@keyframes bob { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(60%, 8%); } }
+@keyframes critter-bob { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(60%, 8%); } }
 @keyframes flit { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(150%, -120%); } 50% { transform: translate(-80%, -200%); } 75% { transform: translate(-160%, -60%); } }
 @keyframes twinkle { 0%, 100% { opacity: .15; transform: translate(0, 0); } 50% { opacity: 1; transform: translate(60%, -80%); } }
 @keyframes balloon { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(26px, -9px); } }

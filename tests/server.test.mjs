@@ -944,6 +944,63 @@ test('reliability: one student action reads a few rows, however many students th
   }
 });
 
+test('reliability: who someone is, is remembered, and forgotten the moment it changes', () => {
+  const { server, teacher, ari, cls, ids } = setup();
+  ari('session');
+  // Remembered: a second request reads no Teachers or Students cells to find out who is asking.
+  const before = ['Teachers', 'Students'].map((n) => server.sheets.get(n).reads);
+  ari('myHelp');
+  assert.deepEqual(['Teachers', 'Students'].map((n) => server.sheets.get(n).reads), before);
+  // The teacher changes this student's road: the very next request sees it.
+  teacher('setStudentPath', ids[ARI], 'platformer');
+  assert.equal(ari('session').student.path, 'platformer');
+  // The student changes their own character: seen at once, and written to their own row.
+  ari('updateProfile', { avatar: { hat: 'cap' } });
+  assert.equal(ari('session').student.avatar.hat, 'cap');
+  // Someone added to a roster gets in straight away, even having just been turned away.
+  assert.equal(server.as(STRANGER)('session').role, null);
+  teacher('addStudents', cls.id, [`New Kid, ${STRANGER}`]);
+  assert.equal(server.as(STRANGER)('session').role, 'student');
+  // Someone removed is out on their next request.
+  teacher('removeStudent', ids[ARI]);
+  assert.equal(ari('session').role, null);
+  denied(() => ari('saveWork', 't1', { code: 'still here?', assets: {} }));
+});
+
+test('reliability: removing a student above never sends another student\'s save or profile to the wrong row', () => {
+  const { server, teacher, ari, bea, cls, ids } = setup();
+  teacher('addStudents', cls.id, ['Cy K, cy@school.test']);
+  const cy = server.as('cy@school.test');
+  cy('saveWork', 't1', { code: 'CY ONE', assets: {} });
+  cy('session');
+  // Ari's rows sit above Cy's in both tabs. Removing Ari moves Cy's rows up by one.
+  teacher('removeStudent', ids[ARI]);
+  cy('saveWork', 't1', { code: 'CY TWO', assets: {}, step_at: 3 });
+  cy('updateProfile', { avatar: { hat: 'crown' } });
+  const mine = cy('myWorks');
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].code, 'CY TWO');
+  assert.equal(cy('session').student.avatar.hat, 'crown');
+  // Bea, whose rows are also nearby, is untouched.
+  const beas = bea('myWorks');
+  assert.equal(beas.length, 1);
+  assert.equal(beas[0].code, 'BEA CODE');
+  assert.equal(bea('session').student.display_name, 'Bea T');
+  assert.ok(!bea('session').student.avatar || bea('session').student.avatar.hat !== 'crown');
+});
+
+test('reliability: a routine save finds its row without searching, and a first save still makes exactly one row', () => {
+  const { server, ari } = setup();
+  ari('saveWork', 't2', { code: 'one', assets: {} });
+  ari('saveWork', 't2', { code: 'two', assets: {} });
+  server.cellsRead();
+  ari('saveWork', 't2', { code: 'three', assets: {} });
+  assert.ok(server.cellsRead() < 80, 'a repeat save reads little');
+  const mine = ari('myWorks').filter((w) => w.lesson_id === 't2');
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].code, 'three');
+});
+
 test('reliability: the class board is built once and shared, and changes still show', () => {
   const { server, cls, kids } = classOf();
   server.as(kids[0])('classBoard', cls.id);

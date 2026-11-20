@@ -22,13 +22,13 @@ export function createQueue(send, { maxBatch = 12, tries = 5, onBusy = () => {},
   const backoff = (n) => sleep(1200 * 1.8 ** n + random() * 1500);
 
   /** One trip, retried while the server says it is busy. */
-  async function trip(method, args) {
+  async function trip(method, args, most = tries) {
     for (let n = 0; ; n++) {
       try {
         return await send(method, args);
       } catch (e) {
         if (!BUSY.test(e.message)) throw e;
-        if (n >= tries) throw new Error(BUSY_MESSAGE);
+        if (n >= most) throw new Error(BUSY_MESSAGE);
         setBusy(true);
         await backoff(n);
       }
@@ -40,14 +40,14 @@ export function createQueue(send, { maxBatch = 12, tries = 5, onBusy = () => {},
     let jobs = group;
     for (let n = 0; jobs.length; n++) {
       const results = jobs.length === 1
-        ? [await trip(jobs[0].method, jobs[0].args).then((data) => ({ ok: true, data }), (e) => ({ ok: false, error: e.message }))]
+        ? [await trip(jobs[0].method, jobs[0].args, jobs[0].tries === undefined ? tries : jobs[0].tries).then((data) => ({ ok: true, data }), (e) => ({ ok: false, error: e.message }))]
         : await trip('batch', [jobs.map((j) => [j.method, j.args])]);
       const again = [];
       jobs.forEach((j, k) => {
         const r = results[k];
         if (r.ok) j.resolve(r.data);
         // Inside a batch, only the calls that were told "busy" go round again.
-        else if (BUSY.test(r.error) && n < tries) again.push(j);
+        else if (BUSY.test(r.error) && n < (j.tries === undefined ? tries : j.tries)) again.push(j);
         else j.reject(new Error(BUSY.test(r.error) || r.error === BUSY_MESSAGE ? BUSY_MESSAGE : r.error));
       });
       jobs = again;
@@ -76,6 +76,8 @@ export function createQueue(send, { maxBatch = 12, tries = 5, onBusy = () => {},
   });
   return {
     call: (method, ...args) => add({ method, args }),
+    // For work that tries again by itself later, like an autosave: one go, so it never holds up what is behind it.
+    once: (method, ...args) => add({ method, args, tries: 0 }),
     direct: (method, args) => add({ method, args, alone: true }),
   };
 }

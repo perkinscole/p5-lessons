@@ -73,3 +73,14 @@ test('queue: big downloads go one at a time, in line with everything else', asyn
   assert.equal(most(), 1);
   assert.equal(trips.filter(([m]) => m === 'batch').length, 0);
 });
+
+test('queue: a call sent once is not retried when the server is busy, and what is behind it still goes', async () => {
+  const { q, trips, waits } = setup((method) => { if (method === 'saveWork') throw new Error('BUSY: try later'); return 'done'; });
+  const save = q.once('saveWork', 't1').then(() => 'saved', (e) => e.message);
+  await new Promise((r) => setTimeout(r, 1));
+  const submit = q.call('submitWork', 't1');
+  assert.equal(await save, BUSY_MESSAGE);
+  assert.equal(await submit, 'done');
+  assert.equal(trips.filter(([m]) => m === 'saveWork').length, 1);
+  assert.equal(waits.length, 0);
+});
