@@ -110,6 +110,15 @@ On your Classes page, press **Import from Google Classroom** to bring in courses
 
 A class's **Classroom grades** tab makes named assignments in that section's Classroom: tick lessons, edit their names, set points and an optional due date, and post them now or save them as drafts. Each assignment matches a lesson number in the gradebook, so one covers all four roads. After grading in the app, **Send grades** sends every approved score that changed, scaled to the assignment's points. Then press Return in Classroom. The **Assignments** tab shows every Classroom assignment and each student's status. **Keeping up** flags students who are behind the pace for your term dates, have gone quiet, have work to fix, or have missing Classroom work. You can turn on an email on school mornings, sent only when someone needs a check-in.
 
+Each assignment the app creates carries:
+
+- **A description** that says where the stop is on the trail, what the lesson is and teaches, how long it takes, how to hand it in, and the Massachusetts standards it addresses, quoted word for word and split into "assessed" and "also practiced". At a fork, where each road has its own lesson, it lists all four lessons and names the roads each standard applies to. Open **What the assignment will say** under any lesson to read it before you create anything.
+- **A link** that opens that lesson for whoever clicks it, on their own road. A student who hasn't reached the lesson yet is sent to their journey map.
+
+**Update descriptions on existing assignments** rewrites the description on assignments the app made earlier. It changes nothing else: not the name, points, due date, or any grade.
+
+Optionally, assignments can be filed under a **Pixel Trail** topic in Classroom. That needs one more permission. To turn it on, add `"https://www.googleapis.com/auth/classroom.topics"` to the `oauthScopes` list in `appsscript.json`, run any function once in the editor to approve it, and publish a new version. Do this outside class time: until you approve the new permission the app will not open for anyone. Without it, everything above still works and assignments are simply created with no topic.
+
 After updating to this version, open the Apps Script editor, run any function once, and approve the new Classroom and email permissions. Then publish a new version. Your Workspace admin may need to allow the Classroom API.
 
 ## Display and project files
@@ -124,7 +133,25 @@ In a lesson, students can add up to 8 extra code files and upload images, using 
 
 ## Sounds and celebrations
 
-Finishing a step plays a short chime and the "Done" mark sparkles. A right answer on a check question chimes too. Submitting a lesson plays a fanfare with confetti while the XP counts up, and new badges and ranks pop in. A badge you give a student, or a rank they reach when you approve work, pops up with its own sound the next time they open Home. Equipping gear on the character page chimes as well. **Display → Play sounds** turns all of it off for a student, and animations are skipped for anyone whose device is set to reduce motion.
+Finishing a step plays a short chime and the "Done" mark sparkles. A right answer on a check question lights up green with sparks, a word of praise, and a glow round the screen; several right in a row on the first try are called out as a streak. A wrong answer gets a low note and a small shake.
+
+Students carry their XP in a **💰 purse** in the top bar. Submitting a lesson fills the whole screen with "Lesson complete!", a fanfare, and confetti while the XP counts up, and then coins fly into the purse. A new rank and each new badge then take over the screen in turn, each with its own sound; a tap or any key moves on. A badge you give a student, or a rank they reach when you approve work, does the same the next time they open Home. Equipping gear on the character page chimes as well. **Display → Play sounds** turns all of it off for a student, and animations are skipped for anyone whose device is set to reduce motion.
+
+## The journey map
+
+The Journey page shows the whole trail as a small 3D world seen at an angle. Each stage is its own land (a camp, a forest, a lake, a snowy summit with real mountains, a mushroom grove, a desert with pyramids). At a fork, the high roads climb onto mesas in the distance and the low roads drop into canyons nearer to you. Lesson stops and characters always sit in front of the scenery, each character has a glow, and a student's own carries a **YOU** tag. Scroll sideways, or use the arrow keys, to travel along the trail. **Flat map** switches to a simpler top-down version, and the choice is remembered on that device.
+
+## Moving through a lesson
+
+Every step carries a label so students know what it wants: **✏️ Your turn** (do this in your code), **👀 Just read**, or **❓ Answer this**. A student can't move past a check question until they have answered it correctly: the steps after it are greyed out and can't be clicked. A step they haven't finished can still be skipped, but the button says **Skip for now** instead of **Next**. Teachers looking at a lesson are never locked.
+
+If a student stops, the lesson nudges them. After about 25 seconds with no typing or clicking, the next thing to do pulses gold: where the code goes, the answers to pick from, or the Next button. After about 50 seconds on a step that needs code, the editor jumps to the right line and shows **▼ type this here** with the code to type, and a soft chime plays. Any key or click stops the pulsing. **Show me** does the same thing on request. Nothing is recorded or sent to you about it.
+
+In the first three lessons, coding steps are **type-along**: the lesson opens a new line where the code goes, puts the cursor on it, and shows the code faintly on that line. The faint part shrinks as the student types over it and turns red with "✗ should be: …" on a slip. From lesson 4 on they find the line themselves, with **Show me** as a fallback.
+
+Each step whose check passes pays **5 XP** on the spot, with coins flying into the purse, so there is a reason to do the next small thing. Before this, XP only arrived when a lesson was submitted. These come from the app's own step checks, never from your grades.
+
+On a class page you also get a private **💤 stopped working** list: students whose unfinished lesson has had no typing, answers, or moving on for 5 minutes or more, with the step they are on. Only you see it; it is never on the projected display. It refreshes once a minute and drops anyone who starts again.
 
 ## Feedback and help
 
@@ -138,11 +165,15 @@ Finishing a step plays a short chime and the "Done" mark sparkles. A right answe
 
 ## Trail Quest
 
-Trail Quest is a small adventure game students play as their own character: a meadow, a forest maze, dark caves, and ruins with treasure rooms, different every run. Their gear gives them powers there. A glow lights the caves, a cape dashes, a pet pulls in coins, a hat adds a heart, and a held item smashes the cracked rocks that seal the treasure rooms.
+Trail Quest is a fast arcade game students play as their own character. A run is a race through rooms that never end. Each room fills the screen: grab the **key**, then run to the **exit**. The next room is new and harder. Rooms come as meadows, mazes, caverns, and chambers joined by halls, and by room 10 they are crowded: slimes, bats from room 2, marching guards from 3, spitters that shoot from 4, hunters that chase from 5, plus spikes from room 3 and some dark rooms from 4. Finishing a room before the ⚡ bar runs out pays a speed bonus, and fast rooms in a row pay more. Losing every heart ends the run; the coins are kept.
 
-It starts closed. On a class page, press **Trail Quest** and choose **Earned** (each lesson a student submits earns play time, 5 minutes unless you change it) or **Open** (everyone can play with no time used up, for a reward day). Students see a class board of best runs and a class treasure that everyone's coins fill. Coins and play time never come from grades.
+Everyone can **dash** with Space, which slips safely through enemies and over spikes. Gear makes it stronger. A held item turns the dash into a strike that defeats enemies and smashes the cracked rocks that seal treasure vaults. A cape dashes further and twice as often, a hat adds a heart, a pet pulls in coins, and a glow lights dark rooms.
 
-Two ways to play together: **two players on one Chromebook** (choose Player 2 from the class list; one uses W A S D and Space, the other the arrow keys and Enter), and **ghost races** (press **Race** beside a classmate on the board to play the same world with their best run replayed beside you). A two-player run uses the signed-in student's play time and counts on their record.
+Rooms also hold **boosts** that are strong but short (⚡ speed, ⭐ unstoppable, 💣 a bomb that clears nearby enemies) and, less often, **relics** that last the rest of the run: swift boots, a lantern, a magnet, a blade, a feather, a lucky clover, a shield, and a heart stone. So a student with little gear can still get lucky, and a student with good gear gets further.
+
+It starts closed. On a class page, press **Trail Quest** and choose **Earned** (each lesson a student submits earns play time, 5 minutes unless you change it) or **Open** (everyone can play with no time used up, for a reward day). Students see a class board of best runs and furthest rooms, and a class treasure that everyone's coins fill. Coins and play time never come from grades.
+
+Two ways to play together: **two players on one Chromebook** (choose Player 2 from the class list; one uses W A S D and Space, the other the arrow keys and Enter), and **ghost races** (press **Race** beside a classmate on the board to play the same rooms in the same order, with their best run replayed beside you). A two-player run uses the signed-in student's play time and counts on their record.
 
 The game runs in the student's browser and only contacts the server when a run starts and ends, so it barely touches the class's quota. Classmates don't see each other moving; the shared parts are the board and the treasure.
 

@@ -66,6 +66,17 @@ function fakeClassroom(data) {
     Courses: {
       list: (o) => page(data.courses || [], 'courses', o.pageToken),
       Students: { list: (id, o) => page((data.rosters || {})[id] || [], 'students', o.pageToken) },
+      // Topics need their own permission. Without `topicsAllowed`, every call fails the way Google's does.
+      Topics: {
+        list: (id, o) => { if (!data.topicsAllowed) throw new Error('Request had insufficient authentication scopes.'); return page((data.topics || {})[id] || [], 'topic', o.pageToken); },
+        create: (body, id) => {
+          if (!data.topicsAllowed) throw new Error('Request had insufficient authentication scopes.');
+          data.topics = data.topics || {};
+          const topic = { topicId: `topic-${Object.values(data.topics).flat().length + 1}`, name: body.name };
+          (data.topics[id] = data.topics[id] || []).push(topic);
+          return topic;
+        },
+      },
       CourseWork: {
         list: (id, o) => page((data.work || {})[id] || [], 'courseWork', o.pageToken),
         // Like the real API: grades can only be written on coursework this app created.
@@ -74,6 +85,16 @@ function fakeClassroom(data) {
           if (!body.title || !body.maxPoints) throw new Error('title and maxPoints are required');
           const work = { ...body, id: `made-${data.created.length + 1}`, courseId, alternateLink: 'https://classroom.test/a' };
           data.created.push(work);
+          return work;
+        },
+        // Like the real API: only coursework this app created, and only the fields named in the mask.
+        patch: (body, courseId, workId, opts) => {
+          const work = (data.created || []).find((w) => w.id === workId && w.courseId === courseId);
+          if (!work) throw new Error('ProjectPermissionDenied');
+          const fields = String(opts && opts.updateMask).split(',');
+          if (fields.some((f) => !['description', 'title', 'dueDate', 'dueTime', 'maxPoints', 'topicId', 'state'].includes(f))) throw new Error('Invalid update mask');
+          fields.forEach((f) => { work[f] = body[f]; });
+          data.patchedWork = (data.patchedWork || 0) + 1;
           return work;
         },
         StudentSubmissions: {

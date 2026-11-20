@@ -1,8 +1,10 @@
 // App shell and router.
-import { h, clear, attempt, toast } from './ui.js';
+import { h, clear, attempt, toast, loading } from './ui.js';
 import { createLocalStore } from './data/local.js';
 import { createAppsScriptStore } from './data/appsscript.js';
 import { avatarURL, defaultAvatar } from './game/avatar.js';
+import { statsFor } from './game/rules.js';
+import { xpPurse, setPurse } from './celebrate.js';
 import { viewLogin, viewNoAccess } from './views/auth.js';
 import { viewHome, viewChooseRoad, viewCharacter, SessionEnded } from './views/student.js';
 import { viewMap } from './views/map.js';
@@ -16,6 +18,8 @@ import { viewProject } from './views/project.js';
 import { viewQuest } from './views/quest.js';
 import { applySettings, openSettings } from './settings.js';
 import { initLanguage } from './translate.js';
+import { lessonForStop } from './curriculum/classroom.js';
+import { PATH_IDS } from './curriculum/graph.js';
 import { openBugReport, noteError } from './views/bugs.js';
 
 // On Apps Script the page has google.script. Anywhere else it runs as a browser-only demo.
@@ -46,10 +50,17 @@ function topbar() {
   const who = s.role === 'student'
     ? [h('img.mini-av', { src: avatarURL(s.student.avatar || defaultAvatar(s.student.id), 2), alt: '' }), s.student.display_name]
     : [s.teacher.display_name];
+  // Students carry their XP in the top bar. It is filled in from the class board, which pages load anyway.
+  if (s.role === 'student' && s.class?.id) {
+    store.classBoard(s.class.id).then((board) => {
+      const row = board.find((x) => x.id === s.student.id);
+      if (row && !document.querySelector('.fx-coin')) setPurse(statsFor({ ...row, path: s.student.path }).xp);
+    }).catch(() => {});
+  }
   return h('header.topbar',
     h('a.brand', { href: '#/', translate: 'no' }, 'Pixel Trail'),
     h('nav.navs', { 'aria-label': 'Main' }, links),
-    h('div.who', h('button.btn.small', { onclick: openSettings }, 'Display'), h('button.btn.small', { onclick: openBugReport, title: 'Report a problem', 'aria-label': 'Report a problem' }, '🐞'), h('span.who-name', { translate: 'no' }, who), store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
+    h('div.who', s.role === 'student' && xpPurse(), h('button.btn.small', { onclick: openSettings }, 'Display'), h('button.btn.small', { onclick: openBugReport, title: 'Report a problem', 'aria-label': 'Report a problem' }, '🐞'), h('span.who-name', { translate: 'no' }, who), store.mode === 'local' && h('button.btn.small', { onclick: signOut }, 'Sign out')),
   );
 }
 
@@ -75,6 +86,33 @@ async function signOut() {
   render();
 }
 
+/** The stop named in the page's address (?stop=L7), or ''. Apps Script hides the address, so it has to be asked for. */
+function stopFromLink() {
+  return new Promise((resolve) => {
+    const done = (v) => resolve(/^L\d{1,2}$/.test(String(v || '')) ? String(v) : '');
+    try {
+      const url = window.google?.script?.url;
+      if (url && url.getLocation) {
+        // If Google never answers, carry on to Home after a moment instead of waiting.
+        const giveUp = setTimeout(() => done(''), 1500);
+        url.getLocation((loc) => { clearTimeout(giveUp); done(loc && loc.parameter && loc.parameter.stop); });
+        return;
+      }
+    } catch (_) { /* fall through to the page's own address */ }
+    try { done(new URLSearchParams(location.search).get('stop')); } catch (_) { done(''); }
+  });
+}
+
+// What kind of user opened the app here last, and their class. No names: only enough to ask early for the right things.
+const BOOT_KEY = 'pixeltrail.boot';
+function bootHint() { try { return JSON.parse(localStorage.getItem(BOOT_KEY) || 'null'); } catch (_) { return null; } }
+function rememberBoot(session) {
+  try {
+    if (session && session.role && !session.preview) localStorage.setItem(BOOT_KEY, JSON.stringify({ role: session.role, class: session.class ? session.class.id : '' }));
+    else if (!session) localStorage.removeItem(BOOT_KEY);
+  } catch (_) { /* Then the first page just takes one more trip. */ }
+}
+
 let renderToken = 0;
 
 export async function render() {
@@ -97,7 +135,7 @@ export async function render() {
   }
   if (!view) { go('/'); return; }
 
-  const main = h('main.page', h('p.muted', 'Loading...'));
+  const main = h('main.page', loading());
   clear(root).append(store.mode === 'local' ? demoBanner() : '', app.session.preview ? previewBanner() : '', topbar(), main);
   try {
     const content = await view(main, ...match.slice(1));
@@ -155,8 +193,27 @@ applySettings();
 
 (async function start() {
   window.__ptBooted = true; // Index.html's startup check reads these two.
-  document.getElementById('app').append(h('p.muted.boot', 'Loading Pixel Trail...'));
-  app.session = await attempt(() => store.session()) || null;
+  // Index.html already shows the loading screen. Ask for who is signed in, and in the same trip
+  // for what Home will need, guessed from last time on this device. A wrong guess costs nothing:
+  // the answers are just not used.
+  const first = attempt(() => store.session());
+  const hint = bootHint();
+  if (hint && hint.role === 'student' && store.mode === 'appsscript' && !/^#\/lesson\//.test(location.hash)) {
+    store.myWorks([]).catch(() => {});
+    if (hint.class) store.classBoard(hint.class).catch(() => {});
+  }
+  app.session = await first || null;
+  rememberBoot(app.session);
+  // A link from a Classroom assignment opens that stop: the lesson on this student's own road.
+  if (app.session && !location.hash.slice(1)) {
+    const stop = await stopFromLink();
+    if (stop) {
+      const student = app.session.role === 'student';
+      const id = lessonForStop(stop, student ? app.session.student.path : PATH_IDS[0]);
+      if (id) location.hash = `#/lesson/${id}`;
+      else if (student) toast('Choose your road first, then open the assignment again.');
+    }
+  }
   await render();
   window.__ptStarted = true;
 })();

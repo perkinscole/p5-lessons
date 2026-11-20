@@ -1,0 +1,52 @@
+<!doctype html>
+<!-- A look at any Trail Quest floor without playing down to it: tests/quest.html?seed=7&depth=6&gear=1
+     Run `npm start` and open it at http://localhost:8080/tests/quest.html -->
+<meta charset="utf-8">
+<title>Trail Quest floor viewer</title>
+<style>body { background: #1b1530; color: #fff; font: 14px system-ui; } canvas { width: 960px; image-rendering: pixelated; display: block; } #app, #toasts, #modal-root { display: none; }</style>
+<p id="hud"></p>
+<canvas id="c" width="480" height="304" tabindex="0"></canvas>
+<div id="app"></div><div id="toasts"></div><div id="modal-root"></div>
+<script type="module">
+  import { startRun } from '../js/views/quest.js';
+  const q = new URLSearchParams(location.search);
+  const gear = q.get('gear') ? { aura: 'spark', cape: 'red', pet: 'cat', hat: 'cap', held: 'sword' } : {};
+  window.run = startRun({
+    canvas: document.getElementById('c'), seed: Number(q.get('seed')) || 7, fromDepth: Number(q.get('depth')) || 1,
+    team: [{ name: 'Tester', avatar: gear, heroImg: null, petImg: null }], ghosts: [], seconds: Number(q.get('seconds')) || 300,
+    onHud: (v) => { window.hud = v; document.getElementById('hud').textContent = `Floor ${v.depth} · ${v.coins} coins · hearts ${v.players[0].hearts}/${v.players[0].max} · ${v.note}`; },
+    onEnd: (r) => { window.ended = r; document.getElementById('hud').textContent = `Ended: ${JSON.stringify({ ...r, path: `${r.path.length} chars` })}`; },
+  });
+
+  // ?auto=1 plays by itself: it walks to the key, then the door, dashing when it can.
+  if (q.get('auto')) {
+    const { distances, TILE, W, isSolid } = await import('../js/game/quest.js');
+    const press = (key, down) => window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { key, bubbles: true }));
+    const KEYS = { '1,0': 'ArrowRight', '-1,0': 'ArrowLeft', '0,1': 'ArrowDown', '0,-1': 'ArrowUp' };
+    let held = [];
+    window.rooms = [];
+    setInterval(() => {
+      if (window.ended) { held.forEach((k) => press(k, false)); return; }
+      const p = window.run.peek();
+      if (window.rooms[window.rooms.length - 1] !== p.depth) window.rooms.push(p.depth);
+      const key = p.world.items.find((it) => it.kind === 'key' && !it.taken);
+      const goal = p.hasKey || !key ? p.world.door : key;
+      const to = distances(p.world.tiles, { tx: Math.floor(goal.x / TILE), ty: Math.floor(goal.y / TILE) }, false);
+      const tx = Math.floor(p.x / TILE);
+      const ty = Math.floor(p.y / TILE);
+      let best = null;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const d = to[(ty + dy) * W + tx + dx]; if (d >= 0 && (!best || d < best.d)) best = { d, dx, dy }; }
+      held.forEach((k) => press(k, false));
+      held = [];
+      if (!best) return;
+      // Steer to the middle of the lane first, so corners don't catch.
+      const offX = p.x - (tx * TILE + 8);
+      const offY = p.y - (ty * TILE + 8);
+      held.push(KEYS[`${best.dx},${best.dy}`]);
+      if (best.dx && Math.abs(offY) > 2) held.push(offY > 0 ? 'ArrowUp' : 'ArrowDown');
+      if (best.dy && Math.abs(offX) > 2) held.push(offX > 0 ? 'ArrowLeft' : 'ArrowRight');
+      held.forEach((k) => press(k, true));
+      if (Math.random() < 0.08) { press(' ', true); press(' ', false); }
+    }, 40);
+  }
+</script>

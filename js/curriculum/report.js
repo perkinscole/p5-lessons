@@ -76,6 +76,27 @@ function lessonSection(entry) {
  * The whole report, or one lesson's when `only` is its id.
  *   info: { className, students, date }
  */
+/**
+ * Students who were working this period and then stopped: their newest unfinished lesson was last
+ * saved between `after` and `before` minutes ago. Saves happen as a student types, answers, or moves
+ * on, so a gap means none of those. Returns [{ student_id, lesson_id, step_at, minutes }], longest first.
+ */
+export function stalledList(works, now = Date.now(), after = 5, before = 50) {
+  const newest = new Map();
+  for (const w of works) {
+    const at = Date.parse(w.updated_at || '');
+    if (!at) continue;
+    const seen = newest.get(w.student_id);
+    if (!seen || at > seen.at) newest.set(w.student_id, { at, w });
+  }
+  const out = [];
+  for (const { at, w } of newest.values()) {
+    const minutes = (now - at) / 60000;
+    if (w.status === 'in_progress' && minutes >= after && minutes <= before) out.push({ student_id: w.student_id, lesson_id: w.lesson_id, step_at: Number(w.step_at) || 0, minutes: Math.floor(minutes) });
+  }
+  return out.sort((a, b) => b.minutes - a.minutes);
+}
+
 /** Problem reports as Markdown, to read or to paste to whoever fixes the app. */
 export function buildBugReport(bugs, info = {}) {
   const lines = ['# Pixel Trail problem reports', '', `${bugs.length} open${info.date ? `, as of ${info.date}` : ''}.`, ''];

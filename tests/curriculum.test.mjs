@@ -2,7 +2,7 @@
 // Every lesson must build into working code that passes its own checks.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PATH_IDS, STAGES, SIDE_TRAILS, sequence, coreSequence, mapLayout, previousGameLesson } from '../js/curriculum/graph.js';
+import { PATHS, PATH_IDS, STAGES, SIDE_TRAILS, sequence, coreSequence, mapLayout, previousGameLesson } from '../js/curriculum/graph.js';
 import { ALIGNMENT } from '../js/curriculum/alignment.js';
 import { checksFor } from '../js/curriculum/checks.js';
 import { recentAchievements } from '../js/game/rules.js';
@@ -555,4 +555,184 @@ test('problem reports read well as Markdown', async () => {
   assert.match(text, /> Run did nothing\n> I pressed it twice/);
   assert.match(text, /boom \(App:1\)/);
   assert.doesNotMatch(text, /undefined/);
+});
+
+test('the stalled list finds students who were working and stopped', async () => {
+  const { stalledList } = await import('../js/curriculum/report.js');
+  const now = Date.parse('2026-11-19T15:00:00Z');
+  const ago = (m) => new Date(now - m * 60000).toISOString();
+  const works = [
+    { student_id: 'a', lesson_id: 't1', status: 'in_progress', step_at: 2, updated_at: ago(8) },
+    { student_id: 'b', lesson_id: 't1', status: 'in_progress', step_at: 4, updated_at: ago(1) }, // still typing
+    { student_id: 'c', lesson_id: 't1', status: 'submitted', step_at: 7, updated_at: ago(9) }, // finished
+    { student_id: 'd', lesson_id: 't2', status: 'in_progress', step_at: 1, updated_at: ago(300) }, // not here today
+    { student_id: 'e', lesson_id: 't1', status: 'in_progress', step_at: 3, updated_at: ago(40) }, // an old lesson...
+    { student_id: 'e', lesson_id: 't2', status: 'in_progress', step_at: 0, updated_at: ago(2) }, // ...but busy on a new one
+    { student_id: 'f', lesson_id: 't3', status: 'in_progress', step_at: 5, updated_at: ago(21) },
+    { student_id: 'g', lesson_id: 't3', status: 'in_progress', updated_at: '' },
+  ];
+  assert.deepEqual(stalledList(works, now), [{ student_id: 'f', lesson_id: 't3', step_at: 5, minutes: 21 }, { student_id: 'a', lesson_id: 't1', step_at: 2, minutes: 8 }]);
+  assert.deepEqual(stalledList([], now), []);
+});
+
+test('finished steps earn XP as a student works, and never from a grade', async () => {
+  const { statsFor, XP } = await import('../js/game/rules.js');
+  assert.equal(statsFor({ works: [{ lesson_id: 't1', status: 'in_progress', checks_passed: 3 }] }).xp, 3 * XP.step);
+  assert.equal(statsFor({ works: [{ lesson_id: 't1', status: 'in_progress', checks_passed: 999 }] }).xp, 12 * XP.step, 'held to a sensible number of steps');
+  const base = { lesson_id: 't1', status: 'approved', auto_ok: true, checks_passed: 4 };
+  assert.equal(statsFor({ works: [{ ...base, grade: { total: 0 } }] }).xp, statsFor({ works: [{ ...base, grade: { total: 100 } }] }).xp);
+  assert.equal(statsFor({ works: [base] }).xp, 4 * XP.step + XP.submit + XP.approved);
+});
+
+test('the map\'s scenery never sits under a stop, a label, or a trail', async () => {
+  const { planOverworld, landFor } = await import('../js/game/overworld.js');
+  const stops = [{ x: 72, y: 282 }, { x: 180, y: 282 }, { x: 612, y: 102 }, { x: 612, y: 462 }, { x: 936, y: 282 }];
+  const trails = [[...Array(41)].map((_, i) => ({ x: 72 + i * 2.7, y: 282 })), [...Array(41)].map((_, i) => ({ x: 180 + i * 10.8, y: 282 - i * 4.5 }))];
+  const stages = [{ x0: 0, x1: 500 }, { x0: 500, x1: 900 }, { x0: 900, x1: 1200 }];
+  // A raised mesa round the top stop, and a sunken canyon round the bottom one.
+  const terraces = [{ level: 2, x0: 562, x1: 662, y0: 56, y1: 146 }, { level: -2, x0: 562, x1: 662, y0: 400, y1: 508 }];
+  const plan = planOverworld({ width: 1200, height: 540, stops, trails, stages, terraces });
+  assert.deepEqual(plan.terraces.map((t) => [t.level, t.wall1 - t.wall0]), [[2, 8], [-2, 8]], 'two levels of height is two tiers of cliff');
+  assert.ok(plan.terraces[0].wall0 === plan.terraces[0].y1, 'a mesa shows its cliff along the bottom');
+  assert.ok(plan.terraces[1].wall1 === plan.terraces[1].y0, 'a canyon shows its wall along the top');
+  for (const t of plan.things) for (const c of plan.terraces) assert.ok(!(t.x >= c.x0 && t.x <= c.x1 && t.y >= c.wall0 && t.y <= c.wall1), `${t.kind} is growing on a cliff face`);
+  assert.ok(plan.things.length > 80, `only ${plan.things.length} things were placed`);
+  assert.ok(new Set(plan.things.map((t) => t.kind)).size >= 6, 'a mix of things');
+  for (const t of plan.things) {
+    assert.ok(t.x >= 0 && t.x < plan.w && t.y >= 0 && t.y < plan.h, `${t.kind} is off the map`);
+    for (const s of stops) {
+      const onTile = Math.abs(t.x * 3 - s.x) < 22 && Math.abs(t.y * 3 - s.y) < 22;
+      assert.ok(!onTile, `${t.kind} is on a stop`);
+      // Anything with height stays out of the space above a stop, where characters stand.
+      if (!plan.loose.has(t.kind)) assert.ok(!(Math.abs(t.x * 3 - s.x) < 40 && t.y * 3 > s.y - 70 && t.y * 3 < s.y + 30), `${t.kind} is where characters stand`);
+    }
+    for (const line of trails) for (const pt of line) assert.ok(Math.hypot(t.x * 3 - pt.x, t.y * 3 - pt.y) > 8, `${t.kind} is on a trail`);
+    assert.ok(t.y * 3 > 46, `${t.kind} is under the stage signs`);
+  }
+  assert.deepEqual(planOverworld({ width: 1200, height: 540, stops, trails, stages, terraces }).things, plan.things, 'the same picture every time');
+  assert.equal(landFor(0), 'camp');
+  assert.equal(landFor(6), 'snow');
+  assert.equal(landFor(12), landFor(0), 'extra stages go round again');
+  assert.equal(plan.things.filter((t) => t.kind === 'tent').length, 2, 'the camp at the start');
+});
+
+test('the 3D map\'s land: roads climb ramps onto mesas, and never have to jump a cliff', async () => {
+  const { buildHeights, cliffAt } = await import('../js/game/terrain.js');
+  const w = 200;
+  const h = 120;
+  const mesa = { x0: 80, x1: 140, y0: 20, y1: 50, height: 150, ramp: 26 };
+  const pit = { x0: 80, x1: 140, y0: 80, y1: 110, height: -60, ramp: 26 };
+  const H = buildHeights({ w, h, terraces: [mesa, pit], bumps: [{ kind: 'peak', x: 20, y: 60 }, { kind: 'pyramid', x: 180, y: 60 }] });
+  const at = (x, y) => H[y * w + x];
+  assert.ok(at(110, 35) > 140, 'the mesa is up');
+  assert.ok(at(110, 95) < -45, 'the canyon is down');
+  assert.ok(Math.abs(at(30, 20)) < 12 && Math.abs(at(110, 65)) < 12, 'ordinary ground is near level');
+  // Walking along the lane onto the mesa is a steady climb with no step bigger than a stride.
+  let last = at(50, 35);
+  for (let x = 51; x <= 85; x++) { const now = at(x, 35); assert.ok(now >= last - 0.5 && now - last < 14, `a step of ${(now - last).toFixed(1)} at x ${x}`); last = now; }
+  // Once the road is on top, the front of the mesa is a cliff facing the viewer.
+  assert.ok(Math.max(...[48, 49, 50, 51, 52].map((y) => cliffAt(H, w, h, 110, y))) > 30, 'a cliff along the front');
+  // Half way up the ramp, the side is a slope, not a wall.
+  assert.ok(Math.max(...Array.from({ length: 40 }, (_, k) => Math.abs(cliffAt(H, w, h, 67, 15 + k)))) < 16, 'no wall beside the ramp');
+  assert.ok(at(20, 60) > 130 && at(20, 60) > at(26, 60) && at(26, 60) > at(33, 60), 'a mountain rises to a point');
+  assert.ok(at(180, 60) > 75 && Math.abs(at(174, 60) - at(180, 54)) < 0.01, 'a pyramid has flat, matching faces');
+  // Rolling hills stay off the trail: calm ground is level, and the open land is not.
+  const calm = new Uint8Array(w * h);
+  for (let x = 0; x < w; x++) calm[60 * w + x] = 1;
+  const hilly = buildHeights({ w, h, calm, hills: 40 });
+  const plain = buildHeights({ w, h });
+  let onTrail = 0;
+  let offTrail = 0;
+  for (let x = 0; x < w; x++) { onTrail = Math.max(onTrail, Math.abs(hilly[60 * w + x] - plain[60 * w + x]), Math.abs(hilly[63 * w + x] - plain[63 * w + x])); offTrail = Math.max(offTrail, hilly[10 * w + x] - plain[10 * w + x]); }
+  assert.ok(onTrail < 0.01, `the trail moved by ${onTrail}`);
+  assert.ok(offTrail > 18, `the hills are only ${offTrail.toFixed(1)} tall`);
+  assert.deepEqual([...buildHeights({ w, h, calm, hills: 40 })], [...hilly], 'the same hills every time');
+  // Built from blocks: every block is one height, a whole number of steps.
+  const blocky = buildHeights({ w, h, terraces: [mesa], calm, hills: 40, step: 12, block: 4 });
+  for (let i = 0; i < blocky.length; i += 37) assert.ok(blocky[i] % 12 === 0);
+  assert.equal(blocky[32 * w + 108], blocky[35 * w + 111], 'one block, one height');
+  assert.ok(blocky[35 * w + 110] >= 144, 'the mesa is still up');
+  // A castle is laid block by block: corner towers, a gate in the front wall, and the keep tallest.
+  const { CASTLE } = await import('../js/game/terrain.js');
+  const fort = buildHeights({ w, h, bumps: [{ kind: 'castle', x: 40, y: 40 }, { kind: 'tower', x: 120, y: 60 }], step: 12, block: 4 });
+  const blockAt = (i, j) => fort[(40 + j * 4 + 1) * w + 40 + i * 4 + 1] / 12;
+  assert.equal(blockAt(0, 0), 9);
+  assert.equal(blockAt(CASTLE - 1, CASTLE - 1), 9);
+  assert.equal(blockAt(3, 3), 12, 'the keep');
+  assert.equal(blockAt(3, CASTLE - 1), 1, 'the gate');
+  assert.ok(blockAt(1, 0) >= 4 && blockAt(1, 0) <= 5 && blockAt(1, 0) !== blockAt(2, 0), 'battlements go up and down');
+  assert.equal(fort[61 * w + 121] / 12, 8, 'a watchtower');
+  // A lookout a trail walks straight up: its near edge is a slope.
+  const soft = buildHeights({ w, h, terraces: [{ ...mesa, soft: true }] });
+  assert.ok(Math.max(...Array.from({ length: 60 }, (_, k) => soft[(30 + k) * w + 110] - soft[(31 + k) * w + 110])) < 12, 'a soft edge has no cliff');
+});
+
+test('every lesson stop on the 3D map gets a building that suits its road and land', async () => {
+  // stops.js draws with a canvas, so only its choosing rule is checked here.
+  const src = (await import('node:fs')).readFileSync(new URL('../js/game/stops.js', import.meta.url), 'utf8');
+  const { stopKind } = await import('../js/game/stops.js');
+  const drawn = new Set([...src.matchAll(/^  (\w+): \(p\) =>/gm)].map((m) => m[1]));
+  const lands = ['camp', 'forest', 'lake', 'autumn', 'highland', 'snow', 'alpine', 'grove', 'crystal', 'dusk', 'desert', 'somewhere new'];
+  for (const land of lands) for (const lane of [-1.5, -0.5, 0, 0.5, 1.5]) for (let k = 0; k < 6; k++) {
+    assert.ok(drawn.has(stopKind({ lane, land, k })), `${land} lane ${lane} stop ${k} has no drawing`);
+  }
+  assert.equal(stopKind({ lane: 1.5, land: 'forest', k: 0 }), 'cave', 'the lowest road is caves');
+  assert.ok(['castle', 'tower'].includes(stopKind({ lane: -1.5, land: 'forest', k: 0 })), 'the highest road is castles and towers');
+  assert.notEqual(stopKind({ lane: -1.5, land: 'forest', k: 0 }), stopKind({ lane: -1.5, land: 'forest', k: 1 }), 'neighbours differ');
+  assert.equal(stopKind({ lane: 0, land: 'camp', k: 0 }), 'tent');
+  assert.equal(stopKind({ lane: 0, land: 'snow', k: 1, summit: true }), 'shrine', 'the Summit is special');
+});
+
+test('every Classroom assignment describes its stop on the trail and quotes its standards exactly', async () => {
+  const { lessonSlots, slotStandards, lessonForStop, DESCRIPTION_MAX } = await import('../js/curriculum/classroom.js');
+  const slots = lessonSlots();
+  const core = slots.filter((s) => !s.beyond).length;
+  assert.ok(core >= 10 && core <= 15);
+  assert.deepEqual(slots.map((s) => s.key), slots.map((_, i) => `L${i + 1}`));
+  for (const slot of slots) {
+    const text = slot.description;
+    const where = `${slot.key} (${slot.title})`;
+    assert.ok(text.length > 300 && text.length < DESCRIPTION_MAX, `${where}: ${text.length} characters`);
+    assert.ok(!/undefined|null|NaN|\[object/.test(text), `${where}: something was left blank`);
+    assert.ok(!/[<>]/.test(text), `${where}: the server would strip this`);
+    assert.ok(text.startsWith(`Pixel Trail · ${slot.stage} · Lesson ${slot.n}`), `${where}: says where it is on the trail`);
+    assert.equal(text.includes(`of ${core}`), !slot.beyond, `${where}: core lessons count toward the ${core}`);
+    assert.ok(text.includes('Press "Submit lesson"'), `${where}: says how to hand it in`);
+    // Every lesson at the stop is named, with its own hook.
+    for (const id of slot.ids) { const l = getLesson(id); assert.ok(text.includes(l.title) && text.includes(l.hook), `${where}: ${id} is described`); }
+    assert.equal(text.includes('Do the one on your road.'), slot.ids.length > 1, where);
+    // Every standard any lesson here addresses is listed, word for word, and no others.
+    const want = new Set(slot.ids.flatMap((id) => [...(ALIGNMENT[id]?.anchor || []), ...(ALIGNMENT[id]?.support || [])]));
+    const listed = slotStandards(slot);
+    assert.deepEqual(new Set(listed.map((s) => s.code)), want, `${where}: its standards`);
+    for (const s of listed) {
+      const official = STANDARDS.find((x) => x.code === s.code).text;
+      assert.ok(text.includes(`${s.code}`) && text.includes(official), `${where}: ${s.code} is quoted exactly`);
+      assert.equal(s.assessed, slot.ids.some((id) => (ALIGNMENT[id]?.anchor || []).includes(s.code)), `${where}: ${s.code} assessed or practiced`);
+      // At a fork, each road is named under what it really does with the standard: never both, never neither.
+      if (slot.ids.length > 1) slot.ids.forEach((id, k) => {
+        const road = PATHS[PATH_IDS[k]].road;
+        const anchors = (ALIGNMENT[id]?.anchor || []).includes(s.code);
+        const supports = (ALIGNMENT[id]?.support || []).includes(s.code);
+        assert.equal(s.roads.includes(road), anchors, `${where}: ${s.code} assessed on ${road}`);
+        assert.equal(s.practiced.includes(road), supports && !anchors, `${where}: ${s.code} practiced on ${road}`);
+      });
+      else assert.deepEqual([s.roads, s.practiced], [[], []]);
+    }
+    assert.equal(text.includes('Massachusetts Digital Literacy and Computer Science standards'), want.size > 0, where);
+  }
+  // A link opens the lesson on the student's own road, or nothing if they have no road yet.
+  const fork = slots.find((s) => s.ids.length > 1);
+  PATH_IDS.forEach((p, k) => assert.equal(lessonForStop(fork.key, p), fork.ids[k]));
+  assert.equal(lessonForStop(fork.key, null), null);
+  assert.equal(lessonForStop('L1', null), 't1');
+  assert.equal(lessonForStop('L999', 'arcade'), null);
+  assert.equal(lessonForStop('<script>', 'arcade'), null);
+});
+
+test('no two animations in the stylesheet share a name', async () => {
+  const { readFileSync } = await import('node:fs');
+  // A later one silently replaces an earlier one. That once sent the character on the character page sliding off its stage.
+  const names = [...readFileSync(new URL('../css/app.css', import.meta.url), 'utf8').matchAll(/@keyframes\s+([\w-]+)/g)].map((m) => m[1]);
+  assert.deepEqual(names.filter((n, i) => names.indexOf(n) !== i), []);
 });

@@ -1,11 +1,11 @@
 // The workspace: lesson steps on the left, code in the middle, the running game on the right.
 import { h, clear, md, toast, attempt, modal, debounce, confirmBox } from '../ui.js';
 import { app, go } from '../main.js';
-import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor } from '../curriculum/engine.js';
+import { getLesson, stepPasses, checkSummary, buildSolution, buildThrough, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
 import { ratingBox, confusingButton, helpBox } from './feedback.js';
-import { chime, sparkle, pop, confetti, countUp, markCelebrated } from '../celebrate.js';
+import { chime, sparkle, pop, countUp, markCelebrated, correct, incorrect, splash, popBadge, popRank, flyXP, gainXP } from '../celebrate.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { loadMe, badgeChip } from './student.js';
@@ -112,7 +112,9 @@ export async function viewLesson(main, id, previewPath) {
   if (isStudent) {
     let flagList;
     let helpNow;
-    [me, team, flagList, helpNow] = await Promise.all([loadMe(), app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {}),
+    // This page uses the code of this lesson and of the one it continues from, on any road.
+    const needCode = [...new Set([id, ...PATH_IDS.map((p) => previousGameLesson(id, p))].filter(Boolean))];
+    [me, team, flagList, helpNow] = await Promise.all([loadMe(needCode), app.store.teamFor(id, Object.fromEntries(PATH_IDS.map((p) => [p, previousGameLesson(id, p)])), {}),
       app.store.myFlags(id).catch(() => []), app.store.myHelp().catch(() => ({ open: false }))]);
     myFlags = new Map(flagList.map((f) => [f.target, f.reason]));
     helpOpen = !!helpNow.open;
@@ -128,6 +130,8 @@ export async function viewLesson(main, id, previewPath) {
       if (!me.done.has(id) && id !== current) { toast('Finish the lesson before this one first.'); go('/map'); return null; }
     }
     work = me.works.find((w) => w.lesson_id === id) || null;
+    // Never open the editor on a lesson whose code did not arrive: an empty editor would be saved over real work.
+    if (me.works.some((w) => needCode.includes(w.lesson_id) && w.full === false)) throw new Error('Your code did not load. Reload the page to try again.');
     if (work) {
       code = work.code;
       assets = work.assets || {};
@@ -182,6 +186,20 @@ export async function viewLesson(main, id, previewPath) {
   };
   let furthest = Math.min(Number(work?.step_at) || 0, lesson.steps.length);
   if (furthest > 0) stepIndex = furthest >= lesson.steps.length ? flow.length : Math.max(0, flow.findIndex((x) => x.step && x.n === furthest));
+  // Questions answered on an earlier visit stay answered, so coming back doesn't mean doing them again.
+  quizzes.forEach((q, k) => {
+    const own = k - (warmUp ? 1 : 0);
+    if (own < 0 ? furthest > 0 : (work?.quiz_first || {})[own] !== undefined) answered.add(q);
+  });
+  // A student can't go past a question they haven't answered. Teachers looking at a lesson can.
+  const gate = () => {
+    if (preview) return flow.length;
+    const at = flow.findIndex((x) => x.quiz && !answered.has(x.quiz));
+    return at < 0 ? flow.length : at;
+  };
+  stepIndex = Math.min(stepIndex, gate());
+  // What a step asks for: something to do in the code, or only something to read.
+  const kindOf = (step) => (step.check || step.code !== undefined || step.edits || step.skeleton || step.provides || step.action ? 'do' : 'read');
   let stretchDone = work?.stretch_done || 0;
   let dirty = false;
   const stdPanel = standardsPanel(id, preview);
@@ -316,11 +334,17 @@ export async function viewLesson(main, id, previewPath) {
       drawStep();
       toast('Restored. Changed your mind? Press Ctrl+Z in the code.');
     };
+    // The code as it should be when this step begins: every earlier step done, this one still to do.
+    const doneSteps = flow.slice(0, stepIndex).filter((x) => x.step).length;
+    let toHere = null;
+    try { toHere = doneSteps > 0 && doneSteps < lesson.steps.length ? buildThrough(id, path, doneSteps) : null; } catch (_) { toHere = null; }
     modal((close) => h('div.stack',
-      h('h2', 'Get a clean copy'),
-      h('p', 'This replaces the code in sketch.js. Your images and extra files stay.'),
+      h('h2', 'Reset the code'),
+      h('p', 'This only replaces the code in sketch.js. Your answers, XP, images, and place in the lesson stay.'),
+      toHere && h('button.btn.primary', { onclick: () => restore(toHere, close) }, 'Reset the code to this step'),
+      toHere && h('p.muted.small', 'Earlier steps are done for you. You only redo this one.'),
       prevWork && h('button.btn', { onclick: () => restore(prevWork.code, close) }, 'My code from the start of this lesson'),
-      h('button.btn.primary', { onclick: () => restore(working, close) }, prevWork ? 'A fresh copy that works' : 'Start this lesson over'),
+      h('button.btn', { class: toHere ? '' : 'primary', onclick: () => restore(working, close) }, prevWork ? 'A fresh copy that works' : 'Code from the start of this lesson'),
       prevWork && h('p.muted.small', 'A fresh copy works, but it won\'t have your own changes.'),
       h('button.btn', { onclick: close }, 'Cancel'),
     ));
@@ -366,8 +390,10 @@ export async function viewLesson(main, id, previewPath) {
       status.textContent = 'All saved';
       status.classList.remove('bad');
     } catch (e) {
-      status.textContent = "Couldn't save. Check your connection.";
-      status.classList.add('bad');
+      // A busy server is not the student's problem: say it calmly and keep trying.
+      const busy = /busy/i.test(e.message || '');
+      status.textContent = busy ? 'Saving again in a moment…' : "Couldn't save. Check your connection.";
+      status.classList.toggle('bad', !busy);
       console.error(e);
       saveSoon(); // Try again, so a busy moment can't lose a student's work.
     }
@@ -393,20 +419,27 @@ export async function viewLesson(main, id, previewPath) {
 
   const drawDots = () => {
     const results = progress();
+    const open = gate();
+    const LOCKED = 'Answer the question first';
     clear(dots);
     flow.forEach((item, i) => {
       const on = i === stepIndex ? 'on' : '';
+      const shut = i > open;
       const go = () => { stepIndex = i; drawStep(); };
       if (item.quiz) {
-        dots.append(h('li', h('button', { class: `quiz ${answered.has(item.quiz) ? 'ok' : ''} ${on}`, 'aria-label': 'Quick check', 'aria-current': on ? 'step' : null, onclick: go }, answered.has(item.quiz) ? '✓' : '?')));
+        dots.append(h('li', h('button', { class: `quiz ${answered.has(item.quiz) ? 'ok' : ''} ${on} ${i === open ? 'next-up' : ''}`, disabled: shut, 'aria-label': shut ? `Quick check, locked. ${LOCKED}` : 'Quick check', title: shut ? LOCKED : 'Quick check', 'aria-current': on ? 'step' : null, onclick: go }, answered.has(item.quiz) ? '✓' : '?')));
         return;
       }
       const passing = item.step.check && results[item.n];
-      dots.append(h('li', h('button', { class: `${passing ? 'ok' : ''} ${on}`, 'aria-label': `Step ${item.n + 1}: ${item.step.title}${passing ? ', done' : ''}`, 'aria-current': on ? 'step' : null, title: item.step.title, onclick: go }, passing ? '✓' : item.n + 1)));
+      const kind = kindOf(item.step);
+      dots.append(h('li', h('button', { class: `${kind} ${passing ? 'ok' : ''} ${on}`, disabled: shut, 'aria-label': `Step ${item.n + 1}: ${item.step.title}${passing ? ', done' : ''}${shut ? `, locked. ${LOCKED}` : ''}`, 'aria-current': on ? 'step' : null, title: shut ? LOCKED : item.step.title, onclick: go }, passing ? '✓' : item.n + 1)));
     });
-    dots.append(h('li', h('button', { class: `${stepIndex === flow.length ? 'on' : ''} finish`, 'aria-label': 'Finish', title: 'Finish', onclick: () => { stepIndex = flow.length; drawStep(); } }, '★')));
+    const shut = open < flow.length;
+    dots.append(h('li', h('button', { class: `${stepIndex === flow.length ? 'on' : ''} finish`, disabled: shut, 'aria-label': shut ? `Finish, locked. ${LOCKED}` : 'Finish', title: shut ? LOCKED : 'Finish', onclick: () => { stepIndex = flow.length; drawStep(); } }, '★')));
   };
 
+  // Right answers in a row on the first try, for a little extra cheer.
+  let streak = 0;
   const quizPane = (q) => {
     let firstTry = !answered.has(q);
     const feedback = h('div.quiz-feedback', { 'aria-live': 'polite' });
@@ -421,17 +454,19 @@ export async function viewLesson(main, id, previewPath) {
         if (qi >= 0 && quizFirst[qi] === undefined) { quizFirst[qi] = i === q.answer; markDirty(); }
         if (i === q.answer) {
           e.currentTarget.classList.add('right');
-          chime('right');
-          sparkle(e.currentTarget);
+          streak = firstTry ? streak + 1 : 0;
+          correct(e.currentTarget, streak);
           if (firstTry && !answered.has(q)) quizRight++;
           answered.add(q);
           clear(feedback).append(h('p.ok', '✓ ', md(q.why)));
+          { const tag = stepBox.querySelector('.step-kind span'); if (tag) tag.remove(); }
           drawNav();
           drawDots();
           markDirty();
         } else {
           firstTry = false;
-          chime('wrong');
+          streak = 0;
+          incorrect(e.currentTarget);
           e.currentTarget.classList.add('wrong');
           e.currentTarget.disabled = true;
           clear(feedback).append(h('p.warn', 'Not quite. Try another one.'));
@@ -440,7 +475,7 @@ export async function viewLesson(main, id, previewPath) {
     }, md(text))));
     const qi = ownIndex(q);
     return h('div.stack',
-      h('p.eyebrow', 'Quick check'),
+      h('p.step-kind.answer', '❓ Answer this', !answered.has(q) && !preview && h('span', ' to keep going')),
       q.review && h('p.eyebrow', 'From an earlier lesson'),
       h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
       q.code && h('pre.snippet', h('code', q.code)),
@@ -462,7 +497,9 @@ export async function viewLesson(main, id, previewPath) {
       team && h('label.field', h('span', 'What did each person in your group do?'), contribution),
       h('details.hint', h('summary', `Done early? Stretch goals (+${XP.stretch} XP each)`), h('div.stretches', boxes)),
       !preview && c.passed < c.total && h('p.warn', `${c.passed} of ${c.total} steps done.`),
-      !preview && !approved && h('button.btn.primary.big', { onclick: submit }, work && isDone(work) ? 'Submit again' : 'Submit lesson'),
+      !preview && work && isDone(work) && !submitting && h('p.submitted-note', '✓ Submitted. Your teacher can see it.'),
+      !preview && submitNote && h('p.warn', { translate: 'no' }, submitNote),
+      !preview && !approved && h('button.btn.primary.big', { onclick: submit, disabled: submitting }, submitting ? 'Submitting… please wait' : work && isDone(work) ? 'Submit again' : 'Submit lesson'),
     );
   };
 
@@ -484,7 +521,11 @@ export async function viewLesson(main, id, previewPath) {
     openFile(MAIN);
     const line = place.line - 1;
     mainDoc.addLineClass(line, 'background', 'place-line');
-    const marker = h('div.place-marker', place.how === 'replace' ? '▲ change this line' : '▼ your new line goes here');
+    // Show what to type right where it goes, so nobody has to look back and forth to find it.
+    const now = flow[stepIndex] && flow[stepIndex].step;
+    const shown = now && !now.reveal && !now.skeleton && typeof now.code === 'string' ? now.code : undefined;
+    const marker = h('div.place-marker', h('div', place.how === 'replace' ? '▲ change this line to:' : shown ? '▼ type this here:' : '▼ your new line goes here'),
+      shown && h('pre.place-ghost', shown.replace(/^\n+/, '').replace(/\n+$/, '')));
     const above = place.how === 'before' || place.how === 'top';
     const widget = cm.addLineWidget(line, marker, { above });
     placeMarks.push(() => mainDoc.removeLineClass(line, 'background', 'place-line'), () => widget.clear());
@@ -501,8 +542,70 @@ export async function viewLesson(main, id, previewPath) {
     placeBox.append(h('span.place-text', '📍 ', PLACE_TEXT[place.how](place.line)), canEdit(MAIN) && h('button.btn.small', { onclick: () => showPlace(place) }, 'Show me'));
   }
 
+  // Type-along, for the first lessons: a new line is opened where the code goes, with the code shown
+  // faintly on it. The faint part shrinks as the student types over it, and turns red on a slip.
+  const TYPE_ALONG = new Set(['t1', 't2', 't3']);
+  const typedSteps = new Set();
+  let typing = null;
+  const squash = (t) => t.replace(/\s+/g, '');
+  function stopTyping() {
+    if (!typing) return;
+    if (typing.mark) typing.mark.clear();
+    cm.setOption('autoCloseBrackets', typing.closers);
+    typing = null;
+  }
+  function updateTyping() {
+    if (!typing) return;
+    if (typing.mark) { typing.mark.clear(); typing.mark = null; }
+    const first = mainDoc.getLineNumber(typing.handle);
+    if (first === null) { stopTyping(); return; }
+    const endLine = typing.end ? mainDoc.getLineNumber(typing.end) : mainDoc.lineCount();
+    const ghost = (line, text, bad) => { typing.mark = mainDoc.setBookmark({ line, ch: mainDoc.getLine(line).length }, { widget: h(`span.type-ghost${bad ? '.bad' : ''}`, text), insertLeft: false }); };
+    for (let k = 0; k < typing.targets.length; k++) {
+      const target = typing.targets[k];
+      const line = first + k;
+      // The student hasn't made this line yet: tell them to press Enter on the one before.
+      if (endLine === null || line >= endLine) { ghost(line - 1, `  ⏎ Enter, then: ${target.trim()}`); return; }
+      const typed = squash(mainDoc.getLine(line));
+      const want = squash(target);
+      if (typed === want) continue;
+      if (!want.startsWith(typed)) { ghost(line, `   ✗ should be: ${target.trim()}`, true); return; }
+      let pos = 0;
+      for (let seen = 0; pos < target.length && seen < typed.length; pos++) if (!/\s/.test(target[pos])) seen++;
+      ghost(line, typed ? target.slice(pos) : target.trim());
+      return;
+    }
+    stopTyping(); // every line matches
+  }
+  function startTyping(step, place) {
+    openFile(MAIN);
+    const targets = step.code.split('\n').filter((l) => l.trim());
+    if (!targets.length) return;
+    const indent = targets[0].match(/^\s*/)[0];
+    const count = mainDoc.lineCount();
+    let at = place.how === 'after' ? place.line : place.how === 'end' ? count : place.line - 1;
+    if (at >= count) { mainDoc.replaceRange(`\n${indent}`, { line: count - 1, ch: mainDoc.getLine(count - 1).length }); at = mainDoc.lineCount() - 1; } else mainDoc.replaceRange(`${indent}\n`, { line: at, ch: 0 });
+    // The editor normally adds a closing bracket for you. Here every character shown gets typed, so it is off for now.
+    typing = { handle: mainDoc.getLineHandle(at), end: at + 1 < mainDoc.lineCount() ? mainDoc.getLineHandle(at + 1) : null, targets, closers: cm.getOption('autoCloseBrackets') };
+    cm.setOption('autoCloseBrackets', false);
+    cm.setCursor({ line: at, ch: mainDoc.getLine(at).length });
+    cm.scrollIntoView({ line: at, ch: 0 }, 80);
+    cm.focus();
+    updateTyping();
+  }
+  /** Start type-along for this step, once, if it is the kind of step it suits. */
+  function maybeTypeAlong(n, step) {
+    if (!TYPE_ALONG.has(id) || !isStudent || approved || typedSteps.has(n) || !canEdit(MAIN)) return;
+    if (typeof step.code !== 'string' || step.reveal || step.skeleton) return;
+    const place = placeOf(step);
+    if (!place || place.how === 'replace') return;
+    typedSteps.add(n);
+    startTyping(step, place);
+  }
+
   const drawStep = () => {
     clearPlace();
+    stopTyping();
     if (stepNumberAt(stepIndex) > furthest) { furthest = stepNumberAt(stepIndex); markDirty(); }
     drawDots();
     clear(stepBox);
@@ -536,7 +639,10 @@ export async function viewLesson(main, id, previewPath) {
           run();
         },
       }, 'Add the starter code'));
+    const kind = kindOf(s);
+    const nextLabel = () => (kind === 'read' ? 'Got it, next' : !s.check || stepPasses(s, allCode()) ? 'Next' : 'Skip for now');
     stepBox.append(...[
+      h(`p.step-kind.${kind}`, kind === 'do' ? '✏️ Your turn: do this in your code' : '👀 Just read'),
       h('h2', s.title),
       h('div.step-do', h('div.read-row', md(brief), readButton(() => brief))),
       placeBox,
@@ -555,9 +661,12 @@ export async function viewLesson(main, id, previewPath) {
       isStudent && confusingButton(id, `step:${flow[stepIndex].n}`, myFlags),
       h('div.row.step-nav',
         stepIndex > 0 && h('button.btn', { onclick: () => { stepIndex--; drawStep(); } }, 'Back'),
-        h('button.btn.primary', { onclick: () => { stepIndex++; drawStep(); run(); } }, 'Next'),
+        h('button.btn.step-next', { class: nextLabel() === 'Skip for now' ? '' : 'primary', onclick: () => { stepIndex++; drawStep(); run(); } }, nextLabel()),
       ),
     ].filter(Boolean));
+    // After the page has drawn, so the editor is on screen to take the cursor.
+    const n = flow[stepIndex].n;
+    setTimeout(() => { if (flow[stepIndex] && flow[stepIndex].step === s) maybeTypeAlong(n, s); }, 0);
     drawPlace();
   };
 
@@ -667,21 +776,49 @@ export async function viewLesson(main, id, previewPath) {
     }
   };
 
+  // One submit at a time. On a busy server a submit can take a while, and a second press used to
+  // send it again, which played the celebration once for every press.
+  let submitting = false;
+  let asking = false;
+  let submitNote = '';
   async function submit() {
+    if (submitting || asking) return;
     const c = checkSummary(lesson, allCode());
     if (c.passed < c.total) {
+      asking = true;
       const sure = await confirmBox('Some checks are not passing', `${c.passed} of ${c.total} checks pass. Your teacher will see that. Sometimes the checker misses a different but correct way of doing things, so you can still submit if you think it works.`, 'Submit anyway');
+      asking = false;
       if (!sure) return;
     }
     if (team && !contribution.value.trim()) { toast('Write what each person in your group did first.', 'error'); return; }
+    if (submitting) return;
+    submitting = true;
+    submitNote = '';
     saveSoon.cancel();
+    if (stepIndex === flow.length) drawStep();
     const before = statsFor({ ...me.row, path, works: me.row.works });
-    const saved = await attempt(() => app.store.submitWork(id, { ...codePatch(mainCode()), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, step_at: lesson.steps.length, ...quizPatch() }));
-    if (!saved) return;
+    let saved = null;
+    try {
+      saved = await app.store.submitWork(id, { ...codePatch(mainCode()), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, step_at: lesson.steps.length, ...quizPatch() });
+    } catch (e) {
+      console.error(e);
+      submitNote = `Not submitted yet: ${e.message || 'something went wrong.'} Your code is still here. Press Submit again.`;
+      toast('Not submitted yet. Press Submit again.', 'error');
+    }
+    submitting = false;
+    if (!saved) { if (stepIndex === flow.length) drawStep(); return; }
     work = saved;
     dirty = false;
-    me = await loadMe();
-    celebrate(before, me.stats);
+    status.textContent = 'Submitted';
+    status.classList.remove('bad');
+    // The answer already says what was saved, so nothing more is asked of the server here. At the
+    // end of class everyone submits together, and three more requests each was what made it slow.
+    const swap = (list) => [...(list || []).filter((w) => w.lesson_id !== id), saved];
+    const row = { ...me.row, works: swap(me.row.works) };
+    const works = swap(me.works);
+    me = { ...me, works, row, done: new Set(works.filter(isDone).map((w) => w.lesson_id)), stats: statsFor({ ...row, path }) };
+    if (stepIndex === flow.length) drawStep();
+    try { celebrate(before, me.stats); } catch (e) { console.error(e); toast('Submitted! Your teacher can see it now.'); }
   }
 
   function celebrate(before, after) {
@@ -689,13 +826,16 @@ export async function viewLesson(main, id, previewPath) {
     const rankedUp = after.rankIndex > before.rankIndex;
     const firstSubmit = after.done.size > before.done.size; // Resubmitting doesn't earn more play time.
     const nextId = currentLesson(path, me.done);
-    const gained = h('h2', '+0 XP');
-    countUp(gained, 0, after.xp - before.xp, (n) => `+${n} XP`);
-    chime('submit');
-    confetti();
-    if (rankedUp) chime('rank', 0.9);
-    newBadges.slice(0, 3).forEach((b, i) => chime('badge', (rankedUp ? 1.9 : 0.9) + i * 0.5));
+    const gain = after.xp - before.xp;
+    const gained = h('h2', `+${gain} XP`);
     markCelebrated(me.student.id, after);
+    // The whole screen celebrates first: the lesson, then a new rank, then each new badge.
+    // The XP flies into the purse as the first one leaves.
+    let big = null;
+    splash({ kind: 'lesson', icon: '🏁', eyebrow: 'Lesson complete!', title: lesson.title, detail: gain > 0 ? `+${gain} XP` : 'Submitted again', sound: 'submit', seconds: 5, onShow: (el) => { big = el.querySelector('.fx-splash-detail'); if (gain > 0) countUp(big, 0, gain, (n) => `+${n} XP`, 1100); } })
+      .then(() => flyXP(document.querySelector('.celebrate h2') || document.body, after.xp));
+    if (rankedUp) popRank(after.rank.name);
+    newBadges.slice(0, 3).forEach((b) => popBadge(b));
     modal((close) => h('div.stack.celebrate',
       h('p.eyebrow', 'Lesson submitted'),
       gained,
@@ -724,7 +864,7 @@ export async function viewLesson(main, id, previewPath) {
       ),
       h('div.row.lesson-actions',
         status,
-        isStudent && canEdit(MAIN) && h('button.btn', { onclick: cleanCopy }, 'Get a clean copy'),
+        isStudent && canEdit(MAIN) && h('button.btn', { onclick: cleanCopy }, 'Reset code'),
         h('button.btn', { onclick: openPicker }, 'Sprites'),
         h('button.btn', { onclick: openSounds }, 'Sounds'),
         musicAllowed() && h('button.btn', { onclick: openMusic }, 'Music'),
@@ -740,6 +880,34 @@ export async function viewLesson(main, id, previewPath) {
   drawHead();
   drawStep();
 
+  // A nudge for a student who has stopped. Nothing is sent anywhere: it only draws the eye to the
+  // next thing to do, first gently, then by pointing at the exact line in the code.
+  let lastActive = Date.now();
+  let nudged = 0;
+  const NUDGE = 'nudge';
+  const calm = () => { page.querySelectorAll(`.${NUDGE}`).forEach((el) => el.classList.remove(NUDGE)); nudged = 0; };
+  const active = () => { lastActive = Date.now(); if (nudged) calm(); };
+  const nudgeTimer = isStudent && !approved ? setInterval(() => {
+    if (document.hidden || document.querySelector('.backdrop, .fx-splash')) { lastActive = Date.now(); return; }
+    const idle = (Date.now() - lastActive) / 1000;
+    const item = flow[stepIndex];
+    const todo = item && item.step && kindOf(item.step) === 'do' && !(item.step.check && stepPasses(item.step, allCode()));
+    if (idle > 25 && nudged < 1) {
+      nudged = 1;
+      // What to look at depends on the step: where the code goes, an answer to pick, or the way on.
+      const targets = !item ? ['.btn.primary.big'] : item.quiz ? (answered.has(item.quiz) ? ['.step-nav .btn.primary'] : ['.step-kind', '.quiz-options']) : todo ? ['.step-kind', '.step-place', '.snippet'] : ['.step-nav .step-next'];
+      targets.forEach((sel) => { const el = stepBox.querySelector(sel); if (el) el.classList.add(NUDGE); });
+    }
+    if (idle > 50 && nudged < 2 && todo) {
+      nudged = 2;
+      const place = placeOf(item.step);
+      if (place && canEdit(MAIN)) { showPlace(place); chime('step'); }
+      const editor = page.querySelector('.CodeMirror');
+      if (editor) editor.classList.add(NUDGE);
+    }
+  }, 5000) : null;
+  ['pointerdown', 'keydown', 'wheel'].forEach((ev) => window.addEventListener(ev, active, true));
+
   // Steps that were already done when the lesson opened stay quiet. Finishing one chimes once.
   const cheered = new Set(lesson.steps.map((s, i) => (s.check && stepPasses(s, allCode()) ? i : -1)));
   const onChange = debounce(() => {
@@ -749,6 +917,11 @@ export async function viewLesson(main, id, previewPath) {
     fresh.forEach((i) => cheered.add(i));
     if (fresh.length && !applyingRemote) {
       chime('step');
+      // Each finished step pays a little XP straight away, so there is a reason to do the next one.
+      if (isStudent && !approved) {
+        gainXP(stepBox.querySelector('.step-check') || stepBox, fresh.length * XP.step);
+        saveSoon();
+      }
       const badge = stepBox.querySelector('.step-check');
       if (badge && flow[stepIndex] && fresh.includes(flow[stepIndex].n)) setTimeout(() => { pop(badge); sparkle(badge); }, 0);
     }
@@ -758,9 +931,11 @@ export async function viewLesson(main, id, previewPath) {
       const ok = stepPasses(item.step, allCode());
       el.className = `step-check ${ok ? 'ok' : 'wait'}`;
       el.textContent = ok ? '✓ Done' : 'Not done yet';
+      const next = stepBox.querySelector('.step-next');
+      if (next) { next.textContent = ok ? 'Next' : 'Skip for now'; next.classList.toggle('primary', ok); }
     }
   }, 350);
-  cm.on('change', () => { clearPlace(); markDirty(); onChange(); });
+  cm.on('change', () => { clearPlace(); markDirty(); onChange(); updateTyping(); });
 
   const stuck = isStudent && !approved ? helpBox(id, () => Math.min(stepNumberAt(stepIndex), lesson.steps.length - 1), helpOpen) : null;
   const feedback = work?.grade?.feedback || (work?.status === 'returned');
@@ -801,6 +976,8 @@ export async function viewLesson(main, id, previewPath) {
   app.cleanup = async () => {
     if (stuck) stuck.stop();
     clearInterval(teamTimer);
+    clearInterval(nudgeTimer);
+    ['pointerdown', 'keydown', 'wheel'].forEach((ev) => window.removeEventListener(ev, active, true));
     window.removeEventListener('beforeunload', beforeUnload);
     document.body.classList.remove('in-workspace');
     saveSoon.cancel();

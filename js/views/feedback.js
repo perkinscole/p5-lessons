@@ -8,7 +8,7 @@
 import { h, clear, debounce, toast, attempt, download } from '../ui.js';
 import { app } from '../main.js';
 import { getLesson, allLessons } from '../curriculum/engine.js';
-import { buildReport, troubleSteps, quizRows, REASONS } from '../curriculum/report.js';
+import { buildReport, troubleSteps, quizRows, REASONS, stalledList } from '../curriculum/report.js';
 import { XP } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { chime } from '../celebrate.js';
@@ -145,16 +145,35 @@ export function helpCard(classId, { onUpdate } = {}) {
       h('ul.help-list', list.map((r) => h('li',
         h('img', { src: avatarURL(r.avatar || defaultAvatar(r.student_id), 2), alt: '' }),
         h('span.help-who', h('strong', r.display_name), h('span.small', ` ${helpPlace(r)}`), r.note && h('span.help-note', `“${r.note}”`), h('span.muted.small', ` ${ago(r.at)}`)),
-        h('button.btn.small', { type: 'button', onclick: async () => { if (await attempt(() => app.store.markHelped(classId, r.student_id))) check(); } }, '✓ Helped')))));
+        h('button.btn.small', { type: 'button', onclick: () => helped(r, list) }, '✓ Helped')))));
   };
+  // The name leaves the list the moment the button is pressed. The server is told in the background,
+  // because on a busy day that takes seconds and the teacher is already walking to the next student.
+  const key = (r) => `${r.student_id}@${r.at}`;
+  const gone = new Set();
+  const shown = (list) => list.filter((r) => !gone.has(key(r)));
+  let last = [];
+  function helped(r, list) {
+    gone.add(key(r));
+    draw(shown(list));
+    if (onUpdate) onUpdate(shown(list));
+    app.store.markHelped(classId, r.student_id).catch((e) => {
+      console.error(e);
+      gone.delete(key(r));
+      toast(`Couldn't mark ${r.display_name} as helped. Try again.`, 'error');
+      draw(shown(last));
+      if (onUpdate) onUpdate(shown(last));
+    });
+  }
   async function check() {
     let list;
     try { list = await app.store.helpRequests(classId); } catch (_) { return; }
     const ids = list.map((r) => `${r.student_id}@${r.at}`);
     if (known && ids.some((id) => !known.includes(id))) chime('doorbell');
     known = ids;
-    draw(list);
-    if (onUpdate) onUpdate(list);
+    last = list;
+    draw(shown(list));
+    if (onUpdate) onUpdate(shown(list));
   }
   check();
   // Every 15 seconds, and never from a tab nobody is looking at: each check is a request on the class's shared limit.
@@ -162,6 +181,34 @@ export function helpCard(classId, { onUpdate } = {}) {
   const onShow = () => { if (!document.hidden) check(); };
   document.addEventListener('visibilitychange', onShow);
   return { el, stop: () => { clearInterval(timer); document.removeEventListener('visibilitychange', onShow); }, check };
+}
+
+/**
+ * A quiet list, for the teacher only, of students who were working and have stopped. It never goes
+ * on the projected display. Checked once a minute. Returns { el, stop }.
+ */
+export function stalledCard(classId, students, firstWorks) {
+  const el = h('section.stalled-card');
+  const byId = new Map(students.map((s) => [s.id, s]));
+  const draw = (works) => {
+    const list = stalledList(works).filter((r) => byId.has(r.student_id));
+    clear(el);
+    el.hidden = list.length === 0;
+    if (!list.length) return;
+    el.append(h('details', { open: true },
+      h('summary', h('strong', `💤 ${list.length} stopped working`), h('span.muted.small', ' · only you see this')),
+      h('ul.help-list', list.map((r) => h('li',
+        h('img', { src: avatarURL(byId.get(r.student_id).avatar || defaultAvatar(r.student_id), 2), alt: '' }),
+        h('span.help-who', h('strong', { translate: 'no' }, byId.get(r.student_id).display_name),
+          h('span.small', ` ${helpPlace({ lesson_id: r.lesson_id, step: Math.min(r.step_at, (getLesson(r.lesson_id)?.steps.length || 1) - 1) })}`),
+          h('span.muted.small', { translate: 'no' }, ` · no progress for ${r.minutes} min`)))))));
+  };
+  draw(firstWorks);
+  const timer = setInterval(async () => {
+    if (document.hidden) return;
+    try { draw(await app.store.classWork(classId)); } catch (_) { /* try again next minute */ }
+  }, 60000);
+  return { el, stop: () => clearInterval(timer) };
 }
 
 async function copyText(text) {

@@ -32,7 +32,9 @@ const SCHEMA = {
   // One row per student who has played Trail Quest. Coins come from play, never from grades.
   World: ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at',
     // A student's best run, replayed for classmates as a ghost: the world it was in, and the path walked.
-    'ghost_seed', 'ghost'],
+    'ghost_seed', 'ghost',
+    // The deepest dungeon floor they have reached.
+    'best_floor'],
   Students: ['id', 'class_id', 'email', 'display_name', 'avatar', 'path', 'game_name', 'created_at', 'google_id'],
   Works: [...WORK_META, ...chunkCols_(WORK_CELLS), ...WORK_TAIL],
   Grades: ['work_id', 'scores', 'total', 'max_total', 'feedback', 'graded_at'],
@@ -53,7 +55,7 @@ const SCHEMA = {
   // Problems people reported. who is a student id or a teacher's email; details is what the page noticed.
   Bugs: ['id', 'at', 'role', 'who', 'name', 'class_id', 'page', 'note', 'details', 'status'],
 };
-const NUMBERS = new Set(['stars', 'step', 'ghost_seed', 'world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
+const NUMBERS = new Set(['best_floor', 'stars', 'step', 'ghost_seed', 'world_mins', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'step_at', 'stretch_done', 'checks_passed', 'checks_total', 'quiz_right', 'quiz_total', 'total', 'max_total', 'frames', 'w', 'h', 'driver_until', 'saves', 'added', 'removed']);
 const BOOLEANS = new Set(['run_free', 'auto_ok', 'shared', 'published', 'started', 'music_open']);
 const OBJECTS = new Set(['details', 'quiz_first', 'confusing', 'holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
@@ -136,16 +138,64 @@ const reply_ = (data) => JSON.stringify({ ok: true, data: data === undefined ? n
 function whoAmI_() {
   const email = String(Session.getActiveUser().getEmail() || '').trim().toLowerCase();
   if (!email) return { role: null, email: '' };
+  // Who someone is hardly ever changes, and looking it up costs three trips to the Sheet on every
+  // request from every student. So it is remembered for a few minutes, and forgotten the moment
+  // that person's row is written or anyone is removed (whoForget_, whoEpoch_).
+  const known = whoCached_(email);
+  if (known) return known;
   const owner = String(Session.getEffectiveUser().getEmail() || '').trim().toLowerCase();
   let teacher = rows_('Teachers').find((t) => t.email === email);
   if (!teacher && email === owner) {
     teacher = { email, display_name: email.split('@')[0], created_at: now_() };
     withLock_(() => { if (!rows_('Teachers').some((t) => t.email === email)) insert_('Teachers', teacher); });
   }
-  if (teacher) return { role: 'teacher', email, teacher };
+  if (teacher) return whoRemember_(email, { role: 'teacher', email, teacher });
   const at = findRows_('Students', 'email', email)[0];
-  if (at) return { role: 'student', email, student: readRow_('Students', at) };
+  if (at) return whoRemember_(email, { role: 'student', email, student: readRow_('Students', at) });
+  // Someone not on a roster is never remembered, so being added works at once.
   return { role: null, email };
+}
+
+const WHO_SECONDS = 120;
+const whoKey_ = (email) => `who:${sheetId_}:${email}`;
+/** Changes whenever a student or teacher row is removed, which moves the rows below it. */
+function whoEpoch_(bump) {
+  try {
+    const cache = CacheService.getScriptCache();
+    if (bump) cache.put('who_epoch', uuid_(), 21600);
+    return cache.get('who_epoch') || '0';
+  } catch (_) {
+    return null;
+  }
+}
+function whoCached_(email) {
+  try {
+    const key = whoKey_(email);
+    const got = CacheService.getScriptCache().getAll(['who_epoch', key]);
+    if (!got[key]) return null;
+    const hit = JSON.parse(got[key]);
+    return hit.epoch === (got.who_epoch || '0') && hit.me && hit.me.email === email ? hit.me : null;
+  } catch (_) {
+    return null;
+  }
+}
+function whoRemember_(email, me) {
+  try {
+    const epoch = whoEpoch_(false);
+    if (epoch !== null) CacheService.getScriptCache().put(whoKey_(email), JSON.stringify({ epoch, me }), WHO_SECONDS);
+  } catch (_) { /* The cache is only a shortcut. */ }
+  return me;
+}
+function whoForget_(email) {
+  try { CacheService.getScriptCache().remove(whoKey_(String(email || '').trim().toLowerCase())); } catch (_) { /* Then it lapses by itself. */ }
+}
+/** Called by every write to a tab. People and groups are remembered in the cache, so their tabs clear it. */
+function wrote_(name, row, removed) {
+  if (name === 'Students' || name === 'Teachers') {
+    if (removed || !row || !row.email) whoEpoch_(true);
+    else whoForget_(row.email);
+  }
+  if (name === 'Teams') { try { CacheService.getScriptCache().remove(`teams_none:${sheetId_}`); } catch (_) { /* It lapses by itself. */ } }
 }
 
 function sessionFor_(me) {
@@ -163,6 +213,9 @@ function sessionFor_(me) {
 // Storage -----------------------------------------------------------------------------------------
 
 let spreadsheet_ = null;
+// The id of the Sheet in use, so nothing remembered about one Sheet is ever used with another.
+let sheetId_ = '';
+const tabs_ = {};
 
 const BUSY_ = 'BUSY: Pixel Trail is very busy right now. Your work is safe. Trying again...';
 
@@ -177,6 +230,7 @@ function db_() {
   let id = props.getProperty('DATA_SHEET_ID');
   if (id) {
     spreadsheet_ = openSheet_(id);
+    sheetId_ = id;
     return spreadsheet_;
   }
   // No id has ever been saved: this is the very first run. The lock stops two first visitors each making one.
@@ -186,10 +240,12 @@ function db_() {
     id = props.getProperty('DATA_SHEET_ID');
     if (id) {
       spreadsheet_ = openSheet_(id);
+      sheetId_ = id;
       return spreadsheet_;
     }
     const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.create('Pixel Trail Data');
     rememberSheet_(ss.getId());
+    sheetId_ = ss.getId();
     spreadsheet_ = ss;
     return ss;
   } finally {
@@ -232,6 +288,14 @@ function parseList_(text) {
 
 function sheet_(name) {
   const ss = db_();
+  // Asked for many times in one request; the answer can't change within it.
+  if (tabs_[name] && tabs_.of === ss) return tabs_[name];
+  if (tabs_.of !== ss) { Object.keys(tabs_).forEach((k) => delete tabs_[k]); tabs_.of = ss; }
+  const made = sheetNow_(ss, name);
+  tabs_[name] = made;
+  return made;
+}
+function sheetNow_(ss, name) {
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
@@ -277,12 +341,13 @@ function rows_(name, cols) {
 }
 
 const toCells_ = (name, obj) => SCHEMA[name].map((f) => (f.startsWith('data') && obj[f] !== undefined ? obj[f] : encode_(f, obj[f])));
-const insert_ = (name, obj) => sheet_(name).appendRow(toCells_(name, obj));
+const insert_ = (name, obj) => { sheet_(name).appendRow(toCells_(name, obj)); wrote_(name, obj, false); };
 
 function update_(name, row) {
   const cols = SCHEMA[name];
   const sh = sheet_(name);
   sh.getRange(row._row, 1, 1, cols.length).setValues([toCells_(name, row)]);
+  wrote_(name, row, false);
 }
 
 function readRow_(name, rowNumber) {
@@ -310,16 +375,36 @@ function myWorkList_(studentId) {
   const vals = sheet_('Works').getRange(first, 3, found[found.length - 1] - first + 1, 2).getValues();
   return found.map((r) => ({ _row: r, lesson_id: decode_('lesson_id', vals[r - first][0]), status: decode_('status', vals[r - first][1]) }));
 }
-/** One student's saved lesson, whole, or null when they haven't started it. */
+/**
+ * One student's saved lesson, whole, or null when they haven't started it.
+ *
+ * Finding the row is the slow part of a save, and a save holds the lock everyone shares. So the row
+ * number is remembered, and checked every time: the row is read (which a save needs anyway) and only
+ * trusted if it really is this student's lesson. A wrong or missing memory just means a search.
+ */
 function myWorkRow_(studentId, lessonId) {
+  const key = `wr:${sheetId_}:${studentId}:${lessonId}`;
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (_) { cache = null; }
+  try {
+    const at = cache ? Number(cache.get(key)) : 0;
+    if (at >= 2 && at <= sheet_('Works').getLastRow()) {
+      const row = readRow_('Works', at);
+      if (row.student_id === studentId && row.lesson_id === lessonId) return row;
+    }
+  } catch (_) { /* Search for it instead. */ }
   const hit = myWorkList_(studentId).find((w) => w.lesson_id === lessonId);
-  return hit ? readRow_('Works', hit._row) : null;
+  if (!hit) return null;
+  try { if (cache) cache.put(key, String(hit._row), 21600); } catch (_) { /* Only a shortcut. */ }
+  return readRow_('Works', hit._row);
 }
 
 /** Delete bottom-up so earlier row numbers stay valid. */
 function deleteRows_(name, predicate, cols) {
   const sh = sheet_(name);
-  rows_(name, cols || SCHEMA[name].slice(0, 3)).filter(predicate).map((r) => r._row).sort((a, b) => b - a).forEach((r) => sh.deleteRow(r));
+  const doomed = rows_(name, cols || SCHEMA[name].slice(0, 3)).filter(predicate).map((r) => r._row).sort((a, b) => b - a);
+  doomed.forEach((r) => sh.deleteRow(r));
+  if (doomed.length) wrote_(name, null, true);
 }
 
 /** Split long text across cells, and join it back. Each piece is marked so it can't act as a formula. */
@@ -335,13 +420,13 @@ function unpackChunks_(row, count) {
   return out;
 }
 
-function withLock_(fn) {
+function withLock_(fn, waitMs) {
   const lock = LockService.getScriptLock();
   const asked = Date.now();
   try {
-    lock.waitLock(20000);
+    lock.waitLock(waitMs || 20000);
   } catch (_) {
-    console.warn('LOCK_TIMEOUT: waited 20 s for a turn to save');
+    console.warn(`LOCK_TIMEOUT: waited ${(waitMs || 20000) / 1000} s for a turn to save`);
     throw new Error(BUSY_);
   }
   // Shows in Apps Script's Executions log, so a pilot can see saves queuing up before they fail.
@@ -396,6 +481,54 @@ function metaWorks_() {
   return rows;
 }
 
+/**
+ * A student's lessons. With `withCode` (a list of lesson ids), only those come with their code and
+ * files; the rest are the details alone (`full: false`), read together in a couple of trips. Home
+ * and the map never need the code, and reading every lesson's code one row at a time was the
+ * slowest part of opening them. Without a list, every lesson comes whole, as it always did.
+ */
+function myWorks_(me, withCode) {
+  const list = myWorkList_(me.student.id);
+  const grades = rows_('Grades');
+  const graded = (w) => ({ ...w, grade: gradeFor_(w.id, grades) });
+  if (!Array.isArray(withCode)) return list.map((w) => fullWork_(w)).map(graded);
+  const want = new Set(withCode.map(String));
+  const light = new Map(metaRows_(list.filter((w) => !want.has(w.lesson_id)).map((w) => w._row)).map((r) => [r._row, r]));
+  return list.map((w) => {
+    if (want.has(w.lesson_id)) return fullWork_(w);
+    const r = light.get(w._row);
+    // Rows are found and read a moment apart. If one changed hands in between, read it properly.
+    if (!r || r.student_id !== me.student.id || r.lesson_id !== w.lesson_id) return fullWork_(w);
+    const { _row, ...rest } = r;
+    return { ...rest, full: false };
+  }).map(graded);
+}
+
+/** The details of these Works rows, without their code. Rows near each other are read together. */
+function metaRows_(rowNumbers) {
+  const sorted = [...rowNumbers].sort((a, b) => a - b);
+  const sh = sheet_('Works');
+  const tailAt = SCHEMA.Works.length - WORK_TAIL.length + 1;
+  const out = [];
+  for (let i = 0; i < sorted.length;) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1] - sorted[j] <= 150) j++;
+    const first = sorted[i];
+    const count = sorted[j] - first + 1;
+    const meta = sh.getRange(first, 1, count, WORK_META.length).getValues();
+    const tail = sh.getRange(first, tailAt, count, WORK_TAIL.length).getValues();
+    for (let k = i; k <= j; k++) {
+      const at = sorted[k] - first;
+      const o = { _row: sorted[k] };
+      WORK_META.forEach((f, c) => { o[f] = decode_(f, meta[at][c]); });
+      WORK_TAIL.forEach((f, c) => { o[f] = decode_(f, tail[at][c]); });
+      out.push(o);
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
 function fullWork_(row) {
   const full = readRow_('Works', row._row);
   const doc = JSON.parse(unpackChunks_(full, WORK_CELLS) || '{"code":"","assets":{},"files":{}}');
@@ -448,7 +581,7 @@ function buildBoard_(classId) {
   // Progress only: never code, grades, feedback, reflections, or emails.
   return students.map((s) => ({
     id: s.id, display_name: s.display_name, avatar: s.avatar, path: s.path, game_name: s.game_name,
-    works: works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, step_at: w.step_at, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
+    works: works.filter((w) => w.student_id === s.id).map((w) => ({ lesson_id: w.lesson_id, status: w.status, step_at: w.step_at, checks_passed: w.checks_passed, stretch_done: w.stretch_done, auto_ok: w.auto_ok, shared: w.shared, submitted_at: w.submitted_at })),
     awards: awards.filter((a) => a.student_id === s.id).map((a) => ({ badge_id: a.badge_id, note: a.note, created_at: a.created_at })),
     sprites_shared: sprites.filter((sp) => sp.student_id === s.id && sp.published).length,
     // How many lessons they rated (not what they said): rating earns a little XP.
@@ -692,14 +825,23 @@ function lessonRatings_(me, classId) {
 // The server only keeps time and coins: minutes are earned by submitting lessons, a run is stamped
 // when it starts, and what the browser reports is held to what that run could really have been.
 const WORLD_RUN_MAX = 300;
-const WORLD_COIN_MAX = 600;
-const WORLD_CHEST = 2000;
+const WORLD_COIN_MAX = 6000;
+const WORLD_CHEST = 10000;
 // Everything about a run except the ghost's path, which is long and only needed for a race.
 const WORLD_META = ['student_id', 'class_id', 'seconds_used', 'best_coins', 'total_coins', 'runs', 'started_ms', 'run_allowed', 'run_free', 'updated_at', 'ghost_seed'];
 // A path is the letter p, then 4 characters per half second: never something a Sheet reads as a number.
 const WORLD_PATH = /^p([0-9a-z]{4}){1,600}$/;
 const worldMode_ = (cls) => (cls && (cls.world_mode === 'earned' || cls.world_mode === 'free') ? cls.world_mode : '');
 const worldMins_ = (cls) => Math.max(1, Math.min(15, Number(cls && cls.world_mins) || 5));
+
+/** Everyone's Trail Quest rows without their recorded paths, plus the deepest floor from the end of the row. */
+function worldMeta_() {
+  const rows = rows_('World', WORLD_META);
+  if (!rows.length) return rows;
+  const deep = sheet_('World').getRange(2, SCHEMA.World.indexOf('best_floor') + 1, rows.length, 1).getValues();
+  rows.forEach((r, i) => { r.best_floor = decode_('best_floor', deep[i][0]); });
+  return rows;
+}
 
 function worldEarned_(student, cls) {
   const done = myWorkList_(student.id).filter((w) => w.status !== 'in_progress').length;
@@ -716,17 +858,17 @@ function worldState_(me) {
   const student = me.student;
   const cls = rows_('Classes').find((c) => c.id === student.class_id);
   const mode = worldMode_(cls);
-  const all = rows_('World', WORLD_META).filter((r) => r.class_id === student.class_id);
+  const all = worldMeta_().filter((r) => r.class_id === student.class_id);
   const mine = all.find((r) => r.student_id === student.id);
   const names = new Map(rows_('Students').filter((x) => x.class_id === student.class_id).map((x) => [x.id, x]));
   const total = all.reduce((a, r) => a + r.total_coins, 0);
   return {
     mode, mins: worldMins_(cls), run_max: WORLD_RUN_MAX,
     seconds_left: mode === 'earned' ? Math.max(0, worldEarned_(student, cls) - (mine ? mine.seconds_used : 0) - worldPending_(mine)) : 0,
-    best: mine ? mine.best_coins : 0, total: mine ? mine.total_coins : 0, runs: mine ? mine.runs : 0,
+    best: mine ? mine.best_coins : 0, total: mine ? mine.total_coins : 0, runs: mine ? mine.runs : 0, floor: mine ? mine.best_floor || 0 : 0,
     // Classmates see names, characters, and coins from play. Nothing here comes from grades.
     board: all.filter((r) => r.runs > 0 && names.has(r.student_id)).sort((a, b) => b.best_coins - a.best_coins).slice(0, 8)
-      .map((r) => ({ id: r.student_id, display_name: names.get(r.student_id).display_name, avatar: names.get(r.student_id).avatar, best: r.best_coins, seed: r.ghost_seed || 0 })),
+      .map((r) => ({ id: r.student_id, display_name: names.get(r.student_id).display_name, avatar: names.get(r.student_id).avatar, best: r.best_coins, floor: r.best_floor || 0, seed: r.ghost_seed || 0 })),
     chest: { level: Math.floor(total / WORLD_CHEST) + 1, have: total % WORLD_CHEST, goal: WORLD_CHEST },
   };
 }
@@ -761,10 +903,12 @@ function worldRun_(me, result) {
     if (!row || !row.started_ms) throw new Error('That run already ended.');
     const elapsed = (Date.now() - row.started_ms) / 1000;
     const seconds = Math.max(0, Math.min(Math.round(Number(result && result.seconds) || 0), row.run_allowed, Math.ceil(elapsed) + 5));
-    const coins = Math.max(0, Math.min(Math.round(Number(result && result.coins) || 0), WORLD_COIN_MAX, 40 + seconds * 6));
+    // Deeper floors pay more, but nobody gets down a floor in under a few seconds.
+    const coins = Math.max(0, Math.min(Math.round(Number(result && result.coins) || 0), WORLD_COIN_MAX, 40 + seconds * 20));
+    const floor = Math.max(1, Math.min(Math.round(Number(result && result.floor) || 1), 1 + Math.floor(seconds / 4), 99));
     const next = {
       ...row, seconds_used: row.seconds_used + (row.run_free ? 0 : seconds), best_coins: Math.max(row.best_coins, coins), total_coins: row.total_coins + coins,
-      runs: row.runs + 1, started_ms: 0, run_allowed: 0, run_free: false, updated_at: now_(),
+      best_floor: Math.max(row.best_floor || 0, floor), runs: row.runs + 1, started_ms: 0, run_allowed: 0, run_free: false, updated_at: now_(),
     };
     // A new best run becomes this student's ghost. A path that isn't in the right form is left out.
     const seed = Math.round(Number(result && result.seed));
@@ -1003,8 +1147,10 @@ function createAssignments_(me, classId, items, opts) {
   if (!link) throw new Error('Import this course from Google Classroom first.');
   if (!Array.isArray(items) || !items.length || items.length > 30) throw new Error('Choose up to 30 lessons.');
   const publish = !!(opts && opts.publish);
-  const appUrl = String(ScriptApp.getService().getUrl() || '');
   const out = { created: 0, skipped: [], failed: [] };
+  // Assignments go under one "Pixel Trail" topic when this script is allowed to manage topics.
+  const topicId = classroomTopic_(link.course_id);
+  out.topic = !!topicId;
   items.forEach((it) => {
     const [slot] = cleanSlots_([it]);
     const title = text_(it.title, 150).trim();
@@ -1016,10 +1162,13 @@ function createAssignments_(me, classId, items, opts) {
     if (rows_('GradeSync').some((g) => g.class_id === classId && g.lesson_id === slot.key)) { out.skipped.push(`${title}: already in Classroom`); return; }
     try {
       const body = {
-        title, description: text_(it.description, 1000), workType: 'ASSIGNMENT', state: publish ? 'PUBLISHED' : 'DRAFT', maxPoints: points,
+        title, description: description_(it.description), workType: 'ASSIGNMENT', state: publish ? 'PUBLISHED' : 'DRAFT', maxPoints: points,
         ...(due ? dueParts_(due) : {}),
       };
-      if (/^https:\/\//.test(appUrl)) body.materials = [{ link: { url: appUrl, title: 'Open Pixel Trail' } }];
+      if (topicId) body.topicId = topicId;
+      // The link opens this stop for whoever clicks it: the lesson on their own road.
+      const stop = stopUrl_(slot.key);
+      if (stop) body.materials = [{ link: { url: stop, title: 'Open this lesson in Pixel Trail' } }];
       const created = Classroom.Courses.CourseWork.create(body, link.course_id);
       withLock_(() => insert_('GradeSync', {
         class_id: classId, lesson_id: slot.key, coursework_id: String(created.id), link: created.alternateLink || '', due, pushed_at: '', sent: {}, title, points,
@@ -1027,6 +1176,65 @@ function createAssignments_(me, classId, items, opts) {
       out.created++;
     } catch (e) {
       out.failed.push(`${title}: ${text_(e && e.message, 160)}`);
+    }
+  });
+  return out;
+}
+
+/** A description for Classroom: plain text, line breaks kept, nothing that could be read as markup. */
+const DESCRIPTION_MAX = 8000;
+function description_(value) {
+  return String(value === null || value === undefined ? '' : value).replace(/\r/g, '').replace(/[<>]/g, '').replace(/[^\S\n]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, DESCRIPTION_MAX);
+}
+
+/** The app's address with a stop on the end, or '' when the address isn't a web link. */
+function stopUrl_(key) {
+  const base = String(ScriptApp.getService().getUrl() || '');
+  if (!/^https:\/\//.test(base)) return '';
+  return `${base}${base.indexOf('?') >= 0 ? '&' : '?'}stop=${encodeURIComponent(key)}`;
+}
+
+/**
+ * The id of the course's "Pixel Trail" topic, made if it isn't there. Returns '' when the script
+ * hasn't been given the Classroom topics permission, or Classroom says no: a topic is a nicety, and
+ * assignments must still be created without one.
+ */
+const TOPIC_NAME = 'Pixel Trail';
+function classroomTopic_(courseId) {
+  try {
+    const found = allPages_((t) => Classroom.Courses.Topics.list(courseId, pageOpts_(t)), 'topic').find((x) => x.name === TOPIC_NAME);
+    if (found) return String(found.topicId);
+    return String(Classroom.Courses.Topics.create({ name: TOPIC_NAME }, courseId).topicId || '');
+  } catch (e) {
+    console.warn(`TOPIC_SKIPPED: ${e && e.message}`);
+    return '';
+  }
+}
+
+/**
+ * Put fresh descriptions on assignments this app already made, for ones created before descriptions
+ * said anything about the trail or the standards. Only the description changes: never the name,
+ * points, due date, or anyone's grade.
+ */
+function updateAssignments_(me, classId, items) {
+  ownerOnly_(me);
+  ownedClass_(me, classId);
+  const link = linkFor_(classId);
+  if (!link) throw new Error('Import this course from Google Classroom first.');
+  if (!Array.isArray(items) || !items.length || items.length > 40) throw new Error('Choose up to 40 lessons.');
+  const syncs = rows_('GradeSync').filter((g) => g.class_id === classId);
+  const out = { updated: 0, skipped: [], failed: [] };
+  items.forEach((it) => {
+    const [slot] = cleanSlots_([it]);
+    const sync = syncs.find((g) => g.lesson_id === slot.key);
+    const text = description_(it.description);
+    if (!sync) { out.skipped.push(`${slot.key}: not in Classroom yet`); return; }
+    if (!text) { out.failed.push(`${sync.title || slot.key}: nothing to write`); return; }
+    try {
+      Classroom.Courses.CourseWork.patch({ description: text }, link.course_id, sync.coursework_id, { updateMask: 'description' });
+      out.updated++;
+    } catch (e) {
+      out.failed.push(`${sync.title || slot.key}: ${text_(e && e.message, 160)}`);
     }
   });
   return out;
@@ -1203,6 +1411,8 @@ function cleanPlan_(p) {
     focus: text_(p.focus, 300),
     standards: (Array.isArray(p.standards) ? p.standards : []).map(String).filter((c) => /^6-8\.[A-Z]+\.[a-e]\.\d$/.test(c)).slice(0, 3),
     timer_end: when && !Number.isNaN(Date.parse(when)) ? new Date(when).toISOString() : '',
+    // The lesson the class display shows, when the teacher picks one. Blank means automatic.
+    lesson: /^[a-z]\d{1,2}$/.test(String(p.lesson || '')) ? String(p.lesson) : '',
   };
 }
 
@@ -1236,6 +1446,7 @@ const TEACHER_ROUTES = {
   gradeSyncStatus: gradeSyncStatus_,
   pushGrades: pushGrades_,
   createAssignments: createAssignments_,
+  updateAssignments: updateAssignments_,
   listTeams: listTeams_,
   saveTeams: saveTeams_,
   classAlerts: classAlerts_,
@@ -1434,7 +1645,14 @@ function cleanFiles_(files) {
 const TEAM_HOLD_MS = 180000;
 const ROAD_OF_ = { p: 'platformer', a: 'adventure', s: 'arcade', m: 'mind' };
 const EMPTY_DOC_ = '{"code":"","assets":{},"files":{}}';
-const teamOf_ = (studentId, lessonId) => rows_('Teams').find((t) => t.lesson_id === lessonId && (t.members || []).includes(studentId));
+/** The group a student is in for a lesson, if any. Most classes have no groups, and that is remembered so a save doesn't read the tab to find out. */
+function teamOf_(studentId, lessonId) {
+  const key = `teams_none:${sheetId_}`;
+  try { if (CacheService.getScriptCache().get(key) === '1') return undefined; } catch (_) { /* Read the tab. */ }
+  const teams = rows_('Teams');
+  if (!teams.length) { try { CacheService.getScriptCache().put(key, '1', 600); } catch (_) { /* Only a shortcut. */ } }
+  return teams.find((t) => t.lesson_id === lessonId && (t.members || []).includes(studentId));
+}
 const MAIN_FILE_ = 'sketch.js';
 /** Who is editing each file right now: { 'sketch.js': studentId }. Holds lapse after TEAM_HOLD_MS. */
 function holdersNow_(team) {
@@ -1693,7 +1911,7 @@ function saveMyWork_(me, lessonId, patch, extra) {
       ...(existing || { id: uuid_(), student_id: me.student.id, lesson_id: lessonId, status: 'in_progress', shared: false, submitted_at: null }),
       stretch_done: Math.max(0, Math.min(3, Number(patch.stretch_done) || 0)),
       reflection: text_(patch.reflection, 4000),
-      checks_passed: Number(patch.checks_passed) || 0,
+      checks_passed: Math.max(0, Math.min(40, Math.round(Number(patch.checks_passed) || 0))),
       checks_total: Number(patch.checks_total) || 0,
       quiz_right: Number(patch.quiz_right) || 0,
       quiz_total: Number(patch.quiz_total) || 0,
@@ -1711,7 +1929,9 @@ function saveMyWork_(me, lessonId, patch, extra) {
     [...WORK_META, ...WORK_TAIL].forEach((f) => { out[f] = row[f]; });
     const saved = JSON.parse(written);
     return { ...out, code: saved.code, assets: saved.assets, files: saved.files, team_lost: lostTurn };
-  });
+    // A routine autosave steps aside quickly when the app is busy and tries again later, leaving the
+    // lock for the things someone is waiting on, like a submit.
+  }, extra ? 20000 : 6000);
 }
 
 // Backups and recovery ---------------------------------------------------------------------------
@@ -1918,6 +2138,8 @@ function combinePlan_(src, countersToo) {
     let out = twin.vals.slice();
     const best = at('World', 'best_coins');
     if (n(w[best]) > n(out[best])) ['best_coins', 'ghost_seed', 'ghost'].forEach((f) => { out[at('World', f)] = w[at('World', f)]; });
+    const deep = at('World', 'best_floor');
+    if (n(w[deep]) > n(out[deep])) out[deep] = w[deep];
     if (countersToo) ['seconds_used', 'total_coins', 'runs'].forEach((f) => { out[at('World', f)] = String(n(out[at('World', f)]) + n(w[at('World', f)])); });
     if (out.join('\u0001') !== twin.vals.join('\u0001')) plan.set.push({ name: 'World', row: twin.row, vals: out });
   });
@@ -1961,6 +2183,9 @@ function dataCombine_(me, link, go) {
       sh.getRange(sh.getLastRow() + 1, 1, rows.length, SCHEMA[name].length).setValues(rows);
     });
     plan.set.forEach((x) => sheet_(x.name).getRange(x.row, 1, 1, SCHEMA[x.name].length).setValues([x.vals]));
+    // Rows were written without the usual helpers, so nothing remembered about people or groups is kept.
+    wrote_('Students', null, true);
+    wrote_('Teams', null, true);
     if (first) props.setProperty('COMBINED', JSON.stringify(done.concat(key).slice(-30)));
     return plan.counts;
   });
@@ -2146,7 +2371,10 @@ const STUDENT_ROUTES = {
   saveSong: saveSong_,
   deleteSong: deleteSong_,
   updateProfile: (me, patch) => withLock_(() => {
-    const s = { ...me.student };
+    // Read again inside the lock: the row must be the one in the Sheet now, not one remembered.
+    const at = findRows_('Students', 'email', me.email)[0];
+    if (!at) throw new Error('You are not on a class list any more. Ask your teacher.');
+    const s = readRow_('Students', at);
     if (patch.avatar !== undefined) {
       if (JSON.stringify(patch.avatar).length > 2000) throw new Error('That character is too big.');
       s.avatar = patch.avatar;
@@ -2163,10 +2391,7 @@ const STUDENT_ROUTES = {
   teamFor: teamFor_,
   takeKeyboard: takeKeyboard_,
   passKeyboard: passKeyboard_,
-  myWorks: (me) => {
-    const grades = rows_('Grades');
-    return myWorkList_(me.student.id).map((w) => fullWork_(w)).map((w) => ({ ...w, grade: gradeFor_(w.id, grades) }));
-  },
+  myWorks: myWorks_,
   saveWork: (me, lessonId, patch) => saveMyWork_(me, lessonId, patch),
   submitWork: (me, lessonId, patch) => saveMyWork_(me, lessonId, patch, { status: 'submitted', submitted_at: now_() }),
   setShared: (me, lessonId, shared) => withLock_(() => {

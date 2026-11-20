@@ -2,7 +2,8 @@
 // so changing a rule here updates every student. Grades are deliberately NOT an input:
 // everything here is visible to classmates, and grades must stay private.
 
-export const XP = { submit: 50, submitUnchecked: 25, approved: 50, stretch: 10, award: 25, rating: 10 };
+// step: each step of a lesson whose check passes, counted as the student works, not only at the end.
+export const XP = { step: 5, submit: 50, submitUnchecked: 25, approved: 50, stretch: 10, award: 25, rating: 10 };
 
 export const RANKS = [
   { name: 'Spark', xp: 0 },
@@ -67,6 +68,8 @@ export function statsFor(s) {
   let xp = 0;
   let stretch = 0;
   for (const w of works) {
+    // The app's own step checks, not a teacher's grade. Counted for lessons still in progress too.
+    xp += Math.min(w.checks_passed || 0, 12) * XP.step;
     if (w.status === 'in_progress') continue;
     xp += w.auto_ok ? XP.submit : XP.submitUnchecked;
     if (w.status === 'approved') xp += XP.approved;

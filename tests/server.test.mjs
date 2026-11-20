@@ -210,6 +210,9 @@ test('a daily plan is the teacher\'s alone, and bad input is cleaned', () => {
   teacher('saveClassPlan', cls.id, { day: '2026-11-08', question: 'Second', timer_end: '2026-11-08T15:00:00Z' });
   const plan = teacher('getClassPlan', cls.id);
   assert.equal(plan.question, 'Second');
+  assert.equal(plan.lesson, '');
+  assert.equal(teacher('saveClassPlan', cls.id, { day: '2026-11-08', lesson: 'c3' }).lesson, 'c3');
+  assert.equal(teacher('saveClassPlan', cls.id, { day: '2026-11-08', lesson: '=EVIL()' }).lesson, '');
   assert.equal(plan.timer_end, '2026-11-08T15:00:00.000Z');
 });
 
@@ -491,7 +494,12 @@ test('named assignments are made ahead, and grades go to them scaled to their po
   assert.equal(data.created[0].maxPoints, 100);
   assert.ok(data.created[0].dueDate && data.created[0].dueTime);
   assert.equal(data.created[1].dueDate, undefined, 'due date is optional');
-  assert.equal(data.created[0].materials[0].link.url, 'https://script.test/exec');
+  // The link opens that stop, and without the topics permission the assignment is still made, with no topic.
+  assert.equal(data.created[0].materials[0].link.url, 'https://script.test/exec?stop=L1');
+  assert.equal(data.created[1].materials[0].link.url, 'https://script.test/exec?stop=L6');
+  assert.equal(made.topic, false);
+  assert.equal(data.created[0].topicId, undefined);
+  assert.equal(data.created[0].description, 'Draw a scene.');
   assert.equal(t('createAssignments', r.class_id, [item], {}).skipped.length, 1, 'no second copy');
   const drafts = t('createAssignments', r.class_id, [{ key: 'L2', ids: ['t3'], title: 'It Moves!', points: 10 }], {});
   assert.equal(drafts.created, 1);
@@ -696,7 +704,8 @@ test('Trail Quest: time is earned by lessons, runs are held to what was possible
 
   // The browser can't claim more time or coins than the run allowed.
   const after = bea('worldRun', { seconds: 4, coins: 99999 });
-  assert.equal(after.best, 40 + 4 * 6);
+  assert.equal(after.best, 40 + 4 * 20);
+  assert.equal(after.floor, 1, 'no floor was claimed, so it counts as the first');
   assert.ok(after.seconds_left >= 115 && after.seconds_left <= 120);
   denied(() => bea('worldRun', { seconds: 1, coins: 5 }), 'a run can only be reported once');
   assert.equal(bea('worldState').runs, 1);
@@ -731,8 +740,13 @@ test('Trail Quest ghosts: a best run can be raced by classmates, and only by the
   other('setWorld', clsB.id, { mode: 'free' });
   const path = 'p' + '0a0b'.repeat(10);
   bea('worldEnter');
-  const first = bea('worldRun', { seconds: 5, coins: 30, seed: 4242, path });
+  // A run can't claim to be deeper than its time allowed, and a path may include trips down the stairs.
+  const first = bea('worldRun', { seconds: 5, coins: 30, seed: 4242, path, floor: 50 });
   assert.equal(first.board[0].seed, 4242);
+  assert.equal(first.floor, 2);
+  assert.equal(first.board[0].floor, 2);
+  bea('worldEnter');
+  assert.equal(bea('worldRun', { seconds: 0, coins: 1, seed: 1, path: 'pzzzz0a0b', floor: 1 }).floor, 2, 'the deepest floor is kept');
   assert.ok(!JSON.stringify(first).includes(path), 'the board does not carry paths');
   const ghosts = ari('worldGhosts', 4242);
   assert.equal(ghosts.length, 1);
@@ -922,12 +936,102 @@ test('reliability: one student action reads a few rows, however many students th
   const kid = server.as(kids[1]);
   kid('saveWork', 't1', { code: 'a', assets: {} });
   kid('saveWork', 't2', { code: 'a', assets: {} });
-  for (const [method, args, most] of [['session', [], 100], ['saveWork', ['t2', { code: 'b', assets: {}, step_at: 2 }], 200], ['submitWork', ['t1', { code: 'b', assets: {} }], 200], ['myWorks', [], 200], ['myHelp', [], 100]]) {
+  for (const [method, args, most] of [['session', [], 100], ['saveWork', ['t2', { code: 'b', assets: {}, step_at: 2 }], 200], ['submitWork', ['t1', { code: 'b', assets: {} }], 200], ['myWorks', [], 200], ['myWorks', [[]], 200], ['myHelp', [], 100]]) {
     server.cellsRead();
     kid(method, ...args);
     const cells = server.cellsRead();
     assert.ok(cells < most, `${method} read ${cells} cells`);
   }
+});
+
+test('reliability: who someone is, is remembered, and forgotten the moment it changes', () => {
+  const { server, teacher, ari, cls, ids } = setup();
+  ari('session');
+  // Remembered: a second request reads no Teachers or Students cells to find out who is asking.
+  const before = ['Teachers', 'Students'].map((n) => server.sheets.get(n).reads);
+  ari('myHelp');
+  assert.deepEqual(['Teachers', 'Students'].map((n) => server.sheets.get(n).reads), before);
+  // The teacher changes this student's road: the very next request sees it.
+  teacher('setStudentPath', ids[ARI], 'platformer');
+  assert.equal(ari('session').student.path, 'platformer');
+  // The student changes their own character: seen at once, and written to their own row.
+  ari('updateProfile', { avatar: { hat: 'cap' } });
+  assert.equal(ari('session').student.avatar.hat, 'cap');
+  // Someone added to a roster gets in straight away, even having just been turned away.
+  assert.equal(server.as(STRANGER)('session').role, null);
+  teacher('addStudents', cls.id, [`New Kid, ${STRANGER}`]);
+  assert.equal(server.as(STRANGER)('session').role, 'student');
+  // Someone removed is out on their next request.
+  teacher('removeStudent', ids[ARI]);
+  assert.equal(ari('session').role, null);
+  denied(() => ari('saveWork', 't1', { code: 'still here?', assets: {} }));
+});
+
+test('reliability: removing a student above never sends another student\'s save or profile to the wrong row', () => {
+  const { server, teacher, ari, bea, cls, ids } = setup();
+  teacher('addStudents', cls.id, ['Cy K, cy@school.test']);
+  const cy = server.as('cy@school.test');
+  cy('saveWork', 't1', { code: 'CY ONE', assets: {} });
+  cy('session');
+  // Ari's rows sit above Cy's in both tabs. Removing Ari moves Cy's rows up by one.
+  teacher('removeStudent', ids[ARI]);
+  cy('saveWork', 't1', { code: 'CY TWO', assets: {}, step_at: 3 });
+  cy('updateProfile', { avatar: { hat: 'crown' } });
+  const mine = cy('myWorks');
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].code, 'CY TWO');
+  assert.equal(cy('session').student.avatar.hat, 'crown');
+  // Bea, whose rows are also nearby, is untouched.
+  const beas = bea('myWorks');
+  assert.equal(beas.length, 1);
+  assert.equal(beas[0].code, 'BEA CODE');
+  assert.equal(bea('session').student.display_name, 'Bea T');
+  assert.ok(!bea('session').student.avatar || bea('session').student.avatar.hat !== 'crown');
+});
+
+test('reliability: a routine save finds its row without searching, and a first save still makes exactly one row', () => {
+  const { server, ari } = setup();
+  ari('saveWork', 't2', { code: 'one', assets: {} });
+  ari('saveWork', 't2', { code: 'two', assets: {} });
+  server.cellsRead();
+  ari('saveWork', 't2', { code: 'three', assets: {} });
+  assert.ok(server.cellsRead() < 80, 'a repeat save reads little');
+  const mine = ari('myWorks').filter((w) => w.lesson_id === 't2');
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].code, 'three');
+});
+
+test('reliability: a page can ask for a student\'s lessons without their code, and gets code only where it asks', () => {
+  const { server, teacher, bea, ari, cls, beaWork } = setup();
+  bea('saveWork', 't2', { code: 'BEA TWO', assets: { a: 1 }, files: { 'extra.js': 'let x;' }, step_at: 4 });
+  // Other students' rows in between, so Bea's rows are not next to each other.
+  teacher('addStudents', cls.id, Array.from({ length: 40 }, (_, i) => `Filler ${i}, f${i}@school.test`));
+  for (let i = 0; i < 40; i++) server.as(`f${i}@school.test`)('saveWork', 't1', { code: `F${i}`, assets: {} });
+  bea('saveWork', 't3', { code: 'BEA THREE', assets: {} });
+
+  const light = bea('myWorks', []);
+  assert.deepEqual(light.map((w) => w.lesson_id).sort(), ['t1', 't2', 't3']);
+  for (const w of light) { assert.equal(w.full, false); assert.equal(w.code, undefined); assert.equal(w.files, undefined); assert.equal(w.student_id, light[0].student_id); }
+  const t1 = light.find((w) => w.lesson_id === 't1');
+  assert.equal(t1.id, beaWork.id);
+  assert.equal(t1.status, 'approved');
+  assert.equal(t1.reflection, 'BEA REFLECTION');
+  assert.equal(t1.grade.feedback, 'PRIVATE FEEDBACK');
+  assert.equal(light.find((w) => w.lesson_id === 't2').step_at, 4);
+
+  const some = bea('myWorks', ['t2', 'zz']);
+  const t2 = some.find((w) => w.lesson_id === 't2');
+  assert.equal(t2.code, 'BEA TWO');
+  assert.deepEqual(t2.files, { 'extra.js': 'let x;' });
+  assert.notEqual(t2.full, false);
+  assert.equal(some.find((w) => w.lesson_id === 't3').full, false);
+
+  // Asked the old way, everything still comes whole.
+  const all = bea('myWorks');
+  assert.deepEqual(all.map((w) => w.code).sort(), ['BEA CODE', 'BEA THREE', 'BEA TWO']);
+  // And never anyone else's.
+  assert.ok(!JSON.stringify(light).includes('ARI SECRET') && !JSON.stringify(light).includes('F1'));
+  assert.equal(ari('myWorks', []).length, 1);
 });
 
 test('reliability: the class board is built once and shared, and changes still show', () => {
@@ -943,8 +1047,10 @@ test('reliability: the class board is built once and shared, and changes still s
   // Changes that show on the board replace the shared copy at once.
   server.as(kids[0])('updateProfile', { game_name: 'Sky Dash' });
   assert.equal(server.as(kids[1])('classBoard', cls.id).find((s) => s.game_name === 'Sky Dash').display_name, 'Kid 0');
-  server.as(kids[2])('saveWork', 't1', { code: 'x', assets: {} });
+  server.as(kids[2])('saveWork', 't1', { code: 'x', assets: {}, checks_passed: 99999 });
   assert.equal(server.as(kids[1])('classBoard', cls.id).filter((s) => s.works.length).length, 1);
+  // The board carries how many steps pass (it earns XP), held to a sane number.
+  assert.equal(server.as(kids[1])('classBoard', cls.id).find((s) => s.works.length).works[0].checks_passed, 40);
   server.as(OWNER)('removeStudent', server.as(OWNER)('listStudents', cls.id)[0].id);
   assert.equal(server.as(kids[1])('classBoard', cls.id).length, 2);
 });
@@ -1125,4 +1231,45 @@ test('student view: a teacher can be a pretend student that no class ever sees',
   // Starting over clears its work.
   assert.equal(teacher('previewReset').student.id, s.student.id);
   assert.equal(teacher('asStudent', 'myWorks', []).length, 0);
+});
+
+test('Classroom assignments: descriptions, the topic, and bringing old ones up to date', () => {
+  const data = { courses: [{ id: 'c1', name: 'CS 7' }], rosters: { c1: [{ userId: 'g1', profile: { emailAddress: 'ava@school.test', name: { givenName: 'Ava', familyName: 'Lee' } } }] }, topicsAllowed: true };
+  const server = createServer({ owner: OWNER, classroom: data });
+  const t = server.as(OWNER);
+  t('listClasses');
+  server.sheets.get('Teachers').appendRow([OTHER, 'Other', '2026-01-01']);
+  const [r] = t('importCourses', ['c1']);
+  const long = `Pixel Trail · Base Camp · Lesson 1 of 15\n\nHello, Canvas\nDraw   a scene.\r\n\n\n\nStandards\n• 6-8.CT.d.6: Use an iterative approach <b>bold</b>\n${'x'.repeat(9000)}`;
+  const first = t('createAssignments', r.class_id, [{ key: 'L1', ids: ['t1'], title: 'Hello, Canvas', points: 100, description: long }], {});
+  assert.equal(first.created, 1);
+  assert.equal(first.topic, true);
+  const work = data.created[0];
+  // Line breaks survive, so the description reads as written. Markup and runs of blank lines don't.
+  assert.ok(work.description.startsWith('Pixel Trail · Base Camp · Lesson 1 of 15\n\nHello, Canvas\nDraw a scene.\n\nStandards\n• 6-8.CT.d.6: Use an iterative approach bbold/b'));
+  assert.equal(work.description.length, 8000);
+  assert.ok(!/[<>\r]/.test(work.description));
+  // One "Pixel Trail" topic per course, made once and reused.
+  assert.equal(work.topicId, 'topic-1');
+  t('createAssignments', r.class_id, [{ key: 'L2', ids: ['t3'], title: 'It Moves!', points: 100, description: 'Second.' }], {});
+  assert.equal(data.created[1].topicId, 'topic-1');
+  assert.deepEqual(data.topics.c1.map((x) => x.name), ['Pixel Trail']);
+
+  // Updating: owner only, only assignments this app made, and only the description changes.
+  const fresh = [{ key: 'L1', ids: ['t1'], description: 'New words\nabout the trail.' }, { key: 'L9', ids: ['c1'], description: 'Never made.' }, { key: 'L2', ids: ['t3'], description: '   ' }];
+  for (const who of ['ava@school.test', OTHER]) assert.equal(server.raw(who, 'updateAssignments', [r.class_id, fresh]).ok, false, who);
+  assert.equal(server.raw(OWNER, 'updateAssignments', [r.class_id, [{ key: 'bad', ids: ['t1'], description: 'x' }]]).ok, false);
+  const before = { ...data.created[0] };
+  const up = t('updateAssignments', r.class_id, fresh);
+  assert.equal(up.updated, 1);
+  assert.equal(up.skipped.length, 1, 'one was never made in Classroom');
+  assert.equal(up.failed.length, 1, 'an empty description is not written over a real one');
+  assert.equal(data.created[0].description, 'New words\nabout the trail.');
+  assert.equal(data.created[1].description, 'Second.');
+  for (const f of ['title', 'maxPoints', 'state', 'topicId', 'id']) assert.equal(data.created[0][f], before[f], `${f} was not touched`);
+  // If Classroom refuses one, the rest still go through and the refusal is reported.
+  data.created[1].courseId = 'somewhere-else';
+  const partly = t('updateAssignments', r.class_id, [{ key: 'L2', ids: ['t3'], description: 'x' }, { key: 'L1', ids: ['t1'], description: 'Again.' }]);
+  assert.equal(partly.updated, 1);
+  assert.match(partly.failed[0], /It Moves!/);
 });
