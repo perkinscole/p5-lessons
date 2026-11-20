@@ -126,7 +126,7 @@ const GRID_OVERLAY = `
       layer = document.createElement('canvas');
       layer.style.cssText = 'position:fixed;pointer-events:none;z-index:5';
       tip = document.createElement('div');
-      tip.style.cssText = 'position:fixed;pointer-events:none;z-index:6;font:bold 13px monospace;background:#14141f;color:#fff;padding:2px 6px;border-radius:3px;display:none';
+      tip.style.cssText = 'position:fixed;pointer-events:none;z-index:6;white-space:nowrap;font:bold 15px monospace;background:#ffd23f;color:#14141f;padding:3px 8px;border:2px solid #14141f;border-radius:4px;display:none';
       document.body.appendChild(layer);
       document.body.appendChild(tip);
     }
@@ -139,28 +139,44 @@ const GRID_OVERLAY = `
     layer.style.top = r.top + 'px';
     layer.style.width = r.width + 'px';
     layer.style.height = r.height + 'px';
-    layer.width = Math.round(r.width);
-    layer.height = Math.round(r.height);
+    var dpr = window.devicePixelRatio || 1;
+    layer.width = Math.round(r.width * dpr);
+    layer.height = Math.round(r.height * dpr);
     var g = layer.getContext('2d');
-    g.font = 'bold 11px monospace';
-    g.lineJoin = 'round';
-    function label(text, x, y) { g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(text, x, y); g.fillStyle = '#fff'; g.fillText(text, x, y); }
-    for (var x = 0; x <= w; x += 50) {
-      g.fillStyle = x % 100 ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.6)';
-      g.fillRect(Math.round(x * k), 0, 1, layer.height);
-      g.fillStyle = x % 100 ? 'rgba(0,0,0,.2)' : 'rgba(0,0,0,.45)';
-      g.fillRect(Math.round(x * k) + 1, 0, 1, layer.height);
+    g.scale(dpr, dpr);
+    var W = r.width, H = r.height;
+    // Lines: a faint one every 50, a clear one every 100, each with a dark edge so it shows on any color.
+    function line(x1, y1, x2, y2, major) {
+      g.setLineDash(major ? [] : [3, 5]);
+      g.lineWidth = major ? 3 : 2.5; g.strokeStyle = major ? 'rgba(20,20,31,.5)' : 'rgba(20,20,31,.25)';
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+      g.lineWidth = 1; g.strokeStyle = major ? 'rgba(255,255,255,.95)' : 'rgba(255,255,255,.7)';
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
     }
-    for (var y = 0; y <= h; y += 50) {
-      g.fillStyle = y % 100 ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.6)';
-      g.fillRect(0, Math.round(y * k), layer.width, 1);
-      g.fillStyle = y % 100 ? 'rgba(0,0,0,.2)' : 'rgba(0,0,0,.45)';
-      g.fillRect(0, Math.round(y * k) + 1, layer.width, 1);
+    for (var x = 50; x < w; x += 50) { var px = Math.round(x * k) + .5; line(px, 0, px, H, x % 100 === 0); }
+    for (var y = 50; y < h; y += 50) { var py = Math.round(y * k) + .5; line(0, py, W, py, y % 100 === 0); }
+    g.setLineDash([]);
+    // Numbers sit in dark tags on the top and left edges, so they read on a bright sky or a dark cave.
+    var size = Math.max(12, Math.min(16, Math.round(13 * k)));
+    g.font = 'bold ' + size + 'px monospace';
+    g.textBaseline = 'middle';
+    function tag(text, cx, cy, color) {
+      var tw = g.measureText(text).width + 10, th = size + 6;
+      var x0 = Math.max(1, Math.min(W - tw - 1, cx - tw / 2)), y0 = Math.max(1, Math.min(H - th - 1, cy - th / 2));
+      g.fillStyle = color || '#14141f';
+      g.beginPath();
+      if (g.roundRect) g.roundRect(x0, y0, tw, th, 4); else g.rect(x0, y0, tw, th);
+      g.fill();
+      g.lineWidth = 1.5; g.strokeStyle = '#fff'; g.stroke();
+      g.fillStyle = color ? '#14141f' : '#fff';
+      g.textAlign = 'center';
+      g.fillText(text, x0 + tw / 2, y0 + th / 2 + 1);
     }
-    label('x', 4, 12);
-    for (var a = 100; a < w; a += 100) label(String(a), a * k + 3, 12);
-    for (var b = 100; b < h; b += 100) label(String(b), 3, b * k - 3);
-    label('y', 4, layer.height - 5);
+    for (var a = 100; a < w; a += 100) tag(String(a), a * k, 0);
+    for (var b = 100; b < h; b += 100) tag(String(b), 0, b * k);
+    tag('x \u2192', W, 0, '#ffd23f');
+    tag('y \u2193', 0, H, '#ffd23f');
+    tag('0', 0, 0, '#ffd23f');
   }
   window.addEventListener('message', function (e) { if (e.data && typeof e.data.ptGrid === 'boolean') { on = e.data.ptGrid; draw(); } });
   window.addEventListener('mousemove', function (e) {
@@ -169,7 +185,7 @@ const GRID_OVERLAY = `
     var inside = e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom;
     tip.style.display = inside ? 'block' : 'none';
     tip.textContent = 'x: ' + x + ', y: ' + y;
-    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 120) + 'px';
+    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 170) + 'px';
     tip.style.top = Math.max(e.clientY - 26, 0) + 'px';
   });
   setInterval(draw, 400);

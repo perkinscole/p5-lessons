@@ -262,8 +262,8 @@ export async function viewLesson(main, id, previewPath) {
   });
   // The coordinate grid: lines and numbers over the game, so (x, y) is something students can see.
   let gridOn = false;
-  const gridButton = h('button.btn', { type: 'button', 'aria-pressed': 'false', title: 'Show a grid with x and y numbers over your game',
-    onclick: () => { gridOn = !gridOn; gridButton.setAttribute('aria-pressed', String(gridOn)); gridButton.classList.toggle('on', gridOn); player.setGrid(gridOn); } }, '▦ Grid');
+  const gridButton = h('button.btn.toggle', { type: 'button', 'aria-pressed': 'false', title: 'Show a grid with x and y numbers over your game',
+    onclick: () => { gridOn = !gridOn; gridButton.setAttribute('aria-pressed', String(gridOn)); gridButton.classList.toggle('on', gridOn); player.setGrid(gridOn); } }, 'Grid', h('span.switch', { 'aria-hidden': 'true' }, h('i')));
   const run = () => {
     clearErrorMark();
     clear(consoleBox);
