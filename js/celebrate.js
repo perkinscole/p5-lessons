@@ -211,7 +211,11 @@ export function popRank(name) {
 const seenKey = (id) => `pixeltrail.celebrated.${id}`;
 function readSeen(id) { try { const v = localStorage.getItem(seenKey(id)); return v ? JSON.parse(v) : null; } catch (_) { return null; } }
 export function markCelebrated(studentId, stats) {
-  try { localStorage.setItem(seenKey(studentId), JSON.stringify({ badges: stats.badges, rank: stats.rankIndex })); } catch (_) { /* fine */ }
+  // Only ever grows. The class board can be a few seconds behind, and if a stale answer were allowed
+  // to shrink this, the same badge would pop up again every time the fresh answer came back.
+  const seen = readSeen(studentId) || { badges: [], rank: 0 };
+  const badges = [...new Set([...(seen.badges || []), ...stats.badges])];
+  try { localStorage.setItem(seenKey(studentId), JSON.stringify({ badges, rank: Math.max(Number(seen.rank) || 0, stats.rankIndex) })); } catch (_) { /* fine */ }
 }
 /** Pop up anything earned since the last time this student was celebrated. */
 export function celebrateNew(studentId, stats, notes = {}) {

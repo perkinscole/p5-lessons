@@ -916,3 +916,6 @@ button.pin-stop:hover img, button.pin-stop:focus-visible img { filter: drop-shad
 .node-dot { fill: var(--ink); opacity: .4; }
 
 .assignment-text { white-space: pre-wrap; font: .82rem/1.45 var(--font-body); background: var(--paper-2); border: 1px solid var(--line); padding: 8px 10px; margin: 6px 0 0; max-height: 18em; overflow: auto; font-weight: 400; }
+
+.submitted-note { margin: 0; font-weight: 700; color: #1f7a3d; }
+:root[data-theme='dark'] .submitted-note { color: #7fe0a0; }

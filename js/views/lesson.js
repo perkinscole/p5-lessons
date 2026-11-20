@@ -1,7 +1,7 @@
 // The workspace: lesson steps on the left, code in the middle, the running game on the right.
 import { h, clear, md, toast, attempt, modal, debounce, confirmBox } from '../ui.js';
 import { app, go } from '../main.js';
-import { getLesson, stepPasses, checkSummary, buildSolution, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor } from '../curriculum/engine.js';
+import { getLesson, stepPasses, checkSummary, buildSolution, buildThrough, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
 import { ratingBox, confusingButton, helpBox } from './feedback.js';
@@ -330,11 +330,17 @@ export async function viewLesson(main, id, previewPath) {
       drawStep();
       toast('Restored. Changed your mind? Press Ctrl+Z in the code.');
     };
+    // The code as it should be when this step begins: every earlier step done, this one still to do.
+    const doneSteps = flow.slice(0, stepIndex).filter((x) => x.step).length;
+    let toHere = null;
+    try { toHere = doneSteps > 0 && doneSteps < lesson.steps.length ? buildThrough(id, path, doneSteps) : null; } catch (_) { toHere = null; }
     modal((close) => h('div.stack',
-      h('h2', 'Get a clean copy'),
-      h('p', 'This replaces the code in sketch.js. Your images and extra files stay.'),
+      h('h2', 'Reset the code'),
+      h('p', 'This only replaces the code in sketch.js. Your answers, XP, images, and place in the lesson stay.'),
+      toHere && h('button.btn.primary', { onclick: () => restore(toHere, close) }, 'Reset the code to this step'),
+      toHere && h('p.muted.small', 'Earlier steps are done for you. You only redo this one.'),
       prevWork && h('button.btn', { onclick: () => restore(prevWork.code, close) }, 'My code from the start of this lesson'),
-      h('button.btn.primary', { onclick: () => restore(working, close) }, prevWork ? 'A fresh copy that works' : 'Start this lesson over'),
+      h('button.btn', { class: toHere ? '' : 'primary', onclick: () => restore(working, close) }, prevWork ? 'A fresh copy that works' : 'Code from the start of this lesson'),
       prevWork && h('p.muted.small', 'A fresh copy works, but it won\'t have your own changes.'),
       h('button.btn', { onclick: close }, 'Cancel'),
     ));
@@ -485,7 +491,9 @@ export async function viewLesson(main, id, previewPath) {
       team && h('label.field', h('span', 'What did each person in your group do?'), contribution),
       h('details.hint', h('summary', `Done early? Stretch goals (+${XP.stretch} XP each)`), h('div.stretches', boxes)),
       !preview && c.passed < c.total && h('p.warn', `${c.passed} of ${c.total} steps done.`),
-      !preview && !approved && h('button.btn.primary.big', { onclick: submit }, work && isDone(work) ? 'Submit again' : 'Submit lesson'),
+      !preview && work && isDone(work) && !submitting && h('p.submitted-note', '✓ Submitted. Your teacher can see it.'),
+      !preview && submitNote && h('p.warn', { translate: 'no' }, submitNote),
+      !preview && !approved && h('button.btn.primary.big', { onclick: submit, disabled: submitting }, submitting ? 'Submitting… please wait' : work && isDone(work) ? 'Submit again' : 'Submit lesson'),
     );
   };
 
@@ -762,21 +770,49 @@ export async function viewLesson(main, id, previewPath) {
     }
   };
 
+  // One submit at a time. On a busy server a submit can take a while, and a second press used to
+  // send it again, which played the celebration once for every press.
+  let submitting = false;
+  let asking = false;
+  let submitNote = '';
   async function submit() {
+    if (submitting || asking) return;
     const c = checkSummary(lesson, allCode());
     if (c.passed < c.total) {
+      asking = true;
       const sure = await confirmBox('Some checks are not passing', `${c.passed} of ${c.total} checks pass. Your teacher will see that. Sometimes the checker misses a different but correct way of doing things, so you can still submit if you think it works.`, 'Submit anyway');
+      asking = false;
       if (!sure) return;
     }
     if (team && !contribution.value.trim()) { toast('Write what each person in your group did first.', 'error'); return; }
+    if (submitting) return;
+    submitting = true;
+    submitNote = '';
     saveSoon.cancel();
+    if (stepIndex === flow.length) drawStep();
     const before = statsFor({ ...me.row, path, works: me.row.works });
-    const saved = await attempt(() => app.store.submitWork(id, { ...codePatch(mainCode()), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, step_at: lesson.steps.length, ...quizPatch() }));
-    if (!saved) return;
+    let saved = null;
+    try {
+      saved = await app.store.submitWork(id, { ...codePatch(mainCode()), ...teamPatch(), stretch_done: stretchDone, reflection: reflect.value, checks_passed: c.passed, checks_total: c.total, auto_ok: c.passed === c.total, step_at: lesson.steps.length, ...quizPatch() });
+    } catch (e) {
+      console.error(e);
+      submitNote = `Not submitted yet: ${e.message || 'something went wrong.'} Your code is still here. Press Submit again.`;
+      toast('Not submitted yet. Press Submit again.', 'error');
+    }
+    submitting = false;
+    if (!saved) { if (stepIndex === flow.length) drawStep(); return; }
     work = saved;
     dirty = false;
-    me = await loadMe();
-    celebrate(before, me.stats);
+    status.textContent = 'Submitted';
+    status.classList.remove('bad');
+    // The answer already says what was saved, so nothing more is asked of the server here. At the
+    // end of class everyone submits together, and three more requests each was what made it slow.
+    const swap = (list) => [...(list || []).filter((w) => w.lesson_id !== id), saved];
+    const row = { ...me.row, works: swap(me.row.works) };
+    const works = swap(me.works);
+    me = { ...me, works, row, done: new Set(works.filter(isDone).map((w) => w.lesson_id)), stats: statsFor({ ...row, path }) };
+    if (stepIndex === flow.length) drawStep();
+    try { celebrate(before, me.stats); } catch (e) { console.error(e); toast('Submitted! Your teacher can see it now.'); }
   }
 
   function celebrate(before, after) {
@@ -822,7 +858,7 @@ export async function viewLesson(main, id, previewPath) {
       ),
       h('div.row.lesson-actions',
         status,
-        isStudent && canEdit(MAIN) && h('button.btn', { onclick: cleanCopy }, 'Get a clean copy'),
+        isStudent && canEdit(MAIN) && h('button.btn', { onclick: cleanCopy }, 'Reset code'),
         h('button.btn', { onclick: openPicker }, 'Sprites'),
         h('button.btn', { onclick: openSounds }, 'Sounds'),
         musicAllowed() && h('button.btn', { onclick: openMusic }, 'Music'),
