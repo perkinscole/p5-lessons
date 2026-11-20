@@ -145,16 +145,35 @@ export function helpCard(classId, { onUpdate } = {}) {
       h('ul.help-list', list.map((r) => h('li',
         h('img', { src: avatarURL(r.avatar || defaultAvatar(r.student_id), 2), alt: '' }),
         h('span.help-who', h('strong', r.display_name), h('span.small', ` ${helpPlace(r)}`), r.note && h('span.help-note', `“${r.note}”`), h('span.muted.small', ` ${ago(r.at)}`)),
-        h('button.btn.small', { type: 'button', onclick: async () => { if (await attempt(() => app.store.markHelped(classId, r.student_id))) check(); } }, '✓ Helped')))));
+        h('button.btn.small', { type: 'button', onclick: () => helped(r, list) }, '✓ Helped')))));
   };
+  // The name leaves the list the moment the button is pressed. The server is told in the background,
+  // because on a busy day that takes seconds and the teacher is already walking to the next student.
+  const key = (r) => `${r.student_id}@${r.at}`;
+  const gone = new Set();
+  const shown = (list) => list.filter((r) => !gone.has(key(r)));
+  let last = [];
+  function helped(r, list) {
+    gone.add(key(r));
+    draw(shown(list));
+    if (onUpdate) onUpdate(shown(list));
+    app.store.markHelped(classId, r.student_id).catch((e) => {
+      console.error(e);
+      gone.delete(key(r));
+      toast(`Couldn't mark ${r.display_name} as helped. Try again.`, 'error');
+      draw(shown(last));
+      if (onUpdate) onUpdate(shown(last));
+    });
+  }
   async function check() {
     let list;
     try { list = await app.store.helpRequests(classId); } catch (_) { return; }
     const ids = list.map((r) => `${r.student_id}@${r.at}`);
     if (known && ids.some((id) => !known.includes(id))) chime('doorbell');
     known = ids;
-    draw(list);
-    if (onUpdate) onUpdate(list);
+    last = list;
+    draw(shown(list));
+    if (onUpdate) onUpdate(shown(list));
   }
   check();
   // Every 15 seconds, and never from a tab nobody is looking at: each check is a request on the class's shared limit.

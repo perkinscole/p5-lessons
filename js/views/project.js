@@ -83,6 +83,8 @@ function fitTrail(root) {
   fits(low);
 }
 
+// Each step has its own colour, with neighbours far apart, so it is plain from the back of the room which block someone is on.
+const STEP_HUES = [205, 28, 275, 140, 340, 52, 178, 310, 95, 232];
 // How wide a stop wants to be: room for each name there, since names are what take the width.
 // Blocks further up the hill have less sky above them, so they get a little more width to make up for it.
 const roomFor = (people, rise) => 3 + (1 + 0.7 * rise) * people.reduce((a, s) => a + Math.min(9, Math.max(5, String(s.display_name).length)) + 2, 0);
@@ -140,7 +142,7 @@ function racePanel(board, lessons, focus, picked) {
       stops.map((st, i) => {
         const here = at.get(st.key);
         const busy = typeof st.key === 'number' && here.length > 0 && here.length === busiest;
-        return h('div.pj-stop', { class: `${typeof st.key === 'number' ? '' : st.key} ${busy ? 'busy' : ''}`, style: `--rise:${(i / (stops.length - 1)).toFixed(3)}` },
+        return h('div.pj-stop', { class: `${typeof st.key === 'number' ? '' : st.key} ${busy ? 'busy' : ''}`, style: `--rise:${(i / (stops.length - 1)).toFixed(3)};${typeof st.key === 'number' ? `--hue:${STEP_HUES[st.key % STEP_HUES.length]}` : ''}` },
           h('div.pj-racers', here.map(personChip)),
           h('div.pj-block',
             h('div.pj-block-top'),

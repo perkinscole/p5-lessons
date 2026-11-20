@@ -264,13 +264,25 @@ function journeyTab(board, cls) {
 function questButton(cls) {
   const mode = cls.world_mode || '';
   const label = mode === 'earned' ? '🗺️ Trail Quest: Earned' : mode === 'free' ? '🗺️ Trail Quest: Open' : '🔒 Trail Quest: Closed';
-  return h('button.btn', { onclick: () => modal((close) => {
+  let btn = h('button.btn', { onclick: () => modal((close) => {
     const choice = (value, title, text) => h('label.check', h('input', { type: 'radio', name: 'quest-mode', value, checked: mode === value }), h('span', h('strong', title), ` ${text}`));
     const mins = h('input', { type: 'number', min: 1, max: 15, value: cls.world_mins || 5, style: 'width:5em', 'aria-label': 'Minutes each lesson earns' });
     const form = h('form.stack', { onsubmit: async (e) => {
       e.preventDefault();
       const picked = form.querySelector('input[name="quest-mode"]:checked').value;
-      if (await attempt(() => app.store.setWorld(cls.id, { mode: picked, mins: Number(mins.value) }))) { toast('Trail Quest updated.'); close(); render(); }
+      // Show the change at once and save behind it: waiting for the server here felt broken.
+      const before = { world_mode: cls.world_mode, world_mins: cls.world_mins };
+      const swap = () => { const fresh = questButton(cls); btn.replaceWith(fresh); btn = fresh; };
+      Object.assign(cls, { world_mode: picked, world_mins: Math.max(1, Math.min(15, Math.round(Number(mins.value) || 5))) });
+      close();
+      swap();
+      toast('Trail Quest updated.');
+      app.store.setWorld(cls.id, { mode: picked, mins: cls.world_mins }).catch((err) => {
+        console.error(err);
+        Object.assign(cls, before);
+        swap();
+        toast(`Trail Quest did not change: ${err.message || 'try again.'}`, 'error');
+      });
     } },
     h('h2', 'Trail Quest'),
     h('p.muted.small', 'A small adventure game students play as their character. Their gear gives them powers. It never uses grades.'),
@@ -281,21 +293,29 @@ function questButton(cls) {
     h('div.row.end', h('button.btn', { type: 'button', onclick: close }, 'Cancel'), h('button.btn.primary', { type: 'submit' }, 'Save')));
     return form;
   }) }, label);
+  return btn;
 }
 
 /** Lets students use the Music Maker, or closes it. It starts closed. */
 function musicToggle(cls) {
   const open = !!cls.music_open;
-  return h('button.btn', {
+  const btn = h('button.btn', {
     'aria-pressed': open ? 'true' : 'false',
     title: open ? 'Students can compose music. Press to close the Music Maker.' : 'Students can\'t use the Music Maker. Press to open it.',
-    onclick: async () => {
-      if (await attempt(() => app.store.setMusicOpen(cls.id, !open))) {
-        toast(open ? 'Music Maker closed for this class.' : 'Music Maker open for this class.');
-        render();
-      }
+    onclick: () => {
+      cls.music_open = !open;
+      const fresh = musicToggle(cls);
+      btn.replaceWith(fresh);
+      toast(open ? 'Music Maker closed for this class.' : 'Music Maker open for this class.');
+      app.store.setMusicOpen(cls.id, !open).catch((err) => {
+        console.error(err);
+        cls.music_open = open;
+        fresh.replaceWith(musicToggle(cls));
+        toast(`Music Maker did not change: ${err.message || 'try again.'}`, 'error');
+      });
     },
   }, open ? '🎵 Music Maker: Open' : '🔒 Music Maker: Closed');
+  return btn;
 }
 
 export async function viewClass(main, classId, tabParam) {
