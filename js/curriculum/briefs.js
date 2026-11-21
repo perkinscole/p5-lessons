@@ -5,6 +5,15 @@ import { getLesson } from './engine.js';
 const RESET = 'Write a function called `resetGame` at the bottom that puts every starting value back.';
 
 const BRIEFS = {
+  // Variables (t3, t4). Students finished these unable to say what a variable is, so each card says
+  // one thing about it: it is a name for a value, you use it by name, and something changes it.
+  't3/A name for a number': 'A **variable** is a name that holds a value. This line makes one named `saucerX` that holds 50. Add it at the very top:',
+  't3/Use the name': 'Wherever you write `saucerX`, the computer uses the value it holds. Replace both `50`s in the saucer with `saucerX`.',
+  't3/One name, one change': 'Change the `50` in your `let` line to `300` and press **Run**. Both shapes move, because both use `saucerX`. Then put `50` back.',
+  't3/See what it holds': '`text` draws words on the canvas. Add this at the end of `draw()` to see the value `saucerX` holds:',
+  't3/Change it every frame': 'Read `=` as **"becomes"**: `saucerX` becomes its old value plus 2. Add this at the end of `draw()`, then watch the number climb.',
+  't3/Your own variable': '**Make** a second variable with `let` at the top, **use** it in a new shape, and **change** it at the end of `draw()`.',
+  't4/Variables p5 gives you': 'You made `saucerX` and changed it yourself. p5 makes `mouseX` and `mouseY` and changes them for you. Replace the body\'s position so it follows the mouse:',
   // Where a step brings in a new idea, the instruction names the idea first. It used to sit folded
   // under "Why?", and students typed the code without having met the word for it.
   "t6/Game over": "`||` means **or**: true if either side is true. Add this at the end of `draw()` to end the round:",

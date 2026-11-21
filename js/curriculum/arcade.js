@@ -250,7 +250,7 @@ let enemySpeed = 2;`,
     },
   ],
   stretch: ['Give the enemy 3 health points.', 'Make the enemy shoot back.', 'Add a rare bonus target that flies across the top.'],
-  reflect: 'Why do we use `abs(enemySpeed)` when speeding up the enemy? What does the enemy do without `abs`?',
+  reflect: '`abs(n)` removes the minus sign from a number, so -3 becomes 3. Why does the speed-up line need it? Take `abs` out and describe what the enemy does.',
 });
 
 lesson({

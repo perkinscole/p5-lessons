@@ -785,5 +785,5 @@ hunter.targetY = 380;`,
     },
   ],
   stretch: ['Make the search stop when the player is far away, so the hunter can lose you.', 'Add a second hunter with a different speed.', 'Draw the path the hunter plans to take.'],
-  reflect: 'Why does BFS always find a shortest path? What would change if you used `.pop()` instead of `.shift()`? Try it!',
+  reflect: 'Why does BFS always find a shortest path? `.shift()` takes the first item in a list and `.pop()` takes the last. What changes if you use `.pop()`? Try it!',
 });

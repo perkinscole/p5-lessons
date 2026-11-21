@@ -26,12 +26,19 @@ export const CHECKS = {
   t3: [
     Q(0, 'How often does `draw()` run?', ['Once', 'Only when you click', 'About 60 times a second'], 2, 'setup() runs once. draw() keeps repeating.'),
     Q(1, 'In this line, what is the variable\'s name?', ['let', 'score', '0'], 1, '`let` makes the box, `score` names it, and 0 goes in it.', 'let score = 0;'),
-    first(3, 'After this runs, what is `x`?', ['7', '5', '2'], 0, '= means "becomes." x becomes 5 + 2.', 'let x = 5;\nx = x + 2;'),
+    first(5, 'After this runs, what is `x`?', ['7', '5', '2'], 0, '= means "becomes." x becomes 5 + 2.', 'let x = 5;\nx = x + 2;'),
+    // Added with the rewrite. Saved answers go by position, so these sit at the end.
+    Q(3, 'Where does this circle appear?', ['x = 300', 'x = 100', 'x = 20'], 0, 'The computer uses the value the name holds, which is 300.', 'let spot = 300;\nellipse(spot, 100, 20, 20);'),
+    Q(3, 'A variable is used in five places. How many lines set its starting value?', ['Five', 'One', 'None'], 1, 'Only its `let` line. Every place that uses the name follows it.'),
+    Q(7, 'Which of these would a game keep in a variable?', ['The player\'s score', 'The word `function`', 'The `;` at the end of a line'], 0, 'A score is a value the game must remember and change.'),
   ],
   t4: [
     first(1, 'The mouse is at x = 100. Where is this circle?', ['x = 100', 'x = 120', 'x = 80'], 1, 'The computer works out 100 + 20.', 'ellipse(mouseX + 20, 200, 30, 30);'),
     first(2, 'When does this code run?', ['All the time', 'Only while the mouse is pressed', 'Only once'], 1, 'if runs its code only when the condition is true.', 'if (mouseIsPressed) {\n  fill(0);\n}'),
     Q(2, 'What is wrong with this code?', ['Nothing', 'The { is never closed', 'It needs a comma'], 1, 'Every { needs a matching }.', 'if (mouseX > 200) {\n  fill(255, 0, 0);'),
+    // Added with the rewrite of the variables lessons.
+    Q(0, 'Who changes the value of `mouseX`?', ['You, with `=`', 'p5, every frame', 'Nobody'], 1, 'p5 keeps it up to date. Your code only uses it.'),
+    Q(3, 'Which variable did the programmer make?', ['mouseX', 'mouseY', 'hatSize'], 2, 'It has its own `let` line. p5 makes the mouse ones.', 'let hatSize = 30;\nellipse(mouseX, mouseY, hatSize, hatSize);'),
   ],
   t5: [
     first(1, 'If `speedX` is 3, what is it after this line?', ['3', '0', '-3'], 2, 'Multiplying by -1 flips the direction.', 'speedX = speedX * -1;'),

@@ -28,6 +28,7 @@ const TODAY = {
     build: 'A night sky where a flying saucer moves by itself.',
     ideas: [
       { term: 'variable', means: 'A name that holds a value. The computer remembers it, and your code can change it.' },
+      { term: 'make, use, change', means: 'What you do with a variable: let makes it, its name uses it, and = changes it.' },
       { term: 'the draw loop', means: 'setup() runs once. draw() runs about 60 times a second, and each run is one frame.' },
       { term: '= means "becomes"', means: 'saucerX = saucerX + 2 makes saucerX become its old value plus 2.' },
       { term: 'animation', means: 'Changing a variable a little every frame makes a shape look like it moves.' },
@@ -37,7 +38,8 @@ const TODAY = {
     build: 'A creature that follows your mouse and reacts when you click.',
     ideas: [
       { term: 'input', means: 'Information coming into your program from the player, like the mouse.' },
-      { term: 'mouseX and mouseY', means: 'Variables p5 keeps up to date with where the mouse is.' },
+      { term: 'built-in variable', means: 'A variable p5 makes and changes for you. You made saucerX. p5 makes mouseX.' },
+      { term: 'mouseX and mouseY', means: 'Built-in variables that always hold where the mouse is. You only use them.' },
       { term: 'expression', means: 'Math written where a number goes, like mouseX + 20. The computer works it out first.' },
       { term: 'if', means: 'Runs the code inside its { } only when its condition is true.' },
     ],
