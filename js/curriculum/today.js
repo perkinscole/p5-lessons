@@ -10,7 +10,7 @@ const TODAY = {
     build: 'A scene with a sun, the ground, and a character you design.',
     ideas: [
       { term: 'canvas', means: 'The square your code draws on. Yours is 400 dots wide and 400 tall.' },
-      { term: 'coordinates (x, y)', means: 'A position on the canvas. x counts from the left, and y counts down from the top.' },
+      { term: 'coordinates (x, y)', means: 'The two numbers for a spot. x is horizontal, across from the left. y is vertical, down from the top.' },
       { term: 'function', means: 'A named set of instructions, like draw(). Its code sits between { and }.' },
       { term: 'braces { }', means: '{ opens a function and } closes it. Every { needs its own }.' },
       { term: 'function call', means: 'A line that runs a command: its name, then numbers in ( ), then a ;' },

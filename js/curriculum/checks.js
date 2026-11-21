@@ -42,7 +42,7 @@ export const CHECKS = {
     Q(4, 'When is this condition true?', ['Only if both are true', 'Never', 'If either one is true'], 2, '|| means or.', 'if (lives <= 0 || score >= 20) {'),
   ],
   p1: [
-    Q(1, 'What is `y` at the end?', ['104', '105', '103'], 1, 'y becomes 102, vy becomes 3, then y becomes 105.', 'let y = 100;\nlet vy = 2;\ny = y + vy;\nvy = vy + 1;\ny = y + vy;'),
+    first(1, 'What is `y` at the end?', ['104', '105', '103'], 1, 'y becomes 102, vy becomes 3, then y becomes 105.', 'let y = 100;\nlet vy = 2;\ny = y + vy;\nvy = vy + 1;\ny = y + vy;'),
     Q(1, 'Why does the player speed up while falling?', ['Gravity adds to the velocity each frame', 'The canvas gets bigger', 'draw() runs faster'], 0, 'Velocity grows, so the position changes more each frame.'),
     Q(4, 'Why is the jump velocity negative?', ['It makes the jump slower', 'Up means a smaller y', 'Gravity is negative'], 1, 'Moving up means y gets smaller.'),
   ],
@@ -52,19 +52,19 @@ export const CHECKS = {
     Q(4, 'Why check `playerVY >= 0` before landing?', ['So you can jump up through it', 'To make coins appear', 'To stop gravity'], 0, 'You only land when you are falling.'),
   ],
   p3: [
-    Q(1, 'What does `!coinTaken` mean?', ['The coin was taken', 'The coin was not taken', 'Coins are worth more'], 1, '! means not.'),
+    first(1, 'What does `!coinTaken` mean?', ['The coin was taken', 'The coin was not taken', 'Coins are worth more'], 1, '! means not.', 'if (!coinTaken) {'),
     Q(3, 'When can this player win?', ['Any time', 'Only before getting the coin', 'After the coin, at the flag'], 2, 'Both parts of && must be true.', 'if (coinTaken && playerX > goalX) {'),
   ],
   p4: [
     Q(1, 'What makes a function actually run?', ['Calling it by name', 'Writing it', 'Saving the file'], 0, 'Writing it only teaches the computer. A call runs it.'),
-    Q(2, 'How many tiles does this draw?', ['4', '5', '6'], 1, 'x is 0, 40, 80, 120, 160. Then 200 is not under 200.', 'for (let x = 0; x < 200; x = x + 40) {\n  rect(x, 360, 38, 40);\n}'),
+    first(2, 'How many tiles does this draw?', ['4', '5', '6'], 1, 'x is 0, 40, 80, 120, 160. Then 200 is not under 200.', 'for (let x = 0; x < 200; x = x + 40) {\n  rect(x, 360, 38, 40);\n}'),
   ],
   p5: [
-    Q(0, 'What is `plats[0].y` here?', ['10', '50', '20'], 2, 'The first item has y: 20. Counting starts at 0.', 'let plats = [{ x: 10, y: 20 }, { x: 50, y: 60 }];'),
+    first(0, 'What is `plats[0].y` here?', ['10', '50', '20'], 2, 'The first item has y: 20. Counting starts at 0.', 'let plats = [{ x: 10, y: 20 }, { x: 50, y: 60 }];'),
     Q(3, 'You add one more platform to the list. What else must you change?', ['Nothing', 'Every loop', 'The canvas size'], 0, '.length grows, so loops handle it.'),
   ],
   p6: [
-    Q(0, 'What is left in the list?', ['[2, 3]', '[1, 3]', '[1, 2]'], 1, 'splice(1, 1) removes one item at position 1.', 'let a = [1, 2, 3];\na.splice(1, 1);'),
+    first(1, 'What is left in the list?', ['[2, 3]', '[1, 3]', '[1, 2]'], 1, 'splice(1, 1) removes one item at position 1.', 'let a = [1, 2, 3];\na.splice(1, 1);'),
     Q(1, 'Why loop backward when removing items?', ['It is faster to type', 'Removing slides later items down, so forward loops skip one', 'Backward loops use less color'], 1, 'Going backward, the items that slide are already checked.'),
     Q(2, 'What does `coins.length === 0` mean?', ['There is one coin left', 'The first coin is gone', 'The list is empty'], 2, '=== asks "exactly equal?"'),
   ],
@@ -78,26 +78,26 @@ export const CHECKS = {
     Q(3, 'Why limit how big the gaps can be?', ['So every level can be beaten', 'So the code is shorter', 'So it uses less color'], 0, 'Constraints keep random levels possible.'),
   ],
   a1: [
-    Q(1, 'What is `x` at the end?', ['4', '16', '7'], 0, 'Subtract 3 twice from 10.', 'let speed = 3;\nlet x = 10;\nx = x - speed;\nx = x - speed;'),
+    first(1, 'What is `x` at the end?', ['4', '16', '7'], 0, 'Subtract 3 twice from 10.', 'let speed = 3;\nlet x = 10;\nx = x - speed;\nx = x - speed;'),
     Q(1, 'Which key should make `playerY` smaller?', ['Down', 'Up', 'Left'], 1, 'Up means a smaller y.'),
     Q(3, 'When does the `else` part run?', ['Always', 'When the if is true', 'When the if is false'], 2, 'else handles the other case.'),
   ],
   a2: [
-    Q(1, 'What is `x` at the end?', ['55', '50', '5'], 1, 'The last line undoes the move.', 'let oldX = 50;\nlet x = 50;\nx = x + 5;\nx = oldX;'),
+    first(1, 'What is `x` at the end?', ['55', '50', '5'], 1, 'The last line undoes the move.', 'let oldX = 50;\nlet x = 50;\nx = x + 5;\nx = oldX;'),
     Q(1, 'Why save `oldX` before moving?', ['So you can undo the move', 'To go faster', 'To draw a wall'], 0, 'If you hit a wall, you go back.'),
     Q(2, 'For two boxes to overlap, how many of the four checks must be true?', ['One', 'Two', 'All four'], 2, 'That is why the checks use &&.'),
   ],
   a3: [
-    Q(1, 'What happens when this runs?', ['Nothing', 'The game stops', 'It logs locked'], 2, '`!hasKey` is true when hasKey is false.', 'let hasKey = false;\nif (!hasKey) {\n  console.log("locked");\n}'),
+    first(1, 'What happens when this runs?', ['Nothing', 'The game stops', 'It logs locked'], 2, '`!hasKey` is true when hasKey is false.', 'let hasKey = false;\nif (!hasKey) {\n  console.log("locked");\n}'),
     Q(1, 'What does `hasKey` hold?', ['A number', 'true or false', 'A color'], 1, 'It is a boolean.'),
     Q(2, 'When does the door block you?', ['When you do not have the key', 'When you have the key', 'Always'], 0, '!hasKey is true when you have no key.'),
   ],
   a4: [
     Q(1, 'What makes `resetGame` actually run?', ['Writing it', 'Pressing Save', 'Calling resetGame()'], 2, 'A call runs the function.'),
-    Q(2, 'How many trees does this draw?', ['5', '4', '6'], 0, 'x is 0, 40, 80, 120, 160. Then 200 is not under 200.', 'for (let x = 0; x < 200; x = x + 40) {\n  ellipse(x, 390, 44, 44);\n}'),
+    first(2, 'How many trees does this draw?', ['5', '4', '6'], 0, 'x is 0, 40, 80, 120, 160. Then 200 is not under 200.', 'for (let x = 0; x < 200; x = x + 40) {\n  ellipse(x, 390, 44, 44);\n}'),
   ],
   a5: [
-    Q(0, 'What is `walls[1].x` here?', ['10', '70', '30'], 1, 'Counting starts at 0, so [1] is the second one.', 'let walls = [{ x: 10 }, { x: 70 }, { x: 30 }];'),
+    first(0, 'What is `walls[1].x` here?', ['10', '70', '30'], 1, 'Counting starts at 0, so [1] is the second one.', 'let walls = [{ x: 10 }, { x: 70 }, { x: 30 }];'),
     Q(3, 'What does `hitsWall(x, y)` give back?', ['A number', 'A wall', 'true or false'], 2, 'return hands back the answer.'),
   ],
   a6: [
@@ -115,25 +115,25 @@ export const CHECKS = {
     Q(2, 'Why does BFS find a shortest path?', ['It guesses well', 'It tries the longest paths first', 'It spreads out one ring at a time'], 2, 'The first time it arrives, no shorter way exists.'),
   ],
   s1: [
-    Q(1, 'The left key is not held. What is `x`?', ['95', '105', '100'], 2, 'The if is false, so x stays the same.', 'let x = 100;\nif (keyIsDown(LEFT_ARROW)) {\n  x = x - 5;\n}'),
+    first(1, 'The left key is not held. What is `x`?', ['95', '105', '100'], 2, 'The if is false, so x stays the same.', 'let x = 100;\nif (keyIsDown(LEFT_ARROW)) {\n  x = x - 5;\n}'),
     Q(1, 'What does `keyIsDown` tell you?', ['A key is held right now', 'A key was ever pressed', 'Which key is biggest'], 0, 'It checks every frame.'),
     Q(3, 'Why does the flame flicker?', ['The canvas shakes', 'random() gives a new number each frame', 'Colors fade over time'], 1, 'draw() runs 60 times a second.'),
   ],
   s2: [
-    Q(1, 'When can this fire?', ['Any time', 'When a bullet is active', 'On space, with no active bullet'], 2, '!bulletActive means no bullet is flying.', 'if (key === " " && !bulletActive) {'),
+    first(1, 'When can this fire?', ['Any time', 'When a bullet is active', 'On space, with no active bullet'], 2, '!bulletActive means no bullet is flying.', 'if (key === " " && !bulletActive) {'),
     Q(3, 'Why turn the bullet off above the screen?', ['So you can fire again', 'To save color', 'To stop the game'], 0, 'Only one bullet can be active.'),
   ],
   s3: [
-    Q(1, 'When is this condition true?', ['At both edges at once', 'At either edge', 'Never'], 1, '|| means or.', 'if (enemyX > 370 || enemyX < 0) {'),
+    first(1, 'When is this condition true?', ['At both edges at once', 'At either edge', 'Never'], 1, '|| means or.', 'if (enemyX > 370 || enemyX < 0) {'),
     Q(2, 'What does `dist` give you?', ['A color', 'A speed', 'How far apart two points are'], 2, 'A small distance means a hit.'),
   ],
   s4: [
-    Q(1, 'What is `t` at the end?', ['6', '3', '2'], 0, 'The loop runs 3 times and adds 2 each time.', 'let t = 0;\nfor (let i = 0; i < 3; i = i + 1) {\n  t = t + 2;\n}'),
+    first(2, 'What is `t` at the end?', ['6', '3', '2'], 0, 'The loop runs 3 times and adds 2 each time.', 'let t = 0;\nfor (let i = 0; i < 3; i = i + 1) {\n  t = t + 2;\n}'),
     Q(1, 'What makes `resetGame` actually run?', ['Calling resetGame()', 'Writing it', 'Pressing Save'], 0, 'A call runs the function.'),
     Q(3, 'What is `410 % 400`?', ['400', '10', '1'], 1, '% gives the remainder, which wraps stars to the top.'),
   ],
   s5: [
-    Q(0, 'What does this log?', ['2', '3', '4'], 1, 'length counts the items.', 'let bullets = [1, 2, 3];\nconsole.log(bullets.length);'),
+    first(0, 'What does this log?', ['2', '3', '4'], 1, 'length counts the items.', 'let bullets = [1, 2, 3];\nconsole.log(bullets.length);'),
     Q(1, 'What does `push` do?', ['Removes the last item', 'Moves an item up', 'Adds an item to the end'], 2, 'Each shot adds one bullet.'),
     Q(2, 'Why loop backward when removing items?', ['Removing slides later items down, so forward loops skip one', 'It is faster to type', 'Bullets move up'], 0, 'Going backward, the items that slide are already checked.'),
   ],
@@ -153,7 +153,7 @@ export const CHECKS = {
     Q(3, 'What does `atan2` give you?', ['The angle toward a point', 'The distance', 'A random number'], 0, 'cos and sin turn the angle into movement.'),
   ],
   m1: [
-    Q(3, 'What is `botX` at the end?', ['48', '52', '80'], 1, 'The bot is left of the player, so it moves right.', 'let botX = 50;\nlet playerX = 80;\nif (botX < playerX) {\n  botX = botX + 2;\n}'),
+    first(3, 'What is `botX` at the end?', ['48', '52', '80'], 1, 'The bot is left of the player, so it moves right.', 'let botX = 50;\nlet playerX = 80;\nif (botX < playerX) {\n  botX = botX + 2;\n}'),
     Q(0, 'What makes machine learning different?', ['It runs faster', 'It finds its own rules from examples', 'It only works in games'], 1, 'A programmer does not write each rule.'),
     Q(3, 'The bot is left of the player. Which rule runs?', ['botX gets smaller', 'botY gets smaller', 'botX gets bigger'], 2, 'if (botX < playerX), move right.'),
   ],
@@ -169,10 +169,10 @@ export const CHECKS = {
   ],
   m4: [
     Q(1, 'What makes `resetGame` actually run?', ['Writing it', 'Calling resetGame()', 'Pressing Save'], 1, 'A call runs the function.'),
-    Q(2, 'How many lights does this draw?', ['4', '6', '5'], 2, 'x is 0, 40, 80, 120, 160. Then 200 is not under 200.', 'for (let x = 0; x < 200; x = x + 40) {\n  ellipse(x, 8, 8, 8);\n}'),
+    first(2, 'How many lights does this draw?', ['4', '6', '5'], 2, 'x is 0, 40, 80, 120, 160. Then 200 is not under 200.', 'for (let x = 0; x < 200; x = x + 40) {\n  ellipse(x, 8, 8, 8);\n}'),
   ],
   m5: [
-    Q(2, 'What does this add to `memories`?', ['One object', 'Three lists', 'Nothing'], 0, 'push adds one item: this object.', 'memories.push({ x: 10, y: 20, move: "left" });'),
+    first(2, 'What does this add to `memories`?', ['One object', 'Three lists', 'Nothing'], 0, 'push adds one item: this object.', 'memories.push({ x: 10, y: 20, move: "left" });'),
     Q(4, 'How does nearest neighbor make its guess?', ['It picks at random', 'It copies the most similar memory', 'It uses the newest memory'], 1, 'It finds the closest example and reuses its answer.'),
   ],
   m6: [
@@ -192,20 +192,20 @@ export const CHECKS = {
   ],
   c1: [
     Q(1, 'What is the `x` in `drawTree(x)`?', ['A global variable', 'A color', 'A parameter the caller fills in'], 2, 'Each call can pass a different value.'),
-    Q(3, 'What does this give back?', ['15', '5', 'Nothing'], 0, 'return hands back 5 * 3.', 'function triple(n) {\n  return n * 3;\n}\ntriple(5);'),
+    first(3, 'What does this give back?', ['15', '5', 'Nothing'], 0, 'return hands back 5 * 3.', 'function triple(n) {\n  return n * 3;\n}\ntriple(5);'),
   ],
   c2: [
-    Q(1, 'How wide is each frame?', ['4', '16', '64'], 1, '64 divided by 4 is 16.', 'let sheetWidth = 64;\nlet frames = 4;\nconsole.log(sheetWidth / frames);'),
+    first(4, 'How wide is each frame?', ['4', '16', '64'], 1, '64 divided by 4 is 16.', 'let sheetWidth = 64;\nlet frames = 4;\nconsole.log(sheetWidth / frames);'),
     Q(1, 'Why load images in `preload()`?', ['It makes them bigger', 'They are ready before setup() runs', 'It draws them'], 1, 'p5 waits for preload to finish.'),
     Q(4, 'With 2 frames, what is `5 % 2`?', ['2', '5', '1'], 2, '% wraps the count, so frames repeat 0, 1, 0, 1.'),
   ],
   c3: [
-    Q(1, 'What is `critters.length`?', ['1', '4', '2'], 2, 'Each push adds one critter.', 'let critters = [];\ncritters.push(new Critter(1, 2));\ncritters.push(new Critter(3, 4));'),
+    first(3, 'What is `critters.length`?', ['1', '4', '2'], 2, 'Each push adds one critter.', 'let critters = [];\ncritters.push(new Critter(1, 2));\ncritters.push(new Critter(3, 4));'),
     Q(0, 'What is a class?', ['A blueprint for making objects', 'A list of numbers', 'A kind of loop'], 0, 'Objects are built from it.'),
     Q(3, 'You click 3 times. How many critters are added?', ['1', '3', '10'], 1, 'Each click pushes one new critter.'),
   ],
   e1: [
-    Q(1, 'Does the sound play?', ['Yes', 'No', 'Twice'], 1, '5 is not greater than 5.', 'let before = 5;\nlet now = 5;\nif (now > before) {\n  playSound("coin");\n}'),
+    first(1, 'Does the sound play?', ['Yes', 'No', 'Twice'], 1, '5 is not greater than 5.', 'let before = 5;\nlet now = 5;\nif (now > before) {\n  playSound("coin");\n}'),
     Q(1, 'Why compare `score` to `scoreBefore`?', ['To make the sound louder', 'To save memory', 'To play the sound only once'], 2, 'The score only rises for one frame at a time.'),
     Q(3, 'When is `(won || lost) && !overBefore` true?', ['On the first frame the game ends', 'On every frame', 'Before the game starts'], 0, 'It is over now, and it was not last frame.'),
   ],
@@ -215,7 +215,7 @@ export const CHECKS = {
     Q(6, 'Who owns the copyright on music you write?', ['You do', 'The school', 'Nobody'], 0, 'Creators own what they make, and a license says how others may use it.'),
   ],
   e3: [
-    Q(1, 'What is `f` at the end?', ['440', '880', '660'], 1, 'It doubles twice: 440, then 880.', 'let f = 220;\nf = f * 2;\nf = f * 2;'),
+    first(1, 'What is `f` at the end?', ['440', '880', '660'], 1, 'It doubles twice: 440, then 880.', 'let f = 220;\nf = f * 2;\nf = f * 2;'),
     Q(1, 'A note is 440. What is one octave higher?', ['441', '220', '880'], 2, 'Each octave doubles the frequency.'),
     Q(6, 'How many values can 3 bits store?', ['3', '8', '9'], 1, 'Two choices per bit: 2 times 2 times 2.'),
   ],
@@ -245,17 +245,17 @@ export const CHECKS = {
     Q(3, 'Why loop backward when removing gems?', ['It is faster', 'So removing does not skip a gem', 'To reverse the score'], 1, 'splice shifts later items down a spot.'),
   ],
   c4: [
-    Q(2, 'What does this log?', ['B', 'A', 'C'], 0, 'The first check is false, and the second is true.', 'let s = "title";\nif (s === "play") {\n  console.log("A");\n} else if (s === "title") {\n  console.log("B");\n} else {\n  console.log("C");\n}'),
+    first(2, 'What does this log?', ['B', 'A', 'C'], 0, 'The first check is false, and the second is true.', 'let s = "title";\nif (s === "play") {\n  console.log("A");\n} else if (s === "title") {\n  console.log("B");\n} else {\n  console.log("C");\n}'),
     Q(2, 'When does `else if` get checked?', ['Always', 'Before the if', 'Only when the if was false'], 2, 'Once one branch runs, the rest are skipped.'),
     Q(5, 'Why call `resetGame()` when starting a round?', ['So old scores and positions are cleared', 'To draw the title', 'To load images'], 0, 'One call restores every starting value.'),
   ],
   c5: [
-    Q(1, 'What is `b` at the end?', ['2', '7', '9'], 1, 'temp held on to the 7.', 'let a = 7;\nlet b = 2;\nlet temp = a;\na = b;\nb = temp;'),
+    first(1, 'What is `b` at the end?', ['2', '7', '9'], 1, 'temp held on to the 7.', 'let a = 7;\nlet b = 2;\nlet temp = a;\na = b;\nb = temp;'),
     Q(1, 'What does `temp` do in a swap?', ['Sorts the list', 'Holds one value so it is not lost', 'Counts the bars'], 1, 'Without it, one value gets overwritten.'),
     Q(2, 'After one sorting step, what is true?', ['The whole list is sorted', 'Nothing changed', 'The biggest score is at the front'], 2, 'Then it repeats on the rest.'),
   ],
   c6: [
-    Q(2, 'Does `burst` run?', ['Yes', 'Only once', 'No, the score did not rise'], 2, '10 is not greater than 10.', 'let lastScore = 10;\nlet score = 10;\nif (score > lastScore) {\n  burst(60, 24);\n}'),
+    first(2, 'Does `burst` run?', ['Yes', 'Only once', 'No, the score did not rise'], 2, '10 is not greater than 10.', 'let lastScore = 10;\nlet score = 10;\nif (score > lastScore) {\n  burst(60, 24);\n}'),
     Q(1, 'What is a particle here?', ['A small object that moves, fades, and is removed', 'A type of loop', 'A sprite file'], 0, 'Your helper file keeps a list of them.'),
     Q(4, 'Why watch someone play without helping?', ['To see their score', 'To find what confuses a new player', 'To finish faster'], 1, 'You already know how your game works. They do not.'),
   ],

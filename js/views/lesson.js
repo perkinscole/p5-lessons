@@ -1,7 +1,7 @@
 // The workspace: lesson steps on the left, code in the middle, the running game on the right.
 import { h, clear, md, toast, attempt, modal, debounce, confirmBox } from '../ui.js';
 import { app, go } from '../main.js';
-import { getLesson, stepPasses, checkSummary, buildSolution, buildThrough, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor } from '../curriculum/engine.js';
+import { getLesson, stepPasses, checkSummary, buildSolution, buildThrough, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor, shownCode } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
 import { ratingBox, confusingButton, helpBox } from './feedback.js';
@@ -17,6 +17,16 @@ import { openSoundPicker, openMusicMaker } from './sounds.js';
 import { reviewFor } from '../curriculum/review.js';
 import { onSettings, getSettings, readButton, speak, stopSpeaking } from '../settings.js';
 import { alignmentFor, standardByCode } from '../curriculum/alignment.js';
+
+/** A button named in an instruction looks like that button, so it is easy to find on the page. */
+function nameButtons(el) {
+  el.querySelectorAll('strong').forEach((b) => {
+    const name = b.textContent.trim();
+    if (name === 'Run') b.classList.add('say-run');
+    if (name === 'Grid') b.classList.add('say-grid');
+  });
+  return el;
+}
 
 /** Code for reading, colored the way the editor colors it. */
 function snippet(text) {
@@ -668,7 +678,7 @@ export async function viewLesson(main, id, previewPath) {
     const { brief, more } = briefOf(s);
     if (getSettings().autoRead) speak(brief);
     const passing = s.check && stepPasses(s, allCode());
-    const display = s.show !== undefined ? s.show : s.code;
+    const display = shownCode(s);
     const codeBlock = display !== undefined && h('div.snippet-wrap',
       h('p.snippet-label', s.code || s.edits ? 'Add this code' : 'Look at this'),
       snippet(display.replace(/^\n+/, '').replace(/\n+$/, '')));
@@ -698,7 +708,7 @@ export async function viewLesson(main, id, previewPath) {
     stepBox.append(...[
       h(`p.step-kind.${kind}`, h('b', kind === 'do' ? '✏️ Your turn' : '👀 Just read'), h('small', `Step ${flow[stepIndex].n + 1} of ${lesson.steps.length}`)),
       h('h2', s.title),
-      h('div.step-do', h('div.read-row', md(brief), readButton(() => brief))),
+      h('div.step-do', h('div.read-row', nameButtons(md(brief)), readButton(() => brief))),
       wait && readFirst(item),
       item.ask && !wait && !preview && h('p.read-first-done', '✓ ', md(item.ask.why)),
       placeBox,
@@ -1045,23 +1055,28 @@ export async function viewLesson(main, id, previewPath) {
   let sizes = {};
   try { sizes = JSON.parse(localStorage.getItem(SIZES) || '{}') || {}; } catch (_) { /* private mode */ }
   const keepSizes = () => { try { localStorage.setItem(SIZES, JSON.stringify(sizes)); } catch (_) { /* this visit only */ } };
-  const runBar = h('div.run-bar', h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run'), gridButton);
+  const runBar = h('div.run-bar', h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run', h('i.twinkle', { 'aria-hidden': 'true' }, '✦'), h('i.twinkle.two', { 'aria-hidden': 'true' }, '✦')), gridButton);
   const gameFrame = h('div.game-frame', player.el);
+  const MIN_CONSOLE = 64;
   const fitGame = () => {
     const box = gamePane.getBoundingClientRect();
     if (!box.width) return;
-    const pad = 24;
-    const consoleH = Math.max(60, Number(sizes.console) || 120);
+    const pad = 16;
+    // The game comes first: the messages give way to it unless the student has sized them, and the
+    // buttons above it shrink when the panel is small.
+    const consoleH = Math.max(MIN_CONSOLE, Number(sizes.console) || MIN_CONSOLE);
     const stacked = window.matchMedia('(max-width: 1050px)').matches;
-    const room = stacked ? box.width - pad : Math.min(box.width - pad, box.height - pad - runBar.offsetHeight - consoleH - 30);
-    const side = Math.max(160, Math.floor(room));
+    const fit = () => (stacked ? box.width - pad : Math.min(box.width - pad, box.height - pad - runBar.offsetHeight - consoleH - 30));
+    runBar.classList.remove('compact');
+    if (fit() < 340) runBar.classList.add('compact');
+    const side = Math.max(160, Math.floor(fit()));
     gameFrame.style.width = gameFrame.style.height = `${side}px`;
     runBar.style.maxWidth = `${side}px`;
   };
   function applySizes() {
     const panes = page.querySelector('.panes');
     ['steps', 'game'].forEach((k) => (sizes[k] ? panes.style.setProperty(`--w-${k}`, `${sizes[k]}px`) : panes.style.removeProperty(`--w-${k}`)));
-    consoleBox.style.setProperty('--h-console', `${Math.max(60, Number(sizes.console) || 120)}px`);
+    consoleBox.style.setProperty('--h-console', `${Math.max(MIN_CONSOLE, Number(sizes.console) || MIN_CONSOLE)}px`);
     fitGame();
     cm.refresh();
   }
@@ -1089,7 +1104,7 @@ export async function viewLesson(main, id, previewPath) {
   const panesBox = () => page.querySelector('.panes').getBoundingClientRect();
   const splitSteps = splitter('steps', 'Resize the steps panel', false, (e) => { const b = panesBox(); return clamp(e.clientX - b.left, 260, b.width - 620); });
   const splitGame = splitter('game', 'Resize the game panel', false, (e) => { const b = panesBox(); return clamp(b.right - e.clientX, 240, b.width - 620); });
-  const splitConsole = splitter('console', 'Resize the messages under the game', true, (e) => { const b = gamePane.getBoundingClientRect(); return clamp(b.bottom - e.clientY - 12, 60, b.height - 260); });
+  const splitConsole = splitter('console', 'Resize the messages under the game', true, (e) => { const b = gamePane.getBoundingClientRect(); return clamp(b.bottom - e.clientY - 12, MIN_CONSOLE, b.height - 260); });
   const gamePane = h('section.game-pane', { 'aria-label': 'Your game' }, runBar, gameFrame, splitConsole, consoleBox);
   const watchSize = window.ResizeObserver ? new ResizeObserver(() => fitGame()) : null;
   if (watchSize) watchSize.observe(gamePane);
@@ -1101,9 +1116,9 @@ export async function viewLesson(main, id, previewPath) {
     h('nav.step-track', { 'aria-label': 'Steps in this lesson' }, dots),
     h('div.panes',
       h('aside.steps',
-        preview && stdPanel,
         stepBox,
         stuck && stuck.el,
+        stdPanel,
       ),
       h('section.code-pane', {
         'aria-label': 'Code editor',
@@ -1124,6 +1139,9 @@ export async function viewLesson(main, id, previewPath) {
   drawFileBar();
   cm.refresh();
   run();
+  // Where to look first: the instruction card is outlined for a few seconds, and Run twinkles.
+  stepBox.classList.add('hello');
+  setTimeout(() => stepBox.classList.remove('hello'), 7000);
   // A student's first look at a lesson starts with what they are about to build and learn.
   if (isStudent && !work) openToday();
 

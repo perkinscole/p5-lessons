@@ -238,6 +238,17 @@ export function briefOf(step) {
   return { brief: chosen.join(' '), more };
 }
 
+/**
+ * The code a step puts on its card: its `show` picture, its `code`, or, for a step made only of
+ * `edits`, each piece in order. Undefined when the step has nothing to show.
+ */
+export function shownCode(step) {
+  if (step.show !== undefined) return step.show;
+  if (step.code !== undefined) return step.code;
+  if (step.edits && step.edits.length) return step.edits.map((e) => String(e.code).replace(/^\n+/, '').replace(/\n+$/, '')).join('\n\n');
+  return undefined;
+}
+
 /** Default rubric; a lesson may override with its own `rubric`. */
 export const DEFAULT_RUBRIC = [
   { id: 'works', label: 'It runs', levels: ['Crashes or empty', 'Runs with errors', 'Runs as expected', 'Runs smoothly, no bugs found'] },

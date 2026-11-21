@@ -1110,3 +1110,28 @@ body.in-workspace .navs a.nav:not([href='#/']) { display: revert; }
 .switch i { position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 50%; background: var(--ink-2); transition: left .12s, background .12s; }
 .btn.toggle[aria-pressed='true'] .switch { background: var(--go); }
 .btn.toggle[aria-pressed='true'] .switch i { left: 19px; background: #fff; border: 1px solid var(--line); }
+
+/* The game takes the room first. In a small panel the buttons over it shrink. */
+.run-bar.compact .btn.run { font-size: 1.15rem; padding: 4px 10px 9px; }
+.run-bar.compact .btn.toggle { font-size: .8rem; padding: 4px 8px 8px; gap: 5px; }
+.run-bar.compact .switch { width: 30px; height: 16px; }
+.run-bar.compact .switch i { width: 10px; height: 10px; }
+.run-bar.compact .btn.toggle[aria-pressed='true'] .switch i { left: 15px; }
+.game-pane { padding: 8px; }
+
+/* Grid has its own color, and an instruction that names Run or Grid shows it as that button. */
+:root { --grid: #b9a2ff; }
+.btn.toggle, .btn.toggle[aria-pressed='true'] { background: var(--grid); color: #1b1640; }
+.say-run, .say-grid { display: inline-block; padding: 0 8px 2px; border: 2px solid var(--line); border-radius: 4px; color: #1b1640; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18); white-space: nowrap; }
+.say-run { background: var(--go); }
+.say-run::before { content: '▶ '; font-size: .8em; }
+.say-grid { background: var(--grid); }
+
+/* Where to look first: the instruction card is outlined as a lesson opens, and Run twinkles. */
+@keyframes card-hello { 0%, 100% { outline-color: transparent; outline-offset: 2px; } 50% { outline-color: var(--sun); outline-offset: 6px; } }
+.step-body.hello { outline: 5px solid transparent; animation: card-hello 1.4s ease-in-out 5; }
+.run-bar .btn.run { position: relative; overflow: visible; }
+.twinkle { position: absolute; top: 4px; right: 12px; font-style: normal; font-size: 1rem; color: #fff; text-shadow: 0 0 6px #fff; opacity: 0; pointer-events: none; animation: run-twinkle 3.2s ease-in-out infinite; }
+.twinkle.two { top: auto; bottom: 10px; right: auto; left: 14px; font-size: .75rem; animation-delay: 1.6s; }
+@keyframes run-twinkle { 0%, 70%, 100% { opacity: 0; transform: scale(.3) rotate(0deg); } 80% { opacity: 1; transform: scale(1.2) rotate(40deg); } 90% { opacity: .4; transform: scale(.7) rotate(80deg); } }
+@media (prefers-reduced-motion: reduce) { .step-body.hello { animation: none; outline-color: var(--sun); } .twinkle { animation: none; opacity: 0; } }

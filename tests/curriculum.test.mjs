@@ -12,7 +12,7 @@ import { attribute_, lineShares_, matchLines_ } from '../js/game/blame.js';
 import { installSynth, cleanSong, songCode } from '../js/game/synth.js';
 import { reviewFor } from '../js/curriculum/review.js';
 import { buildWorld, place, isSolid, BOX } from '../js/game/world.js';
-import { allLessons, buildSolution, buildThrough, applySkeleton, stepPasses, checkSummary, getLesson, stripComments, fallbackStarter, briefOf, filesThrough } from '../js/curriculum/engine.js';
+import { allLessons, buildSolution, buildThrough, applySkeleton, stepPasses, checkSummary, getLesson, stripComments, fallbackStarter, briefOf, filesThrough, shownCode } from '../js/curriculum/engine.js';
 
 const allCode = (id, path, count = Infinity) => [buildThrough(id, path, count), ...Object.values(filesThrough(id, path, count))].join('\n');
 
@@ -779,12 +779,18 @@ test('a "read first" question sits on a step that shows code to add', () => {
     for (const q of firsts) {
       const step = l.steps[q.after];
       assert.ok(step, `${l.id}: "${q.q}" names a step that exists`);
-      const shown = step.show !== undefined ? step.show : step.code;
+      const shown = shownCode(step);
       assert.ok(typeof shown === 'string' && !step.reveal && !step.skeleton, `${l.id}: "${q.q}" is on a step whose code is shown`);
       assert.ok(q.code, `${l.id}: "${q.q}" shows a line to read`);
       assert.ok(!seen.has(q.after), `${l.id}: only one read-first question per step`);
       seen.add(q.after);
     }
   }
-  assert.ok(found >= 8, 'Base Camp uses read-first questions');
+  assert.ok(found >= 30, 'read-first questions are used across the roads');
+});
+
+test('a step that says to add code shows that code', () => {
+  for (const l of allLessons()) for (const s of l.steps) {
+    if (s.edits && !s.reveal && !s.skeleton) assert.equal(typeof shownCode(s), 'string', `${l.id} / ${s.title} shows its code`);
+  }
 });
