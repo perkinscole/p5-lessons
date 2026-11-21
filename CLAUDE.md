@@ -32,6 +32,8 @@ In the preview, sign in as anyone with `http://localhost:8081/?as=ari@school.tes
 
 To run every lesson's answer key in the real sandbox, run `npm start` and open `http://localhost:8080/tests/lessons.html` with the tab visible. Browsers pause animation in hidden tabs and off-screen frames, so a blank canvas or "BRAIN not-ready" there isn't necessarily a bug. Confirm ml5 training with an on-screen game. Add `?only=t1,mind/m6` to run just those lessons, or `?at=1` to run one at a time. Running four at a time in headless Chromium can leave some lessons without a frame drawn in time, so rerun failures with `?at=1` before treating them as bugs.
 
+`docs/APPS_SCRIPT_COMPRESSION.md` has measured sizes and ordered steps for making the Apps Script build smaller and the map's first draw faster. None of it is done yet.
+
 There is no linter. `dist/` is committed and is what gets deployed, so run `npm run build` after any change to `js/`, `css/`, `gas/`, or `vendor/`.
 
 ## Architecture
