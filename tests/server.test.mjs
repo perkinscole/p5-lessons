@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { createServer } from './fake-gas.mjs';
 
 const OWNER = 'teacher@school.test';
@@ -621,7 +622,10 @@ test('the built files load the way Apps Script loads them', () => {
   let ml5 = '';
   for (let i = 0; ; i++) { const part = ari('libraryPart', i); if (!part) break; ml5 += part; }
   const original = readFileSync(new URL('../vendor/ml5.min.js', import.meta.url), 'utf8');
-  assert.equal(ml5, original.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--'));
+  // The pieces arrive compressed and marked; joined and unpacked they are the library, made safe to inline.
+  assert.ok(ml5.startsWith('GZ1:'));
+  const unpacked = gunzipSync(Buffer.from(ml5.slice(4).replace(/\s+/g, ''), 'base64')).toString('utf8');
+  assert.equal(unpacked, original.replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--'));
 });
 
 test('Apps Script gets no large inline JavaScript to rewrite', () => {

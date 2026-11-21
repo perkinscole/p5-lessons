@@ -840,10 +840,34 @@ test('a step that says to add code shows that code', () => {
   }
 });
 
+test('the packed App and P5 files are in short lines and know their own length', async () => {
+  // They are pasted into Apps Script by hand. A paste cut short must be noticed, not silently fail to start.
+  const { readFileSync } = await import('node:fs');
+  for (const name of ['App', 'P5']) {
+    const text = readFileSync(new URL(`../dist/${name}.html`, import.meta.url), 'utf8');
+    assert.ok(Math.max(...text.split('\n').map((l) => l.length)) <= 4000, `${name} has a very long line`);
+    const want = JSON.parse(text.match(/var want = (\{[^}]*\});/)[1]);
+    for (const [id, size] of Object.entries(want)) {
+      const body = text.match(new RegExp(`id="${id}"[^>]*>([\\s\\S]*?)</script>`))[1].replace(/\s+/g, '');
+      assert.equal(body.length, size, `${name}: ${id}`);
+    }
+    assert.ok(text.trimEnd().endsWith('</script>'));
+  }
+});
+
 test('every lesson carries its idea outside the lesson, in a question and in the reflection', () => {
   for (const l of allLessons()) {
     assert.match(l.reflect, /outside this lesson|in a game you play/, `${l.id}: the reflection asks where else the idea is useful`);
     const last = checksFor(l.id).filter((q) => q.after === l.steps.length - 1);
     assert.ok(last.length >= 1, `${l.id}: a closing question puts the idea in another setting`);
   }
+});
+
+test('the small build\'s compressed text unpacks to exactly what went in', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const { inflateBase64, PACKED_MARK } = await import('../js/pack.js');
+  const text = `function draw() { text('héllo → ✓', 1, 2); }\n`.repeat(4000);
+  const packed = gzipSync(Buffer.from(text, 'utf8'), { level: 9 }).toString('base64').replace(/(.{4000})/g, '$1\n');
+  assert.equal(await inflateBase64(packed), text);
+  assert.equal(PACKED_MARK, 'GZ1:');
 });

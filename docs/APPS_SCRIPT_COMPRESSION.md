@@ -1,6 +1,6 @@
 # Making the Apps Script build smaller and faster
 
-Instructions for a future change. Nothing here is done yet. Do the steps in order: they are sorted by how much they save for how little risk. Stop after any step that gets you where you need to be.
+Instructions for a future change. Step 1 is done (see below); the rest is not. Do the steps in order: they are sorted by how much they save for how little risk. Stop after any step that gets you where you need to be.
 
 ## Where the size is now
 
@@ -50,6 +50,20 @@ How to check it:
 - Deploy to a copy of the Apps Script project, not the live one, and repeat on a Chromebook.
 
 Risk: this touches how the app starts. A mistake means a blank page for the whole class, so test on a copy first and keep the previous `dist/` to paste back.
+
+### Step 1 is done
+
+The build now gzips each library before base64. The teacher tried it on a real deployment and it worked, so it is the only build.
+
+| File | Before | Now |
+| --- | --- | --- |
+| `App.html` | 1,140 KB | 388 KB |
+| `P5.html` | 1,378 KB | 328 KB |
+| ml5 | 4,369 KB in 5 files | 1,402 KB in 2 files |
+
+How it works: `b64()` in `tools/build-gas.mjs` gzips first; the loader in `App.html` unpacks the editor library and the app and runs them in order; `js/sandbox.js` unpacks p5 once (`inflateBase64` in `js/pack.js`); ml5 is marked `GZ1:` so `loadMl5Pieces` unpacks it after joining. The app still reads the older uncompressed files too, so an Apps Script project with a mix of old and new files keeps working.
+
+Not measured: the load time on a school Chromebook before and after.
 
 ## Step 2: leave out what Apps Script never uses
 
