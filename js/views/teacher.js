@@ -471,7 +471,7 @@ export function standardsBlock(id) {
 
 export async function viewCurriculum() {
   return h('div.stack',
-    h('div', h('h1', 'All lessons'), h('p.muted', 'Each lesson is 30 to 40 minutes. The core is 15 lessons per student, sized for a term: 10 shared and 5 on their road. Students who finish early continue Beyond the Summit. Open any lesson to try it and see its answer key. Nothing is saved.')),
+    h('div', h('h1', 'All lessons'), h('p.muted', 'Each lesson is 30 to 40 minutes. The core is 15 lessons per student, sized for a term: 10 shared and 5 on their road. Students who finish early continue Beyond the Summit. Open any lesson to try it and see its answer key. Nothing is saved. Materials under a lesson has slides to project, a worksheet, and a checklist to print.')),
     h('section.stack', h('h2', 'Side trail'), h('p.muted', 'Optional, and it never holds anyone back.'), lessonList(SIDE_TRAILS.map((t) => t.id))),
     STAGES.map((st) => h('section.stack',
       h('h2', st.name), h('p.muted', st.beyond ? `Extra challenge: ${st.theme}` : st.theme),
@@ -485,7 +485,10 @@ export async function viewCurriculum() {
 function lessonList(ids) {
   return h('div.lesson-list', ids.map((id) => {
     const l = getLesson(id);
-    return h('a.card.lesson-row', { href: `#/lesson/${id}` }, h('strong', l.title), h('span.muted.small', `${l.mins} min · ${l.concepts.join(', ')}`), md(l.hook), standardCodes(id));
+    // Two links side by side: the lesson itself, and its slides, worksheet and checklist.
+    return h('div.lesson-cell',
+      h('a.card.lesson-row', { href: `#/lesson/${id}` }, h('strong', l.title), h('span.muted.small', `${l.mins} min · ${l.concepts.join(', ')}`), md(l.hook), standardCodes(id)),
+      h('a.lesson-mat', { href: `#/materials/${id}`, title: 'Slides, a worksheet and a checklist for this lesson' }, '🖨 Materials'));
   }));
 }
 

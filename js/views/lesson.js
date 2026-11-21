@@ -9,6 +9,7 @@ import { chime, sparkle, pop, countUp, markCelebrated, correct, incorrect, splas
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
 import { todayFor } from '../curriculum/today.js';
+import { demoFor } from '../curriculum/materials.js';
 import { openBugReport } from './bugs.js';
 import { loadMe, badgeChip } from './student.js';
 import { statsFor, XP, isDone } from '../game/rules.js';
@@ -53,7 +54,7 @@ function pronounce(el, ideas = [], onIdea = null) {
 }
 
 /** Code for reading, colored the way the editor colors it. */
-function snippet(text, numbered = false) {
+export function snippet(text, numbered = false) {
   const code = h('code');
   const pre = h(`pre.snippet.cm-s-default${numbered ? '.numbered' : ''}`, code);
   // Line numbers, for a question that asks about "line 3". They are not part of the code.
@@ -961,16 +962,15 @@ export async function viewLesson(main, id, previewPath) {
   const openToday = (focus) => {
     const today = todayFor(id);
     let demo = null;
-    let answer = '';
-    try { answer = buildSolution(id, path); } catch (_) { /* no finished version to show */ }
     // Only a finished version that runs with nothing but its own code: no sprites, camera or model to load.
-    const showable = answer && !/SPRITES\.|ml5\.|createCapture|loadSound|loadImage/.test(answer);
+    const finished = demoFor(id, path);
+    const showable = !!finished;
     modal((close) => {
       const frame = h('div.today-frame');
       if (showable) {
         demo = createPlayer(() => {});
         frame.append(demo.el);
-        demo.run(answer, {}, filesThrough(id, path));
+        demo.run(finished.code, {}, finished.files);
       }
       return h('div.stack.today',
         h('p.eyebrow', `Today · ${lesson.mins} minutes`),
@@ -1017,6 +1017,7 @@ export async function viewLesson(main, id, previewPath) {
       h('div.row.lesson-actions',
         status,
         preview && h('select.path-pick', { 'aria-label': 'Road to preview', onchange: (e) => go(`/lesson/${id}/${e.target.value}`) }, Object.values(PATHS).map((p) => h('option', { value: p.id, selected: p.id === path }, p.road))),
+        preview && h('a.btn', { href: `#/materials/${id}/${path}`, title: 'Slides, a worksheet and a checklist for this lesson' }, '🖨 Materials'),
         preview && h('button.btn', { onclick: () => { openFile(MAIN); cm.setValue(buildSolution(id, path)); for (const [n, t] of Object.entries(filesThrough(id, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript')); drawFileBar(); run(); toast('Showing the answer key.'); } }, 'Show answer key'),
         h('button.btn.key-ideas', { onclick: () => openToday(), title: 'What this lesson builds, and its key ideas' }, '💡 Key ideas'),
         moreMenu(),

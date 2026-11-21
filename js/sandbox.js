@@ -328,8 +328,10 @@ export function friendlyError(message) {
 /**
  * Create a game player. Pass askCamera for other people's games (Arcade, grading), so the viewer
  * must choose to share their camera each time. A student's own lesson starts it directly.
+ * A game takes the keyboard as soon as it starts. Pass takeFocus: false where the page needs to
+ * keep it (a slide, where the arrow keys move on), and the game gets the keys once it is clicked.
  */
-export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
+export function createPlayer(onEvent = () => {}, { askCamera = false, takeFocus = true } = {}) {
   const el = document.createElement('div');
   el.className = 'player';
   let frame = null;
@@ -423,7 +425,7 @@ export function createPlayer(onEvent = () => {}, { askCamera = false } = {}) {
       frame.setAttribute('title', 'Game canvas');
       frame.srcdoc = doc.html;
       el.appendChild(frame);
-      frame.addEventListener('load', () => { sendGrid(); try { frame.focus(); } catch (_) { /* cross-origin frames may refuse */ } });
+      frame.addEventListener('load', () => { sendGrid(); try { if (takeFocus) frame.focus(); } catch (_) { /* cross-origin frames may refuse */ } });
     },
     stop,
     /** Show or hide the coordinate grid over a 2D game. It stays on across runs. */
