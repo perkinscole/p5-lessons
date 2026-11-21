@@ -301,17 +301,26 @@ export async function viewLesson(main, id, previewPath) {
   let gridOn = false;
   const gridButton = h('button.btn.toggle', { type: 'button', 'aria-pressed': 'false', title: 'Show a grid with x and y numbers over your game',
     onclick: () => { gridOn = !gridOn; gridButton.setAttribute('aria-pressed', String(gridOn)); gridButton.classList.toggle('on', gridOn); player.setGrid(gridOn); } }, 'Grid', h('span.switch', { 'aria-hidden': 'true' }, h('i')));
-  const run = () => {
+  let runs = 0;
+  const run = (pressed = false) => {
     clearErrorMark();
     clear(consoleBox);
     for (const w of warnings(mainCode())) logLine(h('div.warn', md(w)));
     player.run(mainCode(), assets, extraFiles());
+    // Pressing Run shows that something happened: the game flashes and a line says what Run did.
+    // A game that looks the same as before left students unsure the button had worked.
+    if (pressed) {
+      runs += 1;
+      const frame = page && page.querySelector('.game-frame');
+      if (frame) { frame.classList.remove('ran'); void frame.offsetWidth; frame.classList.add('ran'); }
+      logLine(h('div.ran', h('b', '▶ Your code ran.'), runs <= 2 ? ' The computer read every line, top to bottom, and drew this.' : ''));
+    }
     if (dirty) { saveSoon.cancel(); persist(); } // Pressing Run also saves.
   };
 
   // Editor --------------------------------------------------------------------------------------
   const editorHost = h('div.editor-host');
-  const cm = makeEditor(editorHost, code, { onRun: run, cm: { readOnly } });
+  const cm = makeEditor(editorHost, code, { onRun: () => run(true), cm: { readOnly } });
   const MAIN = 'sketch.js';
   const mainDoc = cm.getDoc();
   const extraDocs = new Map(Object.entries(startFiles).map(([name, text]) => [name, window.CodeMirror.Doc(text, 'javascript')]));
@@ -1083,7 +1092,7 @@ export async function viewLesson(main, id, previewPath) {
   let sizes = {};
   try { sizes = JSON.parse(localStorage.getItem(SIZES) || '{}') || {}; } catch (_) { /* private mode */ }
   const keepSizes = () => { try { localStorage.setItem(SIZES, JSON.stringify(sizes)); } catch (_) { /* this visit only */ } };
-  const runBar = h('div.run-bar', h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run', h('i.twinkle', { 'aria-hidden': 'true' }, '✦'), h('i.twinkle.two', { 'aria-hidden': 'true' }, '✦')), gridButton);
+  const runBar = h('div.run-bar', h('button.btn.run', { onclick: () => run(true), title: 'Cmd or Ctrl + Enter' }, '▶ Run', h('i.twinkle', { 'aria-hidden': 'true' }, '✦'), h('i.twinkle.two', { 'aria-hidden': 'true' }, '✦')), gridButton);
   const gameFrame = h('div.game-frame', player.el);
   const MIN_CONSOLE = 64;
   const fitGame = () => {

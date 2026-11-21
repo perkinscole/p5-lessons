@@ -1147,3 +1147,8 @@ code.say-idea { background: var(--sun); }
 
 /* Line numbers on code in a question, so "line 3" can be found. */
 .snippet-n { display: inline-block; width: 1.4em; margin-right: 12px; padding-right: 6px; text-align: right; color: var(--code-number, #9b94c7); border-right: 2px solid rgba(255, 255, 255, .18); user-select: none; }
+
+/* Pressing Run shows that something happened. */
+@keyframes ran-flash { 0% { box-shadow: 0 0 0 0 var(--go); } 40% { box-shadow: 0 0 0 7px var(--go); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.game-frame.ran { animation: ran-flash .6s ease-out 1; }
+.console .ran { color: var(--ink); border-left: 5px solid var(--go); padding-left: 8px; }
