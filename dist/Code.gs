@@ -59,7 +59,7 @@ const NUMBERS = new Set(['best_floor', 'stars', 'step', 'ghost_seed', 'world_min
 const BOOLEANS = new Set(['run_free', 'auto_ok', 'shared', 'published', 'started', 'music_open']);
 const OBJECTS = new Set(['details', 'quiz_first', 'confusing', 'holders', 'avatar', 'scores', 'plan', 'members', 'blame', 'sent']);
 const PATHS = ['platformer', 'adventure', 'arcade', 'mind'];
-const ML5_PARTS = 5; // Set by the build: how many ML5_n files it made.
+const ML5_PARTS = 2; // Set by the build: how many ML5_n files it made.
 
 // Web page ----------------------------------------------------------------------------------------
 

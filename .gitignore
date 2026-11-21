@@ -2,5 +2,4 @@ node_modules/
 .DS_Store
 .env
 
-# The trial small build (npm run build:small). Not what gets deployed until it has been tried on real Apps Script.
 dist-small/

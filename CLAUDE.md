@@ -34,7 +34,7 @@ To run every lesson's answer key in the real sandbox, run `npm start` and open `
 
 The teacher installs a build by pasting `dist/` files into the Apps Script editor. A paste of `App` has twice arrived cut short, which left the app not starting with no useful message. So `tools/build-gas.mjs` wraps the packed text into 4,000-character lines and opens `App` and `P5` with a small check (`CHECK`) that knows how long the contents should be and says on screen when they are not. Keep both.
 
-`docs/APPS_SCRIPT_COMPRESSION.md` has measured sizes and ordered steps for making the Apps Script build smaller and the map's first draw faster. Step 1 (gzip before base64) exists as a trial: `npm run build:small` makes `dist-small/`, about a third of the size, and `PT_DIST=dist-small node tools/gas-preview.mjs` previews it. `dist/` stays the build that is deployed until the small one has run on real Apps Script. The app bundle reads either kind of file (`js/pack.js`).
+`docs/APPS_SCRIPT_COMPRESSION.md` has measured sizes and ordered steps for making the Apps Script build smaller and the map's first draw faster. Step 1 is done: the build gzips each library before base64, the loader in `App.html` and `js/pack.js` unpack them in the browser, and ml5 travels in two files instead of five. The app still reads older uncompressed files, so a project with a mix keeps working.
 
 There is no linter. `dist/` is committed and is what gets deployed, so run `npm run build` after any change to `js/`, `css/`, `gas/`, or `vendor/`.
 
@@ -101,7 +101,7 @@ Constraints that follow from this:
 
 - p5 and ml5 are written inline into each game's page. A frame with no origin can't reliably load scripts, and some browsers refuse outright.
 - `js/game/synth.js`'s `installSynth` is written into game frames as text with `toString()`, so it must stay self-contained. Songs are text and are filtered to note names on both client and server, because a shared song becomes code in a classmate's project.
-- ml5 is about 4 MB, so it loads only when the code contains `ml5.`, and the build splits it into `ML5_n` files that the server sends one at a time.
+- ml5 is about 4 MB (1.4 MB compressed), so it loads only when the code contains `ml5.`, and the build splits it into `ML5_n` files that the server sends one at a time.
 - ml5 needs an in-memory `localStorage` stand-in and `setBackend('webgl')`, both added in `buildDoc`.
 - The sandbox can't open a camera. `createCapture` is replaced with a canvas, and the parent page sends in image frames. Other people's games use `askCamera` to ask the viewer first.
 - `protectLoops` adds a stop check to loops so an infinite loop can't freeze the tab.

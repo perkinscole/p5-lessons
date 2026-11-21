@@ -17,11 +17,9 @@ const minifyClassic = async (files) => {
   return r.outputFiles[0].text;
 };
 
-// `npm run build:small` makes dist-small/: the same app with each library gzipped before it is
-// turned into base64 (docs/APPS_SCRIPT_COMPRESSION.md, step 1). It is a separate folder so the
-// ordinary build stays exactly as it is until the small one has been tried on real Apps Script.
-const SMALL = process.env.PT_SMALL === '1';
-const OUT = SMALL ? 'dist-small' : 'dist';
+// Each library is gzipped before it is turned into base64 (docs/APPS_SCRIPT_COMPRESSION.md, step 1),
+// which makes the files about a third of the size to paste and to send.
+const OUT = 'dist';
 rmSync(path(OUT), { recursive: true, force: true });
 mkdirSync(path(OUT));
 
@@ -38,8 +36,8 @@ const css = await build({ stdin: { contents: read('vendor/codemirror/codemirror.
 // Apps Script rewrites inline JavaScript on its way to the browser, and that breaks some of the
 // bundle (template literals holding lesson code). So code ships as base64 text, which nothing
 // rewrites, and a short loader in plain ES5 decodes it and runs it.
-const b64 = (t) => (SMALL ? gzipSync(Buffer.from(t, 'utf8'), { level: 9 }) : Buffer.from(t, 'utf8')).toString('base64');
-const ENCODING = SMALL ? 'gzip-base64' : 'base64';
+const b64 = (t) => gzipSync(Buffer.from(t, 'utf8'), { level: 9 }).toString('base64');
+const ENCODING = 'gzip-base64';
 // These files are pasted into the Apps Script editor by hand, and a paste has twice arrived cut
 // short, which left the app silently not starting. So: the text is wrapped into short lines (one
 // line a megabyte long is what editors and clipboards handle worst), and each file opens with a
@@ -75,26 +73,10 @@ const CHECK = (file, sizes) => `<script>
 `;
 const sizeOf = (t) => b64(t).length;
 const encoded = (t, id) => `<script type="text/plain" id="${id}" data-encoding="${ENCODING}">\n${wrap(b64(t))}\n</script>\n`;
-const LOADER = `<script>
-(function () {
-  function text(id) {
-    var b = atob(document.getElementById(id).textContent.replace(/\\s+/g, ''));
-    var u = new Uint8Array(b.length);
-    for (var i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
-    return new TextDecoder().decode(u);
-  }
-  ['cm-src', 'app-src'].forEach(function (id) {
-    var s = document.createElement('script');
-    s.textContent = text(id);
-    document.body.appendChild(s);
-  });
-})();
-</script>
-`;
-// The small build's loader. Unpacking takes a moment and happens off to the side, so it waits for
+// The loader. Unpacking takes a moment and happens off to the side, so it waits for
 // the editor library to be unpacked and run before it runs the app. If the browser can't unpack,
 // the error reaches Index.html's "could not start" card with the reason.
-const SMALL_LOADER = `<script>
+const LOADER = `<script>
 (function () {
   function unpack(id) {
     if (typeof DecompressionStream === 'undefined') return Promise.reject(new Error('This browser is too old to open Pixel Trail. Update Chrome and reload.'));
@@ -113,7 +95,7 @@ const SMALL_LOADER = `<script>
 })();
 </script>
 `;
-writeFileSync(path(`${OUT}/App.html`), CHECK('App', { 'cm-src': sizeOf(cm), 'app-src': sizeOf(app.outputFiles[0].text) }) + encoded(cm, 'cm-src') + encoded(app.outputFiles[0].text, 'app-src') + (SMALL ? SMALL_LOADER : LOADER));
+writeFileSync(path(`${OUT}/App.html`), CHECK('App', { 'cm-src': sizeOf(cm), 'app-src': sizeOf(app.outputFiles[0].text) }) + encoded(cm, 'cm-src') + encoded(app.outputFiles[0].text, 'app-src') + LOADER);
 writeFileSync(path(`${OUT}/Styles.html`), `<style>${css.outputFiles[0].text}</style>\n`);
 // Apps Script rejects an HTML file that is bare script text, so libraries go inside a
 // text/plain script tag. The browser reads them out as text.
@@ -123,10 +105,10 @@ copyFileSync(path('gas/Index.html'), path(`${OUT}/Index.html`));
 // ml5 is about 4 MB, so it travels in pieces about the size of the p5 file.
 // Made safe before splitting, so no piece can end its script tag early.
 // Compressed, it is marked so the browser knows to unpack it once the pieces are joined (PACKED_MARK in js/pack.js).
-const ml5 = SMALL ? `GZ1:${b64(safeInline(read('vendor/ml5.min.js')))}` : safeInline(read('vendor/ml5.min.js'));
+const ml5 = `GZ1:${b64(safeInline(read('vendor/ml5.min.js')))}`;
 const PART = 900000;
 const parts = Math.ceil(ml5.length / PART);
-for (let i = 0; i < parts; i++) writeFileSync(path(`${OUT}/ML5_${i}.html`), asText(SMALL ? wrap(ml5.slice(i * PART, (i + 1) * PART)) : ml5.slice(i * PART, (i + 1) * PART)));
+for (let i = 0; i < parts; i++) writeFileSync(path(`${OUT}/ML5_${i}.html`), asText(wrap(ml5.slice(i * PART, (i + 1) * PART))));
 const code = read('gas/Code.gs');
 if (!code.includes('const ML5_PARTS = 0;')) throw new Error('ML5_PARTS line is missing from Code.gs');
 const pace = ['js/game/pace.js', 'js/game/blame.js'].map((f) => read(f).replace(/^export /gm, '')).join('\n');
