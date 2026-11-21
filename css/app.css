@@ -1157,3 +1157,16 @@ code.say-idea { background: var(--sun); }
 @keyframes ran-flash { 0% { box-shadow: 0 0 0 0 var(--go); } 40% { box-shadow: 0 0 0 7px var(--go); } 100% { box-shadow: 0 0 0 0 transparent; } }
 .game-frame.ran { animation: ran-flash .6s ease-out 1; }
 .console .ran { color: var(--ink); border-left: 5px solid var(--go); padding-left: 8px; }
+
+/* High contrast: the green buttons carry black text on a brighter green. */
+:root[data-theme='contrast'] { --go: #4dffa6; }
+:root[data-theme='contrast'] .btn.run, :root[data-theme='contrast'] .step-nav .btn.primary { color: #000; }
+
+/* Rarity words are small text, so they use a darker ink than the borders on light pages. */
+:root { --r-rare-ink: #1f5fb8; --r-epic-ink: #7a35b5; --r-legendary-ink: #7d5b00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']):not([data-theme='contrast']) { --r-rare-ink: #8cbcff; --r-epic-ink: #d1a4ff; --r-legendary-ink: #ffd35c; } }
+:root[data-theme='dark'] { --r-rare-ink: #8cbcff; --r-epic-ink: #d1a4ff; --r-legendary-ink: #ffd35c; }
+:root[data-theme='contrast'] { --r-rare-ink: #143f80; --r-epic-ink: #55208a; --r-legendary-ink: #5c4200; }
+.r-rare .rarity { color: var(--r-rare-ink); }
+.r-epic .rarity { color: var(--r-epic-ink); }
+.r-legendary .rarity { color: var(--r-legendary-ink); }
