@@ -1170,6 +1170,14 @@ export async function viewLesson(main, id, previewPath) {
   applySizes();
 
   clear(main).append(page);
+  // The page fills what is left of the window under the top bar and any banner above it, so the
+  // messages under the game are never pushed off the bottom of a short screen.
+  const fitPage = () => {
+    page.style.height = window.matchMedia('(min-width: 1051px)').matches ? `${Math.max(420, window.innerHeight - Math.round(page.getBoundingClientRect().top + window.scrollY))}px` : '';
+    fitGame();
+  };
+  fitPage();
+  window.addEventListener('resize', fitPage);
   document.body.classList.add('in-workspace');
   // The top bar's Tools menu opens these here, so a student stays in the lesson.
   app.lessonTools = { sprites: openPicker, sounds: openSounds, music: musicAllowed() ? openMusic : null };
@@ -1194,6 +1202,7 @@ export async function viewLesson(main, id, previewPath) {
     window.removeEventListener('beforeunload', beforeUnload);
     document.body.classList.remove('in-workspace');
     if (watchSize) watchSize.disconnect();
+    window.removeEventListener('resize', fitPage);
     delete app.lessonTools;
     saveSoon.cancel();
     if (dirty) await persist();
