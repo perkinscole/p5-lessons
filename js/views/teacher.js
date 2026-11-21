@@ -1,4 +1,5 @@
 // Teacher screens: classes, roster, gradebook, reviewing work, and browsing lessons.
+import { buildClassFile } from '../curriculum/classfile.js';
 import { h, clear, toast, attempt, modal, confirmBox, download, md } from '../ui.js';
 import { app, go, render } from '../main.js';
 import { getLesson, rubricFor, checkSummary } from '../curriculum/engine.js';
@@ -85,6 +86,34 @@ function dataCard(first) {
 }
 
 function rosterTab(cls, students, board, reload) {
+  // One file with the whole class in it, to keep or to bring into another copy of Pixel Trail.
+  const copyStatus = h('span.muted.small', { 'aria-live': 'polite' });
+  const copyCard = students.length > 0 && h('details.card.data-card', h('summary', h('strong', 'Download this class as a file')),
+    h('div.stack',
+      h('p', 'One file with every student, their code, answers, grades and badges. It holds real names and school emails, so keep it on your own computer.'),
+      h('div.row', h('button.btn', {
+        type: 'button',
+        onclick: async (e) => {
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          try {
+            const works = await app.store.classWork(cls.id);
+            const full = new Map();
+            // A few at a time, so the trips share a batch and the class's quota is not flooded.
+            for (let k = 0; k < works.length; k += 8) {
+              copyStatus.textContent = `Reading work ${Math.min(k + 8, works.length)} of ${works.length}…`;
+              const part = await Promise.all(works.slice(k, k + 8).map((w) => app.store.getWorkFull(w.id)));
+              part.forEach((f, n) => { if (f) full.set(works[k + n].id, f); });
+            }
+            download(`${cls.name}-class.json`, JSON.stringify(buildClassFile(cls, students, board, works, full)), 'application/json');
+            copyStatus.textContent = 'Saved to your downloads.';
+          } catch (err) {
+            copyStatus.textContent = '';
+            toast(err.message || 'Could not make the file.', 'error');
+          }
+          btn.disabled = false;
+        },
+      }, 'Download class file'), copyStatus)));
   const usesPasscodes = app.store.usesPasscodes;
   const names = h('textarea', { rows: 5, placeholder: usesPasscodes ? 'One name per line.\nFirst name and last initial works well:\nAri M\nBea T' : 'One student per line: name, then school email.\nAri M, ari@yourschool.org\nBea T, bea@yourschool.org', 'aria-label': usesPasscodes ? 'Student names' : 'Student names and school emails' });
   const statsById = new Map(board.map((b) => [b.id, statsFor(b)]));
@@ -104,6 +133,7 @@ function rosterTab(cls, students, board, reload) {
   };
 
   return h('div.stack',
+    copyCard,
     h('form.card.stack', {
       onsubmit: async (e) => {
         e.preventDefault();

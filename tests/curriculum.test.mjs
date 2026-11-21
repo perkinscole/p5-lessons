@@ -871,3 +871,25 @@ test('the small build\'s compressed text unpacks to exactly what went in', async
   assert.equal(await inflateBase64(packed), text);
   assert.equal(PACKED_MARK, 'GZ1:');
 });
+
+test('a class file holds the class, and what would be sent on leaves out who each student is', async () => {
+  const { buildClassFile, checkClassFile, withoutIdentity, namesInWork, inPieces } = await import('../js/curriculum/classfile.js');
+  const students = [{ id: 's1', display_name: 'Jordan Quimby', email: 'jquimby@school.test', avatar: { skin: 1 }, path: 'platformer', game_name: 'Sky Hop' }, { id: 's2', display_name: 'Bea T', email: 'bea@school.test' }];
+  const works = [{ id: 'w1', student_id: 's1', lesson_id: 't1', status: 'approved', quiz_right: 2, quiz_total: 3, step_at: 8 }, { id: 'w2', student_id: 's2', lesson_id: 't1', status: 'in_progress' }];
+  const full = new Map([['w1', { code: '// by Jordan\nlet x = 1;', files: {}, assets: {}, reflection: 'fun', grade: { scores: { a: 4 }, total: 4, max_total: 4, feedback: 'Good' } }]]);
+  const file = buildClassFile({ name: 'Period 1' }, students, [{ id: 's1', awards: [{ badge_id: 'helper', note: 'kind' }] }, { id: 's2' }], works, full, new Date('2026-11-20T12:00:00Z'));
+  assert.equal(checkClassFile(file), '');
+  assert.equal(checkClassFile(JSON.parse(JSON.stringify(file))), '', 'it survives being saved and read back');
+  assert.match(checkClassFile({ format: 'something else' }), /not a Pixel Trail class file/);
+  assert.equal(file.students[0].works[0].grade.feedback, 'Good');
+  assert.equal(file.students[1].works[0].code, '');
+  const sent = withoutIdentity(file.students[0]);
+  assert.ok(!/Quimby|jquimby|school\.test/.test(JSON.stringify({ ...sent, works: [] })), 'no name or email in the profile or badges');
+  assert.deepEqual(Object.keys(sent).sort(), ['awards', 'profile', 'works']);
+  assert.deepEqual(namesInWork(file), [{ student: 'Jordan Quimby', lesson_id: 't1', word: 'Jordan' }], 'a name typed into code is found, so the teacher is told');
+  const big = { profile: {}, awards: [], works: Array.from({ length: 5 }, (_, k) => ({ lesson_id: `l${k}`, code: 'x'.repeat(400) })) };
+  const pieces = inPieces(big, 1000);
+  assert.ok(pieces.length > 1 && pieces.every((p) => p.works.length >= 1));
+  assert.equal(pieces.flatMap((p) => p.works).length, 5);
+  assert.ok(pieces[0].profile && !pieces[1].profile, 'the profile travels once');
+});
