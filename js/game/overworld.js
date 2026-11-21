@@ -308,6 +308,22 @@ export function paintGround(opts) {
   const p = (x, y, ww, hh, color) => { g.fillStyle = color; g.fillRect(x, y, ww, hh); };
   const random = makeRandom(99);
   const edges = opts.stages.map((st) => st.x0 / ART);
+  // The bare ground is one colour to a pixel, about half a million of them. Filling a rectangle
+  // for each took a third of the time the 3D map needs to appear, so they are written straight
+  // into the picture's pixels instead. A colour that is not a plain solid one is still filled.
+  const base = g.createImageData(plan.w, plan.h);
+  const px = new Uint32Array(base.data.buffer);
+  const solid = new Map();
+  const pixelOf = (color) => {
+    if (!solid.has(color)) {
+      g.fillStyle = color;
+      const hex = /^#[0-9a-f]{6}$/.exec(g.fillStyle);
+      const n = hex ? parseInt(hex[0].slice(1), 16) : 0;
+      solid.set(color, hex ? ((255 << 24) | ((n & 255) << 16) | (n & 0xff00) | (n >> 16)) >>> 0 : null);
+    }
+    return solid.get(color);
+  };
+  const later = [];
   for (let x = 0; x < plan.w; x++) {
     let i = 0;
     while (i + 1 < edges.length && x >= edges[i + 1]) i++;
@@ -316,9 +332,13 @@ export function paintGround(opts) {
       const other = near < 26 && random() < ((26 - near) / 26) ** 2 * 0.5;
       const ground = groundFor(landFor(other ? i + 1 : i));
       const roll = random();
-      p(x, y, 1, 1, roll < 0.06 ? ground[1] : roll < 0.11 ? ground[2] : ground[0]);
+      const color = roll < 0.06 ? ground[1] : roll < 0.11 ? ground[2] : ground[0];
+      const pixel = pixelOf(color);
+      if (pixel === null) later.push([x, y, color]); else px[y * plan.w + x] = pixel;
     }
   }
+  g.putImageData(base, 0, 0);
+  for (const [x, y, color] of later) p(x, y, 1, 1, color);
   for (let k = 0; k < Math.round(plan.w / 6); k++) {
     g.fillStyle = random() < 0.5 ? 'rgba(255, 255, 255, .07)' : 'rgba(40, 70, 40, .05)';
     g.beginPath(); g.ellipse(random() * plan.w, random() * plan.h, 10 + random() * 22, 5 + random() * 9, 0, 0, 6.3); g.fill();

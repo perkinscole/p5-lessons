@@ -24,7 +24,11 @@ import { PATH_IDS } from './curriculum/graph.js';
 import { openBugReport, noteError } from './views/bugs.js';
 
 // On Apps Script the page has google.script. Anywhere else it runs as a browser-only demo.
-const store = window.google?.script ? createAppsScriptStore() : createLocalStore();
+// The Apps Script build sets DEMO to false (tools/build-gas.mjs), which lets it leave the demo
+// store out of the packed app altogether. Run straight from the files, DEMO does not exist.
+// With no demo to fall back on, the packed app says why it cannot start anywhere but Apps Script.
+if (typeof DEMO !== 'undefined' && !DEMO && !window.google?.script) throw new Error('This copy of Pixel Trail only runs on Google Apps Script, and google.script is missing from this page.');
+const store = (typeof DEMO === 'undefined' || DEMO) && !window.google?.script ? createLocalStore() : createAppsScriptStore();
 
 export const app = { store, session: null, cleanup: null };
 export const go = (hash) => { location.hash = hash; };
