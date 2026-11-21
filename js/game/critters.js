@@ -30,9 +30,41 @@ export function critterArt(kind) {
   return urls.get(kind);
 }
 
+/** How far each kind of movement carries an animal to the right, in widths of its own picture. The page's animations match. */
+export const TRAVEL = { roam: 1.1, hop: 0.6, bob: 0.35, idle: 0, flit: 0, twinkle: 0 };
+const GROWN = 1.25; // an animal is drawn this many times the size of its drawing
+
+/**
+ * Can this animal live at (x, y)? A floating one needs water under all of it, wherever it drifts,
+ * so a boat is never beached on a bank. A walking one needs dry, level ground the whole way it
+ * walks and a little behind and in front, so it never steps off a ledge or into a pond, or stands
+ * on a shelf too narrow to be seen as ground. Flying ones only need the spot itself.
+ *   land: { w, h, wet(i), high(i), shut(i) } where i = y * w + x. `high` is the ground's height and
+ *   `shut` is true where nothing may stand (roads, stops, buildings).
+ */
+export function canLive(kind, move, where, x, y, land) {
+  const [wide] = ART[kind];
+  const floats = where === 'water';
+  const half = Math.ceil((wide * GROWN) / 2);
+  const reach = Math.ceil(wide * GROWN * (TRAVEL[move] || 0));
+  const flies = move === 'flit' || move === 'twinkle';
+  const x0 = flies ? x : x - half - 1;
+  const x1 = flies ? x : x + half + reach + 1;
+  const y0 = flies ? y : y - (floats ? 2 : 3);
+  const y1 = flies ? y : y + (floats ? 2 : 3);
+  if (x0 < 0 || y0 < 0 || x1 >= land.w || y1 >= land.h) return false;
+  const level = land.high(y * land.w + x);
+  for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) {
+    const i = yy * land.w + xx;
+    if (land.shut(i) || !!land.wet(i) !== floats || land.high(i) !== level) return false;
+  }
+  return true;
+}
+
 /**
  * Who lives where: [kind, how many, how it moves]. `water` ones only go on water; the rest never do.
- * Moves: roam (walks back and forth), hop, bob (floats), flit (darts about), twinkle.
+ * Moves: roam (walks back and forth), hop, bob (floats), flit (darts about), twinkle. The map
+ * falls back to idle (shifts on the spot) where there is no room to roam, hop or bob.
  */
 export const HABITATS = {
   camp: [['sheep', 4, 'roam'], ['rabbit', 2, 'hop'], ['butterfly', 3, 'flit']],

@@ -667,6 +667,51 @@ test('the 3D map\'s land: roads climb ramps onto mesas, and never have to jump a
   assert.ok(Math.max(...Array.from({ length: 60 }, (_, k) => soft[(30 + k) * w + 110] - soft[(31 + k) * w + 110])) < 12, 'a soft edge has no cliff');
 });
 
+test('animals on the 3D map only live where they fit: boats on water, sheep on level ground', async () => {
+  const { canLive, TRAVEL, HABITATS } = await import('../js/game/critters.js');
+  const w = 80;
+  const h = 40;
+  // A pond 30 cells wide in the middle of level ground, a ledge along the right, and a road along the top.
+  const wet = new Uint8Array(w * h);
+  const high = new Float32Array(w * h);
+  const shut = new Uint8Array(w * h);
+  for (let y = 12; y < 28; y++) for (let x = 20; x < 50; x++) wet[y * w + x] = 1;
+  for (let y = 0; y < h; y++) for (let x = 64; x < w; x++) high[y * w + x] = 48;
+  for (let x = 0; x < w; x++) shut[2 * w + x] = 1;
+  const land = { w, h, wet: (i) => wet[i], high: (i) => high[i], shut: (i) => shut[i] };
+  assert.ok(canLive('boat', 'bob', 'water', 30, 20, land), 'a boat in the middle of the pond');
+  assert.ok(!canLive('boat', 'bob', 'water', 10, 20, land), 'a boat on dry land');
+  assert.ok(!canLive('boat', 'bob', 'water', 22, 20, land), 'a boat with its stern on the bank');
+  assert.ok(!canLive('boat', 'bob', 'water', 44, 20, land), 'a boat that would drift onto the bank');
+  assert.ok(canLive('boat', 'idle', 'water', 38, 20, land), 'a moored boat needs less room than one that drifts');
+  assert.ok(!canLive('duck', 'bob', 'water', 30, 12, land), 'a duck at the very edge of the water');
+  assert.ok(!canLive('sheep', 'roam', undefined, 30, 20, land), 'a sheep in the pond');
+  assert.ok(canLive('sheep', 'roam', undefined, 10, 34, land), 'a sheep on open ground');
+  assert.ok(!canLive('sheep', 'roam', undefined, 14, 20, land), 'a sheep that would walk into the pond');
+  assert.ok(!canLive('sheep', 'roam', undefined, 50, 34, land), 'a sheep that would walk into a cliff');
+  assert.ok(!canLive('sheep', 'idle', undefined, 62, 34, land), 'a sheep at the foot of a cliff');
+  assert.ok(!canLive('rabbit', 'hop', undefined, 10, 3, land), 'a rabbit on the road');
+  assert.ok(!canLive('sheep', 'roam', undefined, 76, 20, land), 'a sheep that would walk off the map');
+  // Every kind of movement the map uses has a distance, and the page's animations move no further.
+  const css = (await import('node:fs')).readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
+  for (const list of Object.values(HABITATS)) for (const [, , move] of list) assert.ok(move in TRAVEL, `${move} has no distance`);
+  const furthest = (name) => Math.max(0, ...[...css.match(new RegExp(`@keyframes ${name} \\{.*`))[0].matchAll(/translateX?\((-?\d+)%/g)].map((m) => +m[1])) / 100;
+  assert.ok(furthest('roam') <= TRAVEL.roam && furthest('hop') <= TRAVEL.hop && furthest('critter-bob') <= TRAVEL.bob && furthest('critter-idle') <= TRAVEL.idle, 'an animation carries an animal further than the room kept for it');
+});
+
+test('a crowd at one stop stands in rows, close together, with nobody on top of anybody', async () => {
+  const { crowdSlots } = await import('../js/game/stops.js');
+  for (let n = 0; n <= 9; n++) {
+    const { slots, first } = crowdSlots(n);
+    assert.equal(slots.length, n);
+    for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) assert.ok(Math.abs(slots[a].x - slots[b].x) >= 16 || Math.abs(slots[a].y - slots[b].y) >= 6, `${n} people: two share a place`);
+    assert.ok(slots.every((s) => s.x >= 0 && s.x <= 48 && Math.abs(s.y) <= 9), `${n} people spread too far along or across the road`);
+    for (let k = 1; k < n; k++) assert.ok(slots[k].row >= slots[k - 1].row, 'back rows come first, so they are drawn first');
+    if (n) assert.ok(slots[first].x === 0 && slots[first].row === slots[n - 1].row, 'the first place is at the front, nearest the stop');
+    assert.equal(new Set(slots.map((s) => s.row)).size, n <= 3 ? Math.min(n, 1) : n <= 6 ? 2 : 3);
+  }
+});
+
 test('every lesson stop on the 3D map gets a building that suits its road and land', async () => {
   // stops.js draws with a canvas, so only its choosing rule is checked here.
   const src = (await import('node:fs')).readFileSync(new URL('../js/game/stops.js', import.meta.url), 'utf8');

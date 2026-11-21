@@ -292,8 +292,14 @@ export const FLAT = new Set(['tuft', 'flowers', 'dune', 'pond']);
 /** Mountains and pyramids are made of terrain in 3D, not drawn. */
 export const SHAPED = new Set(['peak', 'pyramid']);
 
-/** The ground alone: land colours, soft patches, and flat things. Returns { canvas, plan }. */
+/**
+ * The ground alone: land colours, soft patches, and flat things. Returns { canvas, plan }.
+ * `grounds` gives a land its own three colours here, and `skip` names flat things to leave out
+ * (the 3D map digs its ponds as real water, so it does not want them painted).
+ */
 export function paintGround(opts) {
+  const groundFor = (name) => (opts.grounds && opts.grounds[name]) || LANDS[name].ground;
+  const skip = opts.skip || new Set();
   const plan = planOverworld(opts);
   const canvas = document.createElement('canvas');
   canvas.width = plan.w;
@@ -308,16 +314,16 @@ export function paintGround(opts) {
     const near = i + 1 < edges.length ? edges[i + 1] - x : 999;
     for (let y = 0; y < plan.h; y++) {
       const other = near < 26 && random() < ((26 - near) / 26) ** 2 * 0.5;
-      const land = LANDS[landFor(other ? i + 1 : i)];
+      const ground = groundFor(landFor(other ? i + 1 : i));
       const roll = random();
-      p(x, y, 1, 1, roll < 0.06 ? land.ground[1] : roll < 0.11 ? land.ground[2] : land.ground[0]);
+      p(x, y, 1, 1, roll < 0.06 ? ground[1] : roll < 0.11 ? ground[2] : ground[0]);
     }
   }
   for (let k = 0; k < Math.round(plan.w / 6); k++) {
     g.fillStyle = random() < 0.5 ? 'rgba(255, 255, 255, .07)' : 'rgba(40, 70, 40, .05)';
     g.beginPath(); g.ellipse(random() * plan.w, random() * plan.h, 10 + random() * 22, 5 + random() * 9, 0, 0, 6.3); g.fill();
   }
-  for (const t of plan.things) if (FLAT.has(t.kind)) SPRITES[t.kind](p, t.x, t.y, random);
+  for (const t of plan.things) if (FLAT.has(t.kind) && !skip.has(t.kind)) SPRITES[t.kind](p, t.x, t.y, random);
   return { canvas, plan };
 }
 

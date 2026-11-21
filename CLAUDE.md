@@ -121,6 +121,14 @@ How the 3D one works, with no 3D library:
 - Each lesson stop is a small building (`js/game/stops.js`): castles and towers on the high roads, cottages and cabins below them, cave mouths on the low roads, and each land's own landmark on the shared trail, with a badge in the road's colour for done, next, or not yet. Characters stand on the road beside their stop, each with a shadow at their feet. The teacher asked for both after disliking number tiles and characters floating above markers, and did not like balloons in the sky; birds stayed.
 - Lesson stops, names, and characters are ordinary page elements placed over the picture (`.pin`). That keeps them sharp, clickable, reachable by keyboard, and never hidden behind a hill. Keep it that way: the teacher's first complaint about the map was that characters were hard to see.
 
+The map was then reworked after the teacher's next round of notes (stops sat on the road, the road was hard to see, the far land was uniform, a boat was on dry land, characters looked pasted on). What that changed, and must be kept:
+
+- Each stop has a plot set back from the road (`sites` in `buildWorld`): a paved yard, a path to the road, and a cast shadow. The pin stays on the road and the building is carried back by `--by`/`--bs`.
+- Roads are laid as cobbles in the road's own colour with a pale edge and a dark kerb (`layRoads`, `paving`), are never fully in shadow, and a sight-line pass lowers hills in front of them. The shared trail is slate, since cream vanished on sand and snow.
+- The far country is real terrain (`backLand`): ridges, buttes, forests, rock and snow, different behind each land (`LOOK[land].far`). Each land has a stronger 3D-only palette (`LOOK`, passed to `paintGround`), the terraces are taller steps (`LIFT`, `BAND`), and low roads have cave mouths cut in the canyon wall (`hole`).
+- `canLive` in `critters.js` (tested) decides where an animal fits: a boat needs water under its whole width and drift, a walker needs dry level ground for its whole walk. `mayStand` keeps props out of water, off roads, plots and cliff edges.
+- Characters have a thin dark outline and a contact shadow, not a white sticker edge. `crowdSlots` in `stops.js` (tested) stands a group in rows beside its own stop, narrow enough not to cover the next stop's building, with the signed-in student always in the front row nearest the stop and drawn on top.
+
 The teacher's history with this picture: a busy blocky side-view world hid the characters and drew roads as boxy pipes; a flat map fixed that but lost the charm; a top-down pixel overworld brought charm back but not depth; they then asked for a view at an angle with roads climbing into the distance. So keep the depth, keep the palette soft, and keep characters and the student's own road the brightest things on it. `js/game/world.js` still draws the scenery behind the class display's race; the map no longer uses it.
 
 ### The class display's race

@@ -23,14 +23,37 @@ const ART = {
 };
 
 const urls = new Map();
-/** A stop's picture as an image address. */
+/** The picture is this many art pixels square: the drawing with a pixel of outline all round. */
+export const STOP_SIZE = SIZE + 2;
+/** The row of the picture that stands on the ground, counted from the top. */
+export const STOP_FOOT = SIZE - 2;
+const OUTLINE = [38, 30, 52];
+/**
+ * A stop's picture as an image address. Each has a dark outline one pixel wide, and its right
+ * side is a little darker than its left, so it stands out from any land as a solid thing lit
+ * from the same side as the land is.
+ */
 export function stopArt(kind) {
   if (!urls.has(kind)) {
     const canvas = document.createElement('canvas');
-    canvas.width = SIZE;
-    canvas.height = SIZE;
+    canvas.width = STOP_SIZE;
+    canvas.height = STOP_SIZE;
     const g = canvas.getContext('2d');
-    (ART[kind] || ART.cottage)((x, y, w, h, color) => { g.fillStyle = color; g.fillRect(x, y, w, h); });
+    (ART[kind] || ART.cottage)((x, y, w, h, color) => { g.fillStyle = color; g.fillRect(x + 1, y + 1, w, h); });
+    const image = g.getImageData(0, 0, STOP_SIZE, STOP_SIZE);
+    const d = image.data;
+    const solid = new Uint8Array(STOP_SIZE * STOP_SIZE);
+    for (let i = 0; i < solid.length; i++) solid[i] = d[i * 4 + 3] > 40 ? 1 : 0;
+    const has = (x, y) => x >= 0 && y >= 0 && x < STOP_SIZE && y < STOP_SIZE && solid[y * STOP_SIZE + x] === 1;
+    for (let y = 0; y < STOP_SIZE; y++) for (let x = 0; x < STOP_SIZE; x++) {
+      const i = (y * STOP_SIZE + x) * 4;
+      if (has(x, y)) {
+        // The sun is on the left: the right-hand third is in shade, and the left edge is lit.
+        const k = !has(x + 1, y) || !has(x + 2, y) ? 0.82 : !has(x - 1, y) ? 1.08 : 1;
+        for (let c = 0; c < 3; c++) d[i + c] = Math.min(255, d[i + c] * k);
+      } else if (has(x - 1, y) || has(x + 1, y) || has(x, y - 1) || has(x, y + 1)) { d[i] = OUTLINE[0]; d[i + 1] = OUTLINE[1]; d[i + 2] = OUTLINE[2]; d[i + 3] = 255; }
+    }
+    g.putImageData(image, 0, 0);
     urls.set(kind, canvas.toDataURL('image/png'));
   }
   return urls.get(kind);
@@ -56,3 +79,24 @@ export function stopKind({ lane, side, land, k = 0, summit = false }) {
   return list[k % list.length];
 }
 export const STOP_KINDS = Object.keys(ART);
+
+/**
+ * Where each of `n` people stands at a stop, in page pixels from the first one. Up to three stand
+ * in a line along the road. More stand in two rows, and more than six in three, each row a step
+ * behind and a little to one side of the row in front, so a crowd is a huddle and never a pile,
+ * and never spreads so far along the road that it covers the next stop. `row` counts from the
+ * back, which is drawn first. `first` is the place nearest the stop in the front row.
+ */
+export function crowdSlots(n) {
+  if (n <= 3) return { first: 0, slots: Array.from({ length: n }, (_, k) => ({ x: k * 19, y: 1, row: 0 })) };
+  const rows = n <= 6 ? 2 : 3;
+  const each = Math.ceil(n / rows);
+  const depth = rows === 2 ? [-6, 5] : [-9, -2, 5];
+  const slots = [];
+  // The front row fills first, so the row at the back is the short one.
+  for (let row = 0; row < rows; row++) {
+    const here = Math.min(each, Math.max(0, n - (rows - 1 - row) * each));
+    for (let k = 0; k < here; k++) slots.push({ x: (rows - 1 - row) * 6 + k * 17, y: depth[row], row });
+  }
+  return { first: slots.findIndex((s) => s.row === rows - 1), slots };
+}
