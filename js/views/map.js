@@ -182,12 +182,14 @@ export function buildMap({ board, meId = null, myPath = null, myDone = new Set()
       root.append(img);
       if (s.id === meId) {
         // The student's own character carries a tag, so they can find themselves at a glance.
-        const tag = svg('g', { class: 'you-tag', transform: `translate(${x + dx},${y + dy - 12})`, 'aria-hidden': 'true' },
+        // The bob is a CSS transform, which replaces an element's own `transform`. So the place is set on
+        // an outer group and the bob on an inner one; on one element the tag jumped to the map's corner.
+        const tag = svg('g', { class: 'you-tag', 'aria-hidden': 'true' },
           svg('rect', { x: -19, y: -11, width: 38, height: 18, rx: 9 }), svg('polygon', { points: '-5,6 5,6 0,12' }));
         const word = svg('text', { 'text-anchor': 'middle', y: 2 });
         word.textContent = 'YOU';
         tag.append(word);
-        root.append(tag);
+        root.append(svg('g', { transform: `translate(${x + dx},${y + dy - 12})` }, tag));
       }
     });
     const count = svg('g', { class: 'crowd', transform: `translate(${x + 40},${y - 66})`, tabindex: 0, role: 'button', 'aria-label': `${people.length} people here. Show names.`,
