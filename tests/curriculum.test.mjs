@@ -738,10 +738,11 @@ test('no two animations in the stylesheet share a name', async () => {
 });
 
 // The "Today" card ----------------------------------------------------------------------------------
-test('Base Camp lessons say what they build and define a few key ideas, briefly', async () => {
+test('every lesson says what it builds and defines a few key ideas, briefly', async () => {
   const { todayFor, todayLessons } = await import('../js/curriculum/today.js');
   const camp = [...STAGES.find((s) => s.id === 'camp').lessons, ...SIDE_TRAILS.map((t) => t.id)];
   for (const id of camp) assert.ok(todayFor(id), `${id} has a Today entry`);
+  for (const l of allLessons()) assert.ok(todayFor(l.id), `${l.id} has a Today entry`);
   const words = (t) => t.trim().split(/\s+/).length;
   for (const id of todayLessons()) {
     assert.ok(getLesson(id), `${id} is a real lesson`);
