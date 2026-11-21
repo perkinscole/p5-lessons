@@ -18,12 +18,36 @@ import { reviewFor } from '../curriculum/review.js';
 import { onSettings, getSettings, readButton, speak, stopSpeaking } from '../settings.js';
 import { alignmentFor, standardByCode } from '../curriculum/alignment.js';
 
-/** A button named in an instruction looks like that button, so it is easy to find on the page. */
-function nameButtons(el) {
-  el.querySelectorAll('strong').forEach((b) => {
+/**
+ * Makes what matters in an instruction stand out. A button it names looks like that button. Code is
+ * a chip that never breaks across lines. A word that is one of today's key ideas is a chip too, and
+ * pressing it opens that idea.
+ */
+const plain = (t) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+function ideaFor(el, ideas) {
+  const text = el.textContent.trim();
+  if (el.tagName === 'CODE') {
+    const name = text.split('(')[0].trim();
+    return ideas.find((x) => x.term === text || (name.length > 1 && /\(/.test(x.term) && x.term.split('(')[0].trim() === name));
+  }
+  const word = plain(text);
+  if (word.length < 4) return undefined;
+  return ideas.find((x) => { const term = plain(x.term); return term === word || term.startsWith(word) || word.startsWith(term) || plain(x.term.split('(')[0]) === word; });
+}
+function pronounce(el, ideas = [], onIdea = null) {
+  el.querySelectorAll('strong, code').forEach((b) => {
     const name = b.textContent.trim();
-    if (name === 'Run') b.classList.add('say-run');
-    if (name === 'Grid') b.classList.add('say-grid');
+    if (b.tagName === 'STRONG' && name === 'Run') { b.classList.add('say-run'); return; }
+    if (b.tagName === 'STRONG' && name === 'Grid') { b.classList.add('say-grid'); return; }
+    if (b.tagName === 'CODE') b.classList.add('say-code');
+    const idea = onIdea && ideaFor(b, ideas);
+    if (!idea) return;
+    b.classList.add('say-idea');
+    b.setAttribute('role', 'button');
+    b.setAttribute('tabindex', '0');
+    b.title = 'A key idea today. Press to see what it means.';
+    b.addEventListener('click', () => onIdea(idea.term));
+    b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onIdea(idea.term); } });
   });
   return el;
 }
@@ -525,7 +549,7 @@ export async function viewLesson(main, id, previewPath) {
     return h('div.stack',
       h('p.step-kind.answer', h('b', '❓ Answer this', !answered.has(q) && !preview && h('span', ' to keep going')), h('small', 'Quick check')),
       q.review && h('p.eyebrow', 'From an earlier lesson'),
-      h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
+      h('div.quiz-q', h('div.read-row', pronounce(md(q.q)), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
       q.code && snippet(q.code),
       buttons, feedback,
       isStudent && qi >= 0 && confusingButton(id, `quiz:${qi}`, myFlags),
@@ -538,7 +562,7 @@ export async function viewLesson(main, id, previewPath) {
     const { buttons, feedback } = quizButtons(q, () => setTimeout(() => { if (flow[stepIndex] === item) drawStep(); }, 900));
     return h('div.read-first',
       h('p.read-first-tag', '🔎 Read it first'),
-      h('div.quiz-q', h('div.read-row', md(q.q), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
+      h('div.quiz-q', h('div.read-row', pronounce(md(q.q)), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
       q.code && snippet(q.code),
       buttons, feedback,
       h('p.read-first-note', 'Answer to see the code to add.'));
@@ -663,6 +687,7 @@ export async function viewLesson(main, id, previewPath) {
     startTyping(step, place);
   }
 
+  const todayIdeas = (todayFor(id) || { ideas: [] }).ideas;
   const drawStep = () => {
     clearPlace();
     stopTyping();
@@ -708,7 +733,7 @@ export async function viewLesson(main, id, previewPath) {
     stepBox.append(...[
       h(`p.step-kind.${kind}`, h('b', kind === 'do' ? '✏️ Your turn' : '👀 Just read'), h('small', `Step ${flow[stepIndex].n + 1} of ${lesson.steps.length}`)),
       h('h2', s.title),
-      h('div.step-do', h('div.read-row', nameButtons(md(brief)), readButton(() => brief))),
+      h('div.step-do', h('div.read-row', pronounce(md(brief), todayIdeas, openToday), readButton(() => brief))),
       wait && readFirst(item),
       item.ask && !wait && !preview && h('p.read-first-done', '✓ ', md(item.ask.why)),
       placeBox,
@@ -921,7 +946,7 @@ export async function viewLesson(main, id, previewPath) {
 
   // "Today": what this lesson builds and the few ideas it turns on. Shown once when a student first
   // opens the lesson, and again whenever they press Key ideas. Kept short on purpose.
-  const openToday = () => {
+  const openToday = (focus) => {
     const today = todayFor(id);
     let demo = null;
     let answer = '';
@@ -946,7 +971,7 @@ export async function viewLesson(main, id, previewPath) {
             today && h('p.muted', lesson.hook),
             h('h3', 'Key ideas'),
             today
-              ? h('dl.ideas', today.ideas.map((x) => h('div', h('dt', x.term), h('dd', x.means))))
+              ? h('dl.ideas', today.ideas.map((x) => h('div', { class: x.term === focus ? 'focus' : '' }, h('dt', x.term), h('dd', x.means))))
               : h('p.concepts', lesson.concepts.map((c) => h('span.tag', c))))),
         isStudent && standardsPanel(id, false),
         h('div.row.end', h('button.btn.primary.big', { onclick: close }, 'Start')));
@@ -981,7 +1006,7 @@ export async function viewLesson(main, id, previewPath) {
         status,
         preview && h('select.path-pick', { 'aria-label': 'Road to preview', onchange: (e) => go(`/lesson/${id}/${e.target.value}`) }, Object.values(PATHS).map((p) => h('option', { value: p.id, selected: p.id === path }, p.road))),
         preview && h('button.btn', { onclick: () => { openFile(MAIN); cm.setValue(buildSolution(id, path)); for (const [n, t] of Object.entries(filesThrough(id, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript')); drawFileBar(); run(); toast('Showing the answer key.'); } }, 'Show answer key'),
-        h('button.btn.key-ideas', { onclick: openToday, title: 'What this lesson builds, and its key ideas' }, '💡 Key ideas'),
+        h('button.btn.key-ideas', { onclick: () => openToday(), title: 'What this lesson builds, and its key ideas' }, '💡 Key ideas'),
         moreMenu(),
       ),
     );

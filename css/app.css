@@ -1135,3 +1135,12 @@ body.in-workspace .navs a.nav:not([href='#/']) { display: revert; }
 .twinkle.two { top: auto; bottom: 10px; right: auto; left: 14px; font-size: .75rem; animation-delay: 1.6s; }
 @keyframes run-twinkle { 0%, 70%, 100% { opacity: 0; transform: scale(.3) rotate(0deg); } 80% { opacity: 1; transform: scale(1.2) rotate(40deg); } 90% { opacity: .4; transform: scale(.7) rotate(80deg); } }
 @media (prefers-reduced-motion: reduce) { .step-body.hello { animation: none; outline-color: var(--sun); } .twinkle { animation: none; opacity: 0; } }
+
+/* What matters in an instruction stands out: code is a chip that stays on one line, and a key idea
+   is a yellow chip that opens its meaning. */
+.say-code { display: inline-block; white-space: nowrap; padding: 0 7px 1px; margin: 1px 0; background: #dff1ff; color: #1b1640; border: 2px solid var(--line); border-radius: 4px; font-size: .92em; font-weight: 700; }
+.say-idea { display: inline-block; white-space: nowrap; padding: 0 8px 2px; margin: 1px 0; background: var(--sun); color: #2b2350; border: 2px solid var(--line); border-radius: 4px; box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18); cursor: pointer; }
+.say-idea:hover, .say-idea:focus-visible { filter: brightness(1.08); transform: translateY(-1px); outline: none; }
+.say-idea:active { transform: translateY(2px); box-shadow: none; }
+code.say-idea { background: var(--sun); }
+.ideas div.focus { background: var(--sun); color: #2b2350; border-left-color: var(--line); padding: 6px 10px; border-radius: 0 4px 4px 0; }

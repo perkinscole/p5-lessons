@@ -47,7 +47,7 @@ const BRIEFS = {
   "d1/Three directions": "`translate(x, y, z)` moves where you draw. `push` and `pop` keep that move from affecting anything else. Add ground above your box.",
   "e3/Pick from a list": "A scale is a list of notes, so `random` can choose from it. Add this below `// music goes here`.",
   // Lesson 1 names each command's parts on screen, since nothing has been explained yet.
-  't1/Meet the grid': 'Press **Run**, then **Grid**. Every spot has **coordinates** `(x, y)`: `x` is horizontal, across from the left. `y` is vertical, down from the top.',
+  't1/Meet the grid': 'Press **Run**, then **Grid**. Every spot has `(x, y)` **coordinates**. `x` is horizontal, across from the left. `y` is vertical, down from the top.',
   't1/Where your code lives': 'Find `function draw() {` on line 5 and its closing `}` on line 7. Your drawing code goes **between** them.',
   't1/Add a sun': '`ellipse(x, y, width, height)` draws an oval: where it goes, then how big it is. Add this line below `background`:',
   't1/Add the ground': '`rect(x, y, width, height)` draws a rectangle. Its `x` and `y` are its **top-left corner**. Add ground along the bottom:',
