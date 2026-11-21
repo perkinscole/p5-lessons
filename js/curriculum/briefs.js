@@ -5,6 +5,8 @@ import { getLesson } from './engine.js';
 const RESET = 'Write a function called `resetGame` at the bottom that puts every starting value back.';
 
 const BRIEFS = {
+  'c2/Use it somewhere new': 'Draw a **second sprite** for something else in your game. Load it in `preload()` the same way, and show it with `image`.',
+  'c5/Use it somewhere new': 'Change your sort so the **smallest** score ends up first. Decide which line must change before you touch anything.',
   // Variables (t3, t4). Students finished these unable to say what a variable is, so each card says
   // one thing about it: it is a name for a value, you use it by name, and something changes it.
   't3/A name for a number': 'A **variable** is a name that holds a value. This line makes one named `saucerX` that holds 50. Add it at the very top:',

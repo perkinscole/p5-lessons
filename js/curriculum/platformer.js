@@ -86,7 +86,7 @@ function draw() {
     },
   ],
   stretch: ['Change the player\'s color while in the air.', 'Add a double jump by counting jumps instead of using a boolean.', 'Make a short tap jump lower than a long press. Look up `keyReleased()`.'],
-  reflect: 'Explain in your own words how gravity, velocity, and position connect. Which values did you pick, and why?',
+  reflect: 'Explain in your own words how gravity, velocity, and position connect. Which values did you pick, and why? Then name one place outside this lesson where a value that changes a little every moment would be useful.',
 });
 
 lesson({
@@ -169,7 +169,7 @@ rect(platX, platY, platW, platH);`,
     },
   ],
   stretch: ['Move the platform slowly left and right using a speed variable.', 'Add a second platform with four more variables, and notice how annoying that is. Arrays will fix it soon!', 'Add a run boost while holding Shift.'],
-  reflect: 'Pick one line of the platform condition. What goes wrong if you remove it?',
+  reflect: 'Pick one line of the platform condition. What goes wrong if you remove it? Then name one place outside this lesson where keeping a number inside limits would be useful.',
 });
 
 lesson({
@@ -274,7 +274,7 @@ let goalX = 360;`,
     },
   ],
   stretch: ['Add a second coin and require both.', 'Add a moving spike.', 'Make the coin bob up and down using `sin(frameCount * 0.1)`.'],
-  reflect: 'What did your playtester do that surprised you?',
+  reflect: 'What did your playtester do that surprised you? Then name one place outside this lesson where a true-or-false value would be useful.',
 });
 
 lesson({
@@ -338,7 +338,7 @@ lesson({
     },
   ],
   stretch: ['Use a loop inside a loop to draw a brick wall.', 'Make the clouds drift using `frameCount`.', 'Show a "Press R to try again" message when the game ends.'],
-  reflect: 'How many lines of code would your ground tiles take without a loop? What would you change to make the tiles half as wide?',
+  reflect: 'How many lines of code would your ground tiles take without a loop? What would you change to make the tiles half as wide? Then name one place outside this lesson where a loop would be useful.',
 });
 
 lesson({
@@ -411,7 +411,7 @@ lesson({
     },
   ],
   stretch: ['Give each platform a `color` property and use it when drawing.', 'Add a `speed` property to make some platforms move.', 'Add a platform that disappears after you land on it.'],
-  reflect: 'What is the difference between `platforms[0]` and `platforms.length`?',
+  reflect: 'What is the difference between `platforms[0]` and `platforms.length`? Then name one place outside this lesson where a list of things would be useful.',
 });
 
 lesson({
@@ -493,7 +493,7 @@ text("Coins left: " + coins.length, 240, 24);`,
     },
   ],
   stretch: ['Add a big rare coin worth 50 points by giving coins a `value` property.', 'Make spikes into an array too.', 'Use `coins.push()` to spawn a bonus coin when you land on a certain platform.'],
-  reflect: 'Why does the backward loop avoid skipping coins? Try drawing it on paper with 3 coins.',
+  reflect: 'Why does the backward loop avoid skipping coins? Try drawing it on paper with 3 coins. Then name one place outside this lesson where adding to and removing from a list would be useful.',
 });
 
 lesson({
@@ -596,7 +596,7 @@ buildLevel();`,
     },
   ],
   stretch: ['Add `^` as a spike tile using an array of spikes.', 'Add `G` to place the goal flag from the map.', 'Make a second level and switch to it when the first is finished.'],
-  reflect: 'What is easier about making a level this way? What is harder?',
+  reflect: 'What is easier about making a level this way? What is harder? Then name one place outside this lesson where a grid of data would be useful.',
 });
 
 lesson({
@@ -715,5 +715,5 @@ if (playerX + playerSize > goalX) {`,
     },
   ],
   stretch: ['Make gaps grow as you travel further, while keeping them possible.', 'Use `randomSeed(n)` so a "daily level" is the same for everyone.', 'Add moving platforms that the generator places sometimes.'],
-  reflect: 'What would break if you removed the constraints from the random walk? Test it and explain what happened.',
+  reflect: 'What would break if you removed the constraints from the random walk? Test it and explain what happened. Then name one place outside this lesson where rules that make something new each time would be useful.',
 });

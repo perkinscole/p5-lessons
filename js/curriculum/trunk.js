@@ -86,7 +86,7 @@ rect(0, 320, 400, 80);`,
     },
   ],
   stretch: ['Add a cloud made of three overlapping ellipses.', 'Use `triangle(x1, y1, x2, y2, x3, y3)` to draw a mountain behind your character.', 'Add a house or a tree to the scene.'],
-  reflect: 'Where is (0, 0) on your canvas? To move a shape lower down, which number do you change, and does it get bigger or smaller?',
+  reflect: 'Where is (0, 0) on your canvas? To move a shape lower down, which number do you change, and does it get bigger or smaller? Then name one place outside this lesson where coordinates would be useful.',
 });
 
 lesson({
@@ -158,7 +158,7 @@ function draw() {
     },
   ],
   stretch: ['Use `fill(r, g, b, alpha)` with a fourth number to make see-through spots.', 'Give your monster a background scene.', 'Use `rectMode(CENTER)` and see what changes.'],
-  reflect: 'What happened when you moved the body below the eyes? What does that tell you about how the computer reads your code?',
+  reflect: 'What happened when you moved the body below the eyes? What does that tell you about how the computer reads your code? Then name one place outside this lesson where doing things in a set order would be useful.',
 });
 
 lesson({
@@ -324,7 +324,7 @@ ellipse(mouseX + 20, mouseY - 10, 30, 30);`,
     },
   ],
   stretch: ['Make the pupils look toward the mouse.', 'Add a hat that only appears when the mouse is on the right half of the canvas.', 'Use `pmouseX` to draw a trail.'],
-  reflect: 'Who changes `mouseX`: you or p5? Who changed `saucerX` last lesson? What is the same about the two?',
+  reflect: 'Who changes `mouseX`: you or p5? Who changed `saucerX` last lesson? What is the same about the two? Then name one place outside this lesson where input from a person would be useful.',
 });
 
 lesson({
@@ -449,7 +449,7 @@ text("Bounces: " + bounces, 10, 26);   // in draw()`,
     },
   ],
   stretch: ['Speed the ball up a little on every bounce.', 'Add a second ball with its own four variables.', 'Make the ball bounce off a paddle at your mouse.'],
-  reflect: '`==` asks if two values are exactly equal. The ball moves a few dots each frame. Why might `ballX == width` never be true? Try it and explain.',
+  reflect: '`==` asks if two values are exactly equal. The ball moves a few dots each frame. Why might `ballX == width` never be true? Try it and explain. Then name one place outside this lesson where an `if` would be useful.',
 });
 
 lesson({
@@ -582,5 +582,5 @@ fallSpeed = fallSpeed + 0.3;      // on each catch`,
     },
   ],
   stretch: ['Add a bad star (a different color) that costs a life when you catch it.', 'Let players restart: look up `keyPressed()` and `loop()`.', 'Keep and show a best score.'],
-  reflect: 'Write out the catch check in plain English. What is one bug you found in your game?',
+  reflect: 'Write out the catch check in plain English. What is one bug you found in your game? Then name one place outside this lesson where two conditions that must both be true would be useful.',
 });

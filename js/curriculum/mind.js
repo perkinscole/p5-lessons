@@ -99,7 +99,7 @@ function draw() {
     },
   ],
   stretch: ['Give the bot a second mode where it runs away for a few seconds.', 'Add a second bot with different rules.', 'Make the bot move only when you are moving.'],
-  reflect: 'Name one thing that is easy for you but very hard to write rules for, like recognizing a friend\'s face. Name one thing a computer does more easily than you. Why is each one easier for that side?',
+  reflect: 'Name one thing that is easy for you but very hard to write rules for, like recognizing a friend\'s face. Name one thing a computer does more easily than you. Why is each one easier for that side? Then name one place outside this lesson where rules written by a person would be useful.',
 });
 
 lesson({
@@ -187,7 +187,7 @@ let coinY = 120;`,
     },
   ],
   stretch: ['Add a power-up that freezes the bot for 3 seconds.', 'Make the coin worth more the closer the bot is.', 'Add a wall the bot does not know how to get around.'],
-  reflect: 'What did your playtester try that surprised you? What rule would you need to add to handle it?',
+  reflect: 'What did your playtester try that surprised you? What rule would you need to add to handle it? Then name one place outside this lesson where checking that something is fair would be useful.',
 });
 
 lesson({
@@ -274,7 +274,7 @@ if (keyIsDown(DOWN_ARROW) || label === "down") {`,
     },
   ],
   stretch: ['Add a `boost` class that makes you faster while you hold it.', 'Add a gesture that triggers a speed boost.', 'Retrain with examples from three different people, and compare.'],
-  reflect: 'Your model is a simplified model of "reading a gesture." What did it pay attention to that it should not have? What did you, the human, have to do that the machine could not do alone?',
+  reflect: 'Your model is a simplified model of "reading a gesture." What did it pay attention to that it should not have? What did you, the human, have to do that the machine could not do alone? Then name one place outside this lesson where learning from examples would be useful.',
   rubric: [
     { id: 'works', label: 'It runs', levels: ['Crashes or empty', 'Runs, model not connected', 'Model steers the game', 'Model steers it reliably'] },
     { id: 'concept', label: 'Understands training', levels: ['Cannot explain it', 'Describes the steps', 'Explains how examples shape results', 'Improved results by changing the data'] },
@@ -348,7 +348,7 @@ lesson({
     },
   ],
   stretch: ['Use a loop inside a loop to draw a grid.', 'Make the dots pulse using `frameCount`.', 'Show "Press R to try again" when the game ends.'],
-  reflect: 'How does `resetGame` make your code easier to change? What does each of the three parts of a for loop do?',
+  reflect: 'How does `resetGame` make your code easier to change? What does each of the three parts of a for loop do? Then name one place outside this lesson where a loop would be useful.',
 });
 
 lesson({
@@ -463,7 +463,7 @@ lastMove = "left";      // and the same for right, up, and down`,
     },
   ],
   stretch: ['Use the 3 nearest memories, and take the most common move.', 'Forget old memories once the list passes 200.', 'Also record where the bot is, and see if predictions change.'],
-  reflect: 'What attributes did you record about each moment? What did you leave out, and how might that make the bot\'s guesses worse?',
+  reflect: 'What attributes did you record about each moment? What did you leave out, and how might that make the bot\'s guesses worse? Then name one place outside this lesson where guessing from the most similar past example would be useful.',
 });
 
 lesson({
@@ -589,7 +589,7 @@ if (brainReady) {
     },
   ],
   stretch: ['Try 10 epochs and 100 epochs. What changes?', 'Add `score` as a third input. Does it help?', 'Let the bot use whichever algorithm has the better score so far.'],
-  reflect: 'Which algorithm won, and by how much? Name one reason you might still choose the other one, such as speed, memory, or being able to explain its answer.',
+  reflect: 'Which algorithm won, and by how much? Name one reason you might still choose the other one, such as speed, memory, or being able to explain its answer. Then name one place outside this lesson where comparing two methods with evidence would be useful.',
 });
 
 lesson({
@@ -683,7 +683,7 @@ rivals.push(new Bot(340, 40, false));`,
     },
   ],
   stretch: ['Give each bot its own speed property.', 'Make bots that use the neural network instead.', 'Add a bot that learns only from the last 30 memories.'],
-  reflect: 'What happened to the smart bot when you changed how you played? What does that tell you about AI systems trained on old data?',
+  reflect: 'What happened to the smart bot when you changed how you played? What does that tell you about AI systems trained on old data? Then name one place outside this lesson where a blueprint that makes many things would be useful.',
 });
 
 lesson({
@@ -773,5 +773,5 @@ let confusion = [
     },
   ],
   stretch: ['Calculate and display accuracy as a percentage.', 'Compare the tables for nearest neighbor and your neural network.', 'Find a news story about an AI system that treated people unfairly.'],
-  reflect: 'If a school used a model like yours to make a real decision, who could be harmed by its mistakes? What would you want checked before it was used?',
+  reflect: 'If a school used a model like yours to make a real decision, who could be harmed by its mistakes? What would you want checked before it was used? Then name one place outside this lesson where measuring who a system fails for would be useful.',
 });

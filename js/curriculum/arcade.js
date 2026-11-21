@@ -72,7 +72,7 @@ function draw() {
     },
   ],
   stretch: ['Add up and down movement with limits.', 'Tilt the flame depending on which way you fly.', 'Add a boost while holding Shift.'],
-  reflect: 'What is your game about? Why does the flame flicker without any extra code to animate it?',
+  reflect: 'What is your game about? Why does the flame flicker without any extra code to animate it? Then name one place outside this lesson where randomness would be useful.',
 });
 
 lesson({
@@ -149,7 +149,7 @@ text("Shots: " + shots, 10, 24);   // in draw()`,
     },
   ],
   stretch: ['Make the bullet leave a short trail.', 'Add limited ammo that refills over time.', 'Change the bullet\'s color with `frameCount`.'],
-  reflect: 'What would happen without the `bulletActive` check in `keyPressed`? Try removing it and describe what changes.',
+  reflect: 'What would happen without the `bulletActive` check in `keyPressed`? Try removing it and describe what changes. Then name one place outside this lesson where something that is made, used, and removed would be useful.',
 });
 
 lesson({
@@ -250,7 +250,7 @@ let enemySpeed = 2;`,
     },
   ],
   stretch: ['Give the enemy 3 health points.', 'Make the enemy shoot back.', 'Add a rare bonus target that flies across the top.'],
-  reflect: '`abs(n)` removes the minus sign from a number, so -3 becomes 3. Why does the speed-up line need it? Take `abs` out and describe what the enemy does.',
+  reflect: '`abs(n)` removes the minus sign from a number, so -3 becomes 3. Why does the speed-up line need it? Take `abs` out and describe what the enemy does. Then name one place outside this lesson where tuning numbers until something feels fair would be useful.',
 });
 
 lesson({
@@ -320,7 +320,7 @@ lesson({
     },
   ],
   stretch: ['Add a parallax layer of slower stars.', 'Use a loop in a loop to draw a block formation.', 'Show "Press R to try again" when the game ends.'],
-  reflect: 'What makes the stars wrap back to the top? Explain what `%` is doing.',
+  reflect: 'What makes the stars wrap back to the top? Explain what `%` is doing. Then name one place outside this lesson where a loop would be useful.',
 });
 
 lesson({
@@ -408,7 +408,7 @@ lesson({
     },
   ],
   stretch: ['Fire two bullets at once, angled apart, by giving each bullet a `vx`.', 'Add a cooldown so holding fire has a limit.', 'Give some bullets more power.'],
-  reflect: 'Why does the list need bullets removed? What might happen after a long game if you never removed them?',
+  reflect: 'Why does the list need bullets removed? What might happen after a long game if you never removed them? Then name one place outside this lesson where adding to and removing from a list would be useful.',
 });
 
 lesson({
@@ -533,7 +533,7 @@ for (let j = bullets.length - 1; j >= 0; j = j - 1) {
     },
   ],
   stretch: ['Make a formation with two rows using nested loops.', 'Let enemies have a `type` that changes their color and points.', 'Drop a power-up when a certain enemy is hit.'],
-  reflect: 'How many checks happen each frame with 8 enemies and 5 bullets? What might happen with 1,000 of each?',
+  reflect: 'How many checks happen each frame with 8 enemies and 5 bullets? What might happen with 1,000 of each? Then name one place outside this lesson where checking every pair of things would be useful.',
 });
 
 lesson({
@@ -663,7 +663,7 @@ wave = 0;`,
     },
   ],
   stretch: ['Add a `pattern` to each wave, such as zig-zag with `sin()`.', 'Give some waves a tough enemy with health.', 'Show a "Wave 2!" banner for 2 seconds using a timer variable.'],
-  reflect: 'What is the benefit of keeping waves in a list instead of writing code for each? Could a non-programmer design waves now?',
+  reflect: 'What is the benefit of keeping waves in a list instead of writing code for each? Could a non-programmer design waves now? Then name one place outside this lesson where keeping rules in data instead of code would be useful.',
 });
 
 lesson({
@@ -861,5 +861,5 @@ bossActive = true;`,
     },
   ],
   stretch: ['Add a fourth state, such as a charge downward.', 'Make the boss angrier below half health by shortening its timers.', 'Add a second attack pattern and pick one at random.'],
-  reflect: 'Draw your boss\'s state machine, and label each arrow with what causes the switch. What state would you add next?',
+  reflect: 'Draw your boss\'s state machine, and label each arrow with what causes the switch. What state would you add next? Then name one place outside this lesson where a state machine would be useful.',
 });

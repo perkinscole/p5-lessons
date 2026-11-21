@@ -84,7 +84,7 @@ function draw() {
     },
   ],
   stretch: ['Hold Shift to sprint by changing `speed`.', 'Add a second pond, or sand that makes you faster.', 'Wrap around: leaving the right edge brings you back on the left.'],
-  reflect: 'What world did you choose, and what will the player be looking for there?',
+  reflect: 'What world did you choose, and what will the player be looking for there? Then name one place outside this lesson where one variable that controls many things would be useful.',
 });
 
 lesson({
@@ -154,7 +154,7 @@ rect(wallX, wallY, wallW, wallH);`,
     },
   ],
   stretch: ['Make a wall that slowly slides open and closed.', 'Add a pushable block.', 'Make your hero bounce back a little when bumping a wall.'],
-  reflect: 'Why do we check all four sides with `&&`? What happens if one is changed to `||`?',
+  reflect: 'Why do we check all four sides with `&&`? What happens if one is changed to `||`? Then name one place outside this lesson where checking whether two things touch would be useful.',
 });
 
 lesson({
@@ -275,7 +275,7 @@ let treasureY = 40;`,
     },
   ],
   stretch: ['Add a second key and a second door.', 'Make the lava pulse in size using `sin(frameCount * 0.05)`.', 'Make the key float and glint.'],
-  reflect: 'List the conditions a player must meet to win. How did your playtester handle the puzzle?',
+  reflect: 'List the conditions a player must meet to win. How did your playtester handle the puzzle? Then name one place outside this lesson where remembering what has already happened would be useful.',
 });
 
 lesson({
@@ -343,7 +343,7 @@ lesson({
     },
   ],
   stretch: ['Use a loop inside a loop to draw a checkerboard floor.', 'Make the flowers sway using `frameCount`.', 'Show "Press R to try again" when the game ends.'],
-  reflect: 'What does each of the three parts of a for loop do? What happens if you forget the last part?',
+  reflect: 'What does each of the three parts of a for loop do? What happens if you forget the last part? Then name one place outside this lesson where a loop would be useful.',
 });
 
 lesson({
@@ -423,7 +423,7 @@ lesson({
     },
   ],
   stretch: ['Give each wall a `color` property.', 'Add a `secret: true` wall the player can walk through.', 'Add a moving wall using a `speed` property.'],
-  reflect: 'How does a function with `return` make your code easier to read? Show an example from your game.',
+  reflect: 'How does a function with `return` make your code easier to read? Show an example from your game. Then name one place outside this lesson where a function that hands back an answer would be useful.',
 });
 
 lesson({
@@ -496,7 +496,7 @@ lesson({
     },
   ],
   stretch: ['Give gems a `value` property so some are worth more.', 'Make the gems pulse in size.', 'Use `push()` to drop a bonus gem when the door opens.'],
-  reflect: 'Why does the backward loop avoid skipping gems? Try drawing it on paper with 3 gems.',
+  reflect: 'Why does the backward loop avoid skipping gems? Try drawing it on paper with 3 gems. Then name one place outside this lesson where adding to and removing from a list would be useful.',
 });
 
 lesson({
@@ -597,7 +597,7 @@ buildMap();`,
     },
   ],
   stretch: ['Add `L` as a lava tile.', 'Add `K` to place the key from the map.', 'Make a second map and switch to it through a door: that is a room change!'],
-  reflect: 'Why does `tileMap[row][col]` use row first? What would you see if they were swapped?',
+  reflect: 'Why does `tileMap[row][col]` use row first? What would you see if they were swapped? Then name one place outside this lesson where a grid of data would be useful.',
 });
 
 lesson({
@@ -785,5 +785,5 @@ hunter.targetY = 380;`,
     },
   ],
   stretch: ['Make the search stop when the player is far away, so the hunter can lose you.', 'Add a second hunter with a different speed.', 'Draw the path the hunter plans to take.'],
-  reflect: 'Why does BFS always find a shortest path? `.shift()` takes the first item in a list and `.pop()` takes the last. What changes if you use `.pop()`? Try it!',
+  reflect: 'Why does BFS always find a shortest path? `.shift()` takes the first item in a list and `.pop()` takes the last. What changes if you use `.pop()`? Try it! Then name one place outside this lesson where finding the shortest way would be useful.',
 });

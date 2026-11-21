@@ -794,3 +794,11 @@ test('a step that says to add code shows that code', () => {
     if (s.edits && !s.reveal && !s.skeleton) assert.equal(typeof shownCode(s), 'string', `${l.id} / ${s.title} shows its code`);
   }
 });
+
+test('every lesson carries its idea outside the lesson, in a question and in the reflection', () => {
+  for (const l of allLessons()) {
+    assert.match(l.reflect, /outside this lesson|in a game you play/, `${l.id}: the reflection asks where else the idea is useful`);
+    const last = checksFor(l.id).filter((q) => q.after === l.steps.length - 1);
+    assert.ok(last.length >= 1, `${l.id}: a closing question puts the idea in another setting`);
+  }
+});
