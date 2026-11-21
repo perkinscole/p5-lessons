@@ -105,6 +105,8 @@ function present(slides, demo, from = 0) {
   };
   const onKey = (e) => {
     const k = e.key;
+    // Space and Enter on one of the bar's own buttons press that button, so Close can be reached by keyboard.
+    if ((k === ' ' || k === 'Enter') && e.target instanceof Element && e.target.closest('button')) return;
     if (k === 'Escape') close();
     else if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || k === ' ' || k === 'Enter') move(1);
     else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp') move(-1);
@@ -187,7 +189,7 @@ function keyEl(k) {
       h('h3', 'Predict'),
       h('ol.key-answers', k.questions.map((q) => h('li', h('div.key-q', md(q.q)), h('div.key-a', h('b', { translate: 'no' }, q.letter), md(q.option)), h('div.key-why', md(q.why)))))),
     h('section',
-      h('h3', 'Reflect'),
+      h('h3', 'What this lesson shows'),
       k.evidence && h('p', h('strong', 'Evidence: '), k.evidence),
       group('Assess here', k.assessed),
       group('Practiced here', k.practiced)));
@@ -195,7 +197,7 @@ function keyEl(k) {
 
 function checklistEl(c) {
   const box = () => h('span.tick', { 'aria-hidden': 'true' });
-  return h('article.sheet.checklist',
+  return h('article.sheet.checksheet',
     sheetHead(c),
     h('div.check-cols',
       h('section',

@@ -168,3 +168,31 @@ test('a lesson with little written for it still gets materials, with the missing
   assert.throws(() => slidesFor('zz9'), /Unknown lesson/);
   assert.throws(() => answerKeyFor('zz9'), /Unknown lesson/);
 });
+
+// ---- The screen and its styles, read as text: there is no page to load in these tests. ----
+import { readFileSync } from 'node:fs';
+const VIEW = readFileSync(new URL('../js/views/materials.js', import.meta.url), 'utf8');
+const CSS = readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
+
+test('the materials page asks the server for nothing, stores nothing, and runs nothing on a timer', () => {
+  for (const word of ['store.', 'app.store', 'localStorage', 'sessionStorage', 'setInterval', 'setTimeout', 'fetch(', 'google.script']) {
+    assert.ok(!VIEW.includes(word), `js/views/materials.js uses ${word}`);
+  }
+});
+
+test('paper and slides do not reuse a class another screen already styles', () => {
+  const at = CSS.indexOf('/* ---- Materials:');
+  assert.ok(at > 0, 'the Materials section of app.css');
+  const styled = (text) => new Set([...text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{[^}]*\}/g, '{}').matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]));
+  const before = styled(CSS.slice(0, at));
+  // Every class the page puts on an element it builds, e.g. h('article.sheet.worksheet').
+  const used = new Set([...VIEW.matchAll(/h\(\s*[`'"]([\w.\-${}?:' >]+?)[`'"]/g)].flatMap((m) => [...m[1].matchAll(/\.([a-zA-Z][\w-]*)/g)].map((c) => c[1])));
+  assert.ok(used.has('sheet') && used.has('slide') && used.has('present'), 'the classes were read from the page');
+  // Shared on purpose: the app's own layout, buttons and tabs.
+  const shared = new Set(['stack', 'row', 'btn', 'primary', 'big', 'small', 'muted', 'eyebrow', 'tab', 'tabs', 'path-pick']);
+  for (const c of used) if (!shared.has(c)) assert.ok(!before.has(c), `.${c} is already styled for another screen (the teacher's review page has a .checklist)`);
+});
+
+test('Space and Enter on a Present button press that button instead of moving the slides', () => {
+  assert.match(VIEW, /\(k === ' ' \|\| k === 'Enter'\) && e\.target instanceof Element && e\.target\.closest\('button'\)\) return;/);
+});
