@@ -1,6 +1,6 @@
 # Making the Apps Script build smaller and faster
 
-Instructions for a future change. Nothing here is done yet. Do the steps in order: they are sorted by how much they save for how little risk. Stop after any step that gets you where you need to be.
+Instructions for a future change. Step 1 is built as a trial (see below); the rest is not done. Do the steps in order: they are sorted by how much they save for how little risk. Stop after any step that gets you where you need to be.
 
 ## Where the size is now
 
@@ -50,6 +50,24 @@ How to check it:
 - Deploy to a copy of the Apps Script project, not the live one, and repeat on a Chromebook.
 
 Risk: this touches how the app starts. A mistake means a blank page for the whole class, so test on a copy first and keep the previous `dist/` to paste back.
+
+### Step 1 is built, as a trial
+
+`npm run build:small` makes `dist-small/`, a second copy of the build with step 1 applied. The ordinary `npm run build` and `dist/` are unchanged, so nothing changes for a class until the small build has been tried on real Apps Script. `PT_DIST=dist-small node tools/gas-preview.mjs` previews it.
+
+Sizes at commit `faa68fb` plus this change:
+
+| File | `dist/` | `dist-small/` |
+| --- | --- | --- |
+| `App.html` | 1,140 KB | 388 KB |
+| `P5.html` | 1,378 KB | 328 KB |
+| ml5 | 4,369 KB in 5 files | 1,402 KB in 2 files |
+
+Checked locally in the preview for both builds: the app starts for a teacher and a student, the journey map draws, a lesson's game draws after Run, and the ml5 pieces join and unpack to the same 4,472,928 characters. `npm test` passes. Not yet checked: real Apps Script, a school Chromebook, and the load time there.
+
+How it works: `b64()` in `tools/build-gas.mjs` gzips first when `PT_SMALL=1`; the loader in `App.html` (`SMALL_LOADER`) unpacks the editor library and the app and runs them in order; `js/sandbox.js` unpacks p5 once (`inflateBase64` in `js/pack.js`); ml5 is marked `GZ1:` so `loadMl5Pieces` knows to unpack it after joining. The same app bundle reads either kind of file, so the two builds differ only in `App`, `P5`, the `ML5_n` files, and the `ML5_PARTS` number in `Code.gs`.
+
+To make it the only build once it has been proven on a real deployment: set `SMALL` to always true, delete `LOADER`, and remove `dist-small/` from `.gitignore` and this trial note.
 
 ## Step 2: leave out what Apps Script never uses
 

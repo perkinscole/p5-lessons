@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node tools/dev-server.mjs 8080",
     "build": "node tools/build-gas.mjs",
+    "build:small": "PT_SMALL=1 node tools/build-gas.mjs",
     "preview": "npm run build && node tools/gas-preview.mjs",
     "test": "node --test tests/curriculum.test.mjs tests/server.test.mjs tests/debug.test.mjs tests/avatar.test.mjs tests/quest.test.mjs tests/queue.test.mjs"
   },

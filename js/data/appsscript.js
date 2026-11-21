@@ -1,5 +1,6 @@
 import { setMl5Loader } from '../sandbox.js';
 import { createQueue } from './queue.js';
+import { inflateBase64, PACKED_MARK } from '../pack.js';
 // Data store for the real app, which runs on Google Apps Script. Same interface as local.js.
 // Everything goes through the server's single api() function, which decides who may do what.
 
@@ -97,6 +98,8 @@ async function loadMl5Pieces() {
     if (!part) break;
     text += part;
   }
+  // The small build sends ml5 compressed. Unpack it here, so what is kept on the device is ready to use.
+  if (text.startsWith(PACKED_MARK)) text = await inflateBase64(text.slice(PACKED_MARK.length));
   try { await idb('readwrite', (files) => { files.clear(); return files.put(text, ML5_KEY); }); } catch (_) { /* It still works, just not kept. */ }
   return text;
 }

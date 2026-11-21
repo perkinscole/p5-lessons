@@ -34,7 +34,7 @@ To run every lesson's answer key in the real sandbox, run `npm start` and open `
 
 The teacher installs a build by pasting `dist/` files into the Apps Script editor. A paste of `App` has twice arrived cut short, which left the app not starting with no useful message. So `tools/build-gas.mjs` wraps the packed text into 4,000-character lines and opens `App` and `P5` with a small check (`CHECK`) that knows how long the contents should be and says on screen when they are not. Keep both.
 
-`docs/APPS_SCRIPT_COMPRESSION.md` has measured sizes and ordered steps for making the Apps Script build smaller and the map's first draw faster. None of it is done yet.
+`docs/APPS_SCRIPT_COMPRESSION.md` has measured sizes and ordered steps for making the Apps Script build smaller and the map's first draw faster. Step 1 (gzip before base64) exists as a trial: `npm run build:small` makes `dist-small/`, about a third of the size, and `PT_DIST=dist-small node tools/gas-preview.mjs` previews it. `dist/` stays the build that is deployed until the small one has run on real Apps Script. The app bundle reads either kind of file (`js/pack.js`).
 
 There is no linter. `dist/` is committed and is what gets deployed, so run `npm run build` after any change to `js/`, `css/`, `gas/`, or `vendor/`.
 

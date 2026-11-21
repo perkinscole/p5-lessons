@@ -862,3 +862,12 @@ test('every lesson carries its idea outside the lesson, in a question and in the
     assert.ok(last.length >= 1, `${l.id}: a closing question puts the idea in another setting`);
   }
 });
+
+test('the small build\'s compressed text unpacks to exactly what went in', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const { inflateBase64, PACKED_MARK } = await import('../js/pack.js');
+  const text = `function draw() { text('héllo → ✓', 1, 2); }\n`.repeat(4000);
+  const packed = gzipSync(Buffer.from(text, 'utf8'), { level: 9 }).toString('base64').replace(/(.{4000})/g, '$1\n');
+  assert.equal(await inflateBase64(packed), text);
+  assert.equal(PACKED_MARK, 'GZ1:');
+});

@@ -2,6 +2,7 @@
 // no same-origin (so no login tokens or database), no navigation, no network.
 
 import { installSynth } from './game/synth.js';
+import { inflateBase64 } from './pack.js';
 import { getSettings, onSettings } from './settings.js';
 
 const PLACEHOLDER = (() => {
@@ -69,6 +70,11 @@ let p5Text = null;
 const loadP5 = () => {
   // On Apps Script, the build puts p5 into the page, with its script tags already made safe.
   const packed = document.getElementById('p5-src');
+  if (packed && packed.dataset.encoding === 'gzip-base64') {
+    // The small build compresses p5. Unpack it once and keep the text for every game after.
+    if (!p5Text) p5Text = inflateBase64(packed.textContent).catch((e) => { p5Text = null; throw e; });
+    return p5Text;
+  }
   if (packed) return Promise.resolve(packed.dataset.encoding === 'base64' ? fromBase64(packed.textContent) : packed.textContent);
   if (!p5Text) {
     p5Text = fetch(new URL('../vendor/p5.min.js', import.meta.url))

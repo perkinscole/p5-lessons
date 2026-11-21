@@ -16,8 +16,10 @@ const classroom = {
   madeSubs: { gc1: [{ id: 'm1', userId: 'u1' }, { id: 'm2', userId: 'u2' }, { id: 'm3', userId: 'u3' }] },
   subs: { gc1: [{ userId: 'u1', courseWorkId: 'a1', state: 'CREATED' }, { userId: 'u2', courseWorkId: 'a1', state: 'RETURNED', assignedGrade: 9 }, { userId: 'u3', courseWorkId: 'a1', state: 'TURNED_IN', late: true }, { userId: 'u1', courseWorkId: 'a2', state: 'CREATED' }] },
 };
-const server = createServer({ owner: OWNER, codeFile: '../dist/Code.gs', htmlDir: '../dist', classroom });
-const dist = (f) => readFileSync(new URL(`../dist/${f}`, import.meta.url), 'utf8');
+// PT_DIST=dist-small previews the small build.
+const DIST = process.env.PT_DIST || 'dist';
+const server = createServer({ owner: OWNER, codeFile: `../${DIST}/Code.gs`, htmlDir: `../${DIST}`, classroom });
+const dist = (f) => readFileSync(new URL(`../${DIST}/${f}`, import.meta.url), 'utf8');
 
 /** Do what HtmlService does with Index.html's template tags. */
 function renderIndex(email) {
