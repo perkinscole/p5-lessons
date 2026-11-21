@@ -14,6 +14,7 @@ import { viewSounds } from './views/sounds.js';
 import { viewArcade } from './views/arcade.js';
 import { viewTeacherHome, viewClass, viewReview, viewCurriculum } from './views/teacher.js';
 import { viewStandards } from './views/standards.js';
+import { viewMaterials } from './views/materials.js';
 import { viewProject } from './views/project.js';
 import { viewQuest } from './views/quest.js';
 import { applySettings, openSettings } from './settings.js';
@@ -35,7 +36,7 @@ const STUDENT_ROUTES = [
 const TEACHER_ROUTES = [
   [/^\/project\/([\w-]+)$/, viewProject],
   [/^\/$/, viewTeacherHome], [/^\/class\/([\w-]+)(?:\/(\w+))?$/, viewClass], [/^\/review\/([\w-]+)$/, viewReview],
-  [/^\/curriculum$/, viewCurriculum], [/^\/standards$/, viewStandards], [/^\/lesson\/(\w+)(?:\/(\w+))?$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/sounds$/, viewSounds],
+  [/^\/curriculum$/, viewCurriculum], [/^\/materials\/(\w+)(?:\/(\w+))?(?:\/(\w+))?$/, viewMaterials], [/^\/standards$/, viewStandards], [/^\/lesson\/(\w+)(?:\/(\w+))?$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/sounds$/, viewSounds],
   [/^\/arcade\/([\w-]+)$/, viewArcade], [/^\/map\/([\w-]+)$/, viewMap],
 ];
 
