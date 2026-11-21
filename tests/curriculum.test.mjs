@@ -855,6 +855,24 @@ test('the packed App and P5 files are in short lines and know their own length',
   }
 });
 
+test('the Apps Script build leaves the demo store out, and running from the files keeps it', async () => {
+  // dist/ is only rebuilt now and then, so this bundles main.js the way tools/build-gas.mjs does.
+  const { readFileSync } = await import('node:fs');
+  const { build } = await import('esbuild');
+  const { fileURLToPath } = await import('node:url');
+  assert.match(readFileSync(new URL('../tools/build-gas.mjs', import.meta.url), 'utf8'), /DEMO: 'false'/, 'the build sets DEMO to false');
+  const bundle = async (define) => (await build({
+    entryPoints: [fileURLToPath(new URL('../js/main.js', import.meta.url))],
+    bundle: true, minify: true, format: 'iife', write: false, target: 'es2020', legalComments: 'none',
+    define: { 'import.meta.url': '""', BUILD_ID: '"test"', ...define }, logLevel: 'silent',
+  })).outputFiles[0].text;
+  const packed = await bundle({ DEMO: 'false' });
+  for (const only of ['pixeltrail.demo.v1', 'pixeltrail.demo.session']) assert.ok(!packed.includes(only), `the packed app still has ${only}`);
+  assert.ok(packed.includes('withSuccessHandler'), 'the packed app still talks to Apps Script');
+  assert.ok(packed.includes('only runs on Google Apps Script'), 'the packed app says why it cannot start without google.script');
+  assert.ok((await bundle({})).includes('pixeltrail.demo.v1'), 'without DEMO the demo store is there, as in npm start');
+});
+
 test('every lesson carries its idea outside the lesson, in a question and in the reflection', () => {
   for (const l of allLessons()) {
     assert.match(l.reflect, /outside this lesson|in a game you play/, `${l.id}: the reflection asks where else the idea is useful`);

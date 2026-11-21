@@ -85,7 +85,7 @@ Those are for this step alone. With the map changes of step 4 added, the bundle 
 
 Two guards, because this changes what the packed app can do:
 
-- The build stops with an error if the demo store's storage key (`pixeltrail.demo.v1`) is found in the bundle, so a later change to `main.js` cannot quietly bring it back.
+- The build stops with an error if the demo store's storage key (`pixeltrail.demo.v1`) is found in the bundle, so a later change to `main.js` cannot quietly bring it back. `tests/curriculum.test.mjs` bundles `main.js` the same way and checks it too, since the tests otherwise read the committed `dist/`.
 - The packed app has no demo to fall back on. Opened anywhere without `google.script`, it throws "This copy of Pixel Trail only runs on Google Apps Script…", which `Index.html` shows in its "could not start" card.
 
 Checked: demo mode signs in as a student and as the teacher; `npm run preview` starts, and its Student view opens the 3D map; a preview of a build with `App.html` cut short shows "The App file was not pasted completely", and one with damaged contents of the right length shows "Pixel Trail could not start."
@@ -131,7 +131,7 @@ At full speed the build went from about 0.92 s to about 0.80 s of work, and the 
 What changed:
 
 1. **Measuring.** `map3d.js` records `map3d buildWorld` and `map3d first draw` with `performance.measure`. On a Chromebook, open the map, then run `performance.getEntriesByType('measure')` in the console. For a sliced build the entry's `detail` has `worked` (milliseconds of actual work) and `longest` (the longest single piece).
-2. **The page is drawn first.** `mapView` in `map.js` shows `loading('Drawing the map…')` in a box the height of the map, then builds the world. `buildWorld` is a generator: each `yield` is a place it can pause. `prepareWorld` runs it 30 ms at a time with a pause between, so the hiker keeps walking and the **Flat map** button works during the wait. The pieces are the same work in the same order; a generator run straight through was no slower than the plain function. If the build fails, the page says so and shows the flat map.
+2. **The page is drawn first.** `mapView` in `map.js` shows `loading('Drawing the map…')` in a box the height of the map, then builds the world. `buildWorld` is a generator: each `yield` is a place it can pause. `prepareWorld` runs it 30 ms at a time with a pause between, so the hiker keeps walking and the **Flat map** button works during the wait. The pieces are the same work in the same order; a generator run straight through was no slower than the plain function. If the build fails, the page says so and shows the flat map, with the **3D map** button there to try again.
 3. **The world is kept for the visit.** This was already there: `worlds` in `map3d.js`, keyed by the student's road, which is all `buildWorld` depends on. `worldBuilt` lets `mapView` skip the wait when it is. Nothing is put in `localStorage`.
 4. **One cheap win.** `paintGround` in `overworld.js` filled a one-pixel rectangle for each of about half a million ground pixels. It now writes them into the picture directly. That took roughly a quarter off the build. The 3D picture is unchanged: the canvas at five scroll positions, start to end of the trail, is byte-for-byte identical before and after (0 pixels differ).
 

@@ -220,9 +220,10 @@ export function mapView(opts, centerId = null) {
   const draw = () => {
     const mine = ++turn;
     const flat = !!getSettings().mapFlat;
-    const put = (map) => {
+    // `shown` is which map is on the page: the flat one also stands in when the 3D one cannot be drawn.
+    const put = (map, shown = flat) => {
       clear(wrap).append(
-        h('div.row.end', h('button.btn.small', { type: 'button', onclick: () => { setSetting({ mapFlat: !flat }); draw(); } }, flat ? '⛰️ 3D map' : '🗺️ Flat map')),
+        h('div.row.end', h('button.btn.small', { type: 'button', onclick: () => { setSetting({ mapFlat: !shown }); draw(); } }, shown ? '⛰️ 3D map' : '🗺️ Flat map')),
         map);
       if (!centerId) return;
       requestAnimationFrame(() => {
@@ -243,7 +244,7 @@ export function mapView(opts, centerId = null) {
       console.error(e);
       if (mine !== turn) return;
       toast('The 3D map could not be drawn, so here is the flat one.', 'error');
-      clear(wrap).append(flatMap());
+      put(flatMap(), true);
     };
     requestAnimationFrame(() => prepareWorld(opts.myPath).then(() => { if (mine === turn) put(buildMap3d(opts)); }).catch(fail));
   };
