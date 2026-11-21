@@ -1144,3 +1144,6 @@ body.in-workspace .navs a.nav:not([href='#/']) { display: revert; }
 .say-idea:active { transform: translateY(2px); box-shadow: none; }
 code.say-idea { background: var(--sun); }
 .ideas div.focus { background: var(--sun); color: #2b2350; border-left-color: var(--line); padding: 6px 10px; border-radius: 0 4px 4px 0; }
+
+/* Line numbers on code in a question, so "line 3" can be found. */
+.snippet-n { display: inline-block; width: 1.4em; margin-right: 12px; padding-right: 6px; text-align: right; color: var(--code-number, #9b94c7); border-right: 2px solid rgba(255, 255, 255, .18); user-select: none; }

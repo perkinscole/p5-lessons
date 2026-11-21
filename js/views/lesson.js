@@ -53,15 +53,18 @@ function pronounce(el, ideas = [], onIdea = null) {
 }
 
 /** Code for reading, colored the way the editor colors it. */
-function snippet(text) {
+function snippet(text, numbered = false) {
   const code = h('code');
-  const pre = h('pre.snippet.cm-s-default', code);
+  const pre = h(`pre.snippet.cm-s-default${numbered ? '.numbered' : ''}`, code);
+  // Line numbers, for a question that asks about "line 3". They are not part of the code.
+  const number = (i) => (numbered ? [h('span.snippet-n', { 'aria-hidden': 'true' }, String(i + 1))] : []);
   const CM = window.CodeMirror;
-  if (!CM || !CM.StringStream) { code.textContent = text; return pre; }
+  if (!CM || !CM.StringStream) { text.split('\n').forEach((line, i) => code.append(...(i ? ['\n'] : []), ...number(i), line)); return pre; }
   const mode = CM.getMode({ indentUnit: 2 }, 'javascript');
   const state = CM.startState(mode);
   text.split('\n').forEach((line, i) => {
     if (i) code.append('\n');
+    code.append(...number(i));
     const stream = new CM.StringStream(line);
     while (!stream.eol()) {
       const style = mode.token(stream, state);
@@ -550,7 +553,7 @@ export async function viewLesson(main, id, previewPath) {
       h('p.step-kind.answer', h('b', '❓ Answer this', !answered.has(q) && !preview && h('span', ' to keep going')), h('small', 'Quick check')),
       q.review && h('p.eyebrow', 'From an earlier lesson'),
       h('div.quiz-q', h('div.read-row', pronounce(md(q.q)), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
-      q.code && snippet(q.code),
+      q.code && snippet(q.code, q.code.includes('\n')),
       buttons, feedback,
       isStudent && qi >= 0 && confusingButton(id, `quiz:${qi}`, myFlags),
       nav);
@@ -563,7 +566,7 @@ export async function viewLesson(main, id, previewPath) {
     return h('div.read-first',
       h('p.read-first-tag', '🔎 Read it first'),
       h('div.quiz-q', h('div.read-row', pronounce(md(q.q)), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
-      q.code && snippet(q.code),
+      q.code && snippet(q.code, q.code.includes('\n')),
       buttons, feedback,
       h('p.read-first-note', 'Answer to see the code to add.'));
   };
