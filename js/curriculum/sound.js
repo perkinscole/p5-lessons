@@ -54,7 +54,7 @@ lesson({
     },
   ],
   stretch: ['Make the pitch rise with each point using `playNote`.', 'Add a warning sound when the player is almost out of time or lives.', 'Add footsteps that play every 15 frames while the player moves.'],
-  reflect: 'Why does a sound in your game loop need an `if`? Which of your sounds tells the player something they could not see?',
+  reflect: 'Why does a sound in your game loop need an `if`? Which of your sounds tells the player something they could not see? Then name one place outside this lesson where reacting only at the moment something changes would be useful.',
 });
 
 lesson({
@@ -106,7 +106,7 @@ lesson({
     },
   ],
   stretch: ['Write a second song for your title screen.', 'Make the music speed up when time is almost out.', 'Share your song with the class from the Sound Studio.'],
-  reflect: 'Your song is a few lines of text, while an MP3 of it would be far larger. What does an MP3 store that your file does not? Why can\'t you just put your favorite pop song in a game you publish?',
+  reflect: 'Your song is a few lines of text, while an MP3 of it would be far larger. What does an MP3 store that your file does not? Why can\'t you just put your favorite pop song in a game you publish? Then name one place outside this lesson where giving credit and asking permission would be useful.',
 });
 
 lesson({
@@ -203,5 +203,5 @@ function draw() {
     },
   ],
   stretch: ['Add a second voice that plays a bass note every four beats.', 'Let the mouse position choose the scale.', 'Use the arrow keys to play your list like an instrument.'],
-  reflect: 'Your random walk and the pure random picker both made music. Which did you prefer, and how would you measure "better"? Why does using fewer bits make a sound rougher?',
+  reflect: 'Your random walk and the pure random picker both made music. Which did you prefer, and how would you measure "better"? Why does using fewer bits make a sound rougher? Then name one place outside this lesson where rules that create something would be useful.',
 });

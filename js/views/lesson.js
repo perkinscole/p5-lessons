@@ -53,15 +53,18 @@ function pronounce(el, ideas = [], onIdea = null) {
 }
 
 /** Code for reading, colored the way the editor colors it. */
-function snippet(text) {
+function snippet(text, numbered = false) {
   const code = h('code');
-  const pre = h('pre.snippet.cm-s-default', code);
+  const pre = h(`pre.snippet.cm-s-default${numbered ? '.numbered' : ''}`, code);
+  // Line numbers, for a question that asks about "line 3". They are not part of the code.
+  const number = (i) => (numbered ? [h('span.snippet-n', { 'aria-hidden': 'true' }, String(i + 1))] : []);
   const CM = window.CodeMirror;
-  if (!CM || !CM.StringStream) { code.textContent = text; return pre; }
+  if (!CM || !CM.StringStream) { text.split('\n').forEach((line, i) => code.append(...(i ? ['\n'] : []), ...number(i), line)); return pre; }
   const mode = CM.getMode({ indentUnit: 2 }, 'javascript');
   const state = CM.startState(mode);
   text.split('\n').forEach((line, i) => {
     if (i) code.append('\n');
+    code.append(...number(i));
     const stream = new CM.StringStream(line);
     while (!stream.eol()) {
       const style = mode.token(stream, state);
@@ -298,17 +301,26 @@ export async function viewLesson(main, id, previewPath) {
   let gridOn = false;
   const gridButton = h('button.btn.toggle', { type: 'button', 'aria-pressed': 'false', title: 'Show a grid with x and y numbers over your game',
     onclick: () => { gridOn = !gridOn; gridButton.setAttribute('aria-pressed', String(gridOn)); gridButton.classList.toggle('on', gridOn); player.setGrid(gridOn); } }, 'Grid', h('span.switch', { 'aria-hidden': 'true' }, h('i')));
-  const run = () => {
+  let runs = 0;
+  const run = (pressed = false) => {
     clearErrorMark();
     clear(consoleBox);
     for (const w of warnings(mainCode())) logLine(h('div.warn', md(w)));
     player.run(mainCode(), assets, extraFiles());
+    // Pressing Run shows that something happened: the game flashes and a line says what Run did.
+    // A game that looks the same as before left students unsure the button had worked.
+    if (pressed) {
+      runs += 1;
+      const frame = page && page.querySelector('.game-frame');
+      if (frame) { frame.classList.remove('ran'); void frame.offsetWidth; frame.classList.add('ran'); }
+      logLine(h('div.ran', h('b', '▶ Your code ran.'), runs <= 2 ? ' The computer read every line, top to bottom, and drew this.' : ''));
+    }
     if (dirty) { saveSoon.cancel(); persist(); } // Pressing Run also saves.
   };
 
   // Editor --------------------------------------------------------------------------------------
   const editorHost = h('div.editor-host');
-  const cm = makeEditor(editorHost, code, { onRun: run, cm: { readOnly } });
+  const cm = makeEditor(editorHost, code, { onRun: () => run(true), cm: { readOnly } });
   const MAIN = 'sketch.js';
   const mainDoc = cm.getDoc();
   const extraDocs = new Map(Object.entries(startFiles).map(([name, text]) => [name, window.CodeMirror.Doc(text, 'javascript')]));
@@ -550,7 +562,7 @@ export async function viewLesson(main, id, previewPath) {
       h('p.step-kind.answer', h('b', '❓ Answer this', !answered.has(q) && !preview && h('span', ' to keep going')), h('small', 'Quick check')),
       q.review && h('p.eyebrow', 'From an earlier lesson'),
       h('div.quiz-q', h('div.read-row', pronounce(md(q.q)), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
-      q.code && snippet(q.code),
+      q.code && snippet(q.code, q.code.includes('\n')),
       buttons, feedback,
       isStudent && qi >= 0 && confusingButton(id, `quiz:${qi}`, myFlags),
       nav);
@@ -563,7 +575,7 @@ export async function viewLesson(main, id, previewPath) {
     return h('div.read-first',
       h('p.read-first-tag', '🔎 Read it first'),
       h('div.quiz-q', h('div.read-row', pronounce(md(q.q)), readButton(() => `${q.q} ${q.options.map((o, i) => `Choice ${i + 1}: ${o}.`).join(' ')}`))),
-      q.code && snippet(q.code),
+      q.code && snippet(q.code, q.code.includes('\n')),
       buttons, feedback,
       h('p.read-first-note', 'Answer to see the code to add.'));
   };
@@ -1080,7 +1092,7 @@ export async function viewLesson(main, id, previewPath) {
   let sizes = {};
   try { sizes = JSON.parse(localStorage.getItem(SIZES) || '{}') || {}; } catch (_) { /* private mode */ }
   const keepSizes = () => { try { localStorage.setItem(SIZES, JSON.stringify(sizes)); } catch (_) { /* this visit only */ } };
-  const runBar = h('div.run-bar', h('button.btn.run', { onclick: run, title: 'Cmd or Ctrl + Enter' }, '▶ Run', h('i.twinkle', { 'aria-hidden': 'true' }, '✦'), h('i.twinkle.two', { 'aria-hidden': 'true' }, '✦')), gridButton);
+  const runBar = h('div.run-bar', h('button.btn.run', { onclick: () => run(true), title: 'Cmd or Ctrl + Enter' }, '▶ Run', h('i.twinkle', { 'aria-hidden': 'true' }, '✦'), h('i.twinkle.two', { 'aria-hidden': 'true' }, '✦')), gridButton);
   const gameFrame = h('div.game-frame', player.el);
   const MIN_CONSOLE = 64;
   const fitGame = () => {

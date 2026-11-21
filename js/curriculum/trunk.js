@@ -15,7 +15,7 @@ function draw() {
   steps: [
     {
       title: 'Meet the grid', mins: 5,
-      say: 'Press **Run**. The blue square is your **canvas**, 400 dots wide and 400 tall. Press **Grid** above your code to see the numbers, and move your mouse over the canvas to read any spot.\n\nThe two numbers for a spot are its **coordinates**, written `(x, y)`. The `x` coordinate is **horizontal**: it counts dots across from the left. The `y` coordinate is **vertical**: it counts dots down from the **top**, so bigger `y` means lower down. Most people expect the opposite, so keep this one in mind.',
+      say: 'Press **Run**. Run makes the computer read your code from the top line to the bottom and do what each line says. The blue square is your **canvas**, 400 dots wide and 400 tall. Press **Grid** above your code to see the numbers, and move your mouse over the canvas to read any spot.\n\nThe two numbers for a spot are its **coordinates**, written `(x, y)`. The `x` coordinate is **horizontal**: it counts dots across from the left. The `y` coordinate is **vertical**: it counts dots down from the **top**, so bigger `y` means lower down. In math class `y` goes up, so this feels backward at first. Everyone trips on it, and the Grid is there to check.',
     },
     {
       title: 'Where your code lives', mins: 4,
@@ -86,7 +86,7 @@ rect(0, 320, 400, 80);`,
     },
   ],
   stretch: ['Add a cloud made of three overlapping ellipses.', 'Use `triangle(x1, y1, x2, y2, x3, y3)` to draw a mountain behind your character.', 'Add a house or a tree to the scene.'],
-  reflect: 'Why do you think y counts down from the top instead of up from the bottom?',
+  reflect: 'Where is (0, 0) on your canvas? To move a shape lower down, which number do you change, and does it get bigger or smaller? Then name one place outside this lesson where coordinates would be useful.',
 });
 
 lesson({
@@ -158,7 +158,7 @@ function draw() {
     },
   ],
   stretch: ['Use `fill(r, g, b, alpha)` with a fourth number to make see-through spots.', 'Give your monster a background scene.', 'Use `rectMode(CENTER)` and see what changes.'],
-  reflect: 'What happened when you moved the body below the eyes? What does that tell you about how the computer reads your code?',
+  reflect: 'What happened when you moved the body below the eyes? What does that tell you about how the computer reads your code? Then name one place outside this lesson where doing things in a set order would be useful.',
 });
 
 lesson({
@@ -180,19 +180,19 @@ function draw() {
 `,
   steps: [
     {
-      title: 'Why draw() matters', mins: 4,
+      title: 'Why draw() matters', mins: 3,
       say: '`setup()` runs **once**. `draw()` runs over and over, about **60 times every second**. Each pass paints a new frame, and a game is just a very fast flipbook.\n\nThe saucer never moves because its numbers never change. We need a number that *can* change.',
     },
     {
-      title: 'Create a variable', mins: 6,
-      say: 'A **variable** is a labeled box that holds a value. `let` makes a new box, `saucerX` is its name, `=` puts a value in it, and `;` ends the line. Put this at the very top, **outside** any function, so it survives between frames:',
+      title: 'A name for a number', mins: 5,
+      say: 'A **variable** is a name that holds a value. Think of a labeled box: the label is the name, and the value sits inside. The computer remembers it for you.\n\n`let` makes a new variable, `saucerX` is its name, and `= 50` puts 50 in it. It goes at the very top, **outside** any function, so it is made once and remembered from frame to frame.',
       code: 'let saucerX = 50;\n',
       at: { top: true },
       check: /\blet\s+\w+\s*=/,
     },
     {
-      title: 'Use the variable', mins: 5,
-      say: 'Replace the fixed `50`s with your variable. It looks the same when you run it, but now that number can change.',
+      title: 'Use the name', mins: 5,
+      say: 'Wherever you write `saucerX`, the computer looks in the box and uses the value it finds. Right now that is 50, so the saucer looks the same. The difference is that the two shapes now share **one** number.',
       edits: [
         { code: 'ellipse(saucerX, 120, 90, 30);', at: { replace: 'ellipse(50, 120, 90, 30);' } },
         { code: 'ellipse(saucerX, 108, 40, 30);', at: { replace: 'ellipse(50, 108, 40, 30);' } },
@@ -203,8 +203,23 @@ ellipse(saucerX, 108, 40, 30);`,
       check: /ellipse\s*\(\s*[a-zA-Z_]\w*\s*,/,
     },
     {
+      title: 'One name, one change', mins: 4,
+      say: 'Change the `50` in your `let` line to `300` and press Run. Both shapes move together, because both use `saucerX`. You changed one number in one place, and everything that uses the name followed. Then put `50` back.\n\nThis is the first reason programmers use variables: a value that is used in many places is written once.',
+    },
+    {
+      title: 'See what it holds', mins: 4,
+      say: 'You cannot see inside a variable unless you ask. `text(words, x, y)` draws words on the canvas, and `+` joins words to a value. Programmers print values like this all the time to check what the computer is remembering.',
+      code: `
+  // show what saucerX holds
+  fill(255);
+  textSize(16);
+  text("saucerX is " + saucerX, 10, 24);`,
+      at: { endOf: 'function draw' },
+      check: /text\s*\(/,
+    },
+    {
       title: 'Change it every frame', mins: 6,
-      say: 'At the end of `draw()`, make the variable bigger. Read `=` as **"becomes"**: saucerX *becomes* its old value plus 2.',
+      say: 'Now change the value while the program runs. Read `=` as **"becomes"**: saucerX *becomes* its old value plus 2. `draw()` runs 60 times a second, so the value grows 60 times a second, and the saucer flies. Watch the number on screen climb.\n\nThis is the second reason for variables: a value that changes over time needs a name, so the computer can remember it between frames.',
       code: '\n  saucerX = saucerX + 2;',
       at: { endOf: 'function draw' },
       check: /(\w+)\s*=\s*\1\s*[+\-*/]|\w+\s*[+\-*/]=|\w+\+\+/,
@@ -215,8 +230,8 @@ ellipse(saucerX, 108, 40, 30);`,
       say: 'Comment out `background` by putting `//` in front of it, then Run. You get a smear, because old frames never get painted over. Now remove the `//`. Clearing and redrawing every frame is how all animation works.',
     },
     {
-      title: 'A second moving thing', mins: 11,
-      say: 'Add a **second variable** of your own that moves something else: a falling meteor, a rising moon, a growing planet. It can change position, size, or even color.',
+      title: 'Your own variable', mins: 5,
+      say: 'Now do all three yourself. **Make** a second variable with `let` at the top, **use** it in a new shape, and **change** it at the end of `draw()`. It could be a falling meteor, a rising moon, or a growing planet.',
       reveal: true,
       edits: [
         { code: 'let meteorY = 0;', at: { after: 'let saucerX = 50;' } },
@@ -226,18 +241,18 @@ ellipse(saucerX, 108, 40, 30);`,
   ellipse(300, meteorY, 24, 24);
   meteorY = meteorY + 3;`, at: { endOf: 'function draw' } },
       ],
-      show: `let meteorY = 0;   // at the top
+      show: `let meteorY = 0;   // make it, at the top
 
 // inside draw():
 fill(255, 170, 60);
-ellipse(300, meteorY, 24, 24);
-meteorY = meteorY + 3;`,
+ellipse(300, meteorY, 24, 24);   // use it
+meteorY = meteorY + 3;           // change it`,
       check: /\blet[\s\S]+\blet\s+\w+/,
-      hint: 'You need two let lines at the top of your code.',
+      hint: 'You need three things: a let line at the top, the name inside a shape, and a line that changes it.',
     },
   ],
   stretch: ['Make something grow by putting a variable in the width of an ellipse.', 'Make the background slowly change color using a variable.', 'Add a third variable for the saucer\'s speed, and use it in place of the 2.'],
-  reflect: 'Why does the variable have to be created outside draw()? What would happen if `let saucerX = 50;` were inside draw()?',
+  reflect: 'What three things did you do with `saucerX`? Name one thing in a game you play that must be a variable, and say why.',
 });
 
 lesson({
@@ -261,7 +276,7 @@ function draw() {
   steps: [
     {
       title: 'Variables p5 gives you', mins: 6,
-      say: 'p5 keeps some variables updated for you. `mouseX` and `mouseY` always hold the mouse position. Replace the body\'s position so it follows the mouse:',
+      say: 'Last lesson you **made** `saucerX` with `let`, and **you** changed it with `=`. `mouseX` and `mouseY` are variables too, but p5 makes them and p5 changes them, every frame, to match where the mouse is. They are called **built-in** variables. You never write `let mouseX`. You only use them. Replace the body\'s position so it follows the mouse:',
       code: 'ellipse(mouseX, mouseY, 100, 100);',
       at: { replace: 'ellipse(200, 200, 100, 100);' },
       check: /mouseX/,
@@ -290,7 +305,7 @@ ellipse(mouseX + 20, mouseY - 10, 30, 30);`,
     },
     {
       title: 'Show a number on screen', mins: 4,
-      say: '`text(what, x, y)` draws words. Show the coordinates. This is a great way to check what your variables hold, and programmers call it **debugging**.',
+      say: '`text(what, x, y)` draws words. Show the coordinates, the same way you showed `saucerX` last lesson. Move the mouse and watch p5 change the two values for you. Checking what your variables hold like this is called **debugging**.',
       code: `
   fill(0);
   textSize(16);
@@ -309,7 +324,7 @@ ellipse(mouseX + 20, mouseY - 10, 30, 30);`,
     },
   ],
   stretch: ['Make the pupils look toward the mouse.', 'Add a hat that only appears when the mouse is on the right half of the canvas.', 'Use `pmouseX` to draw a trail.'],
-  reflect: 'What is the difference between a variable you made and one p5 gives you?',
+  reflect: 'Who changes `mouseX`: you or p5? Who changed `saucerX` last lesson? What is the same about the two? Then name one place outside this lesson where input from a person would be useful.',
 });
 
 lesson({
@@ -434,7 +449,7 @@ text("Bounces: " + bounces, 10, 26);   // in draw()`,
     },
   ],
   stretch: ['Speed the ball up a little on every bounce.', 'Add a second ball with its own four variables.', 'Make the ball bounce off a paddle at your mouse.'],
-  reflect: 'What would happen if you wrote `ballX == width` instead of `ballX > width`? Try it and explain.',
+  reflect: '`==` asks if two values are exactly equal. The ball moves a few dots each frame. Why might `ballX == width` never be true? Try it and explain. Then name one place outside this lesson where an `if` would be useful.',
 });
 
 lesson({
@@ -567,5 +582,5 @@ fallSpeed = fallSpeed + 0.3;      // on each catch`,
     },
   ],
   stretch: ['Add a bad star (a different color) that costs a life when you catch it.', 'Let players restart: look up `keyPressed()` and `loop()`.', 'Keep and show a best score.'],
-  reflect: 'Write out the catch check in plain English. What is one bug you found in your game?',
+  reflect: 'Write out the catch check in plain English. What is one bug you found in your game? Then name one place outside this lesson where two conditions that must both be true would be useful.',
 });

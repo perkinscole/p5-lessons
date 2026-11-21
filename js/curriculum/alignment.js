@@ -13,7 +13,7 @@ const CAS = (s) => `6-8.CAS.${s}`;
 export const ALIGNMENT = {
   t1: { anchor: [CT('d.6')], support: [], evidence: 'Builds a character by guessing, running, and adjusting; breaks a line on purpose and reads the error.' },
   t2: { anchor: [], support: [CT('d.5'), CT('d.6')], evidence: 'Moves a line to see that order changes the result, then explains how the computer reads code. Foundational.' },
-  t3: { anchor: [], support: [CT('b.2'), CT('d.4')], evidence: 'Reflection predicts what happens if the variable is created inside draw(). Foundational.' },
+  t3: { anchor: [], support: [CT('b.2'), CT('d.4')], evidence: 'Reflection names making, using and changing a variable, and finds one in a real game. Foundational.' },
   t4: { anchor: [], support: [CT('b.2'), CT('d.4')], evidence: 'Output changes with mouse input; first if statement and expressions. Foundational.' },
   t5: { anchor: [CT('b.5')], support: [CT('d.6'), CT('b.1'), CT('b.2')], evidence: 'Writes all four wall checks, then fixes the check so the edge of the ball, not its center, is the boundary.' },
   t6: { anchor: [CT('b.1')], support: [CT('b.3'), CT('d.4'), CT('d.6')], evidence: 'A working game built from the draw loop, compound conditions, and a difficulty rule of the student\'s own.' },

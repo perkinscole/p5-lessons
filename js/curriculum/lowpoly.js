@@ -77,7 +77,7 @@ function draw() {
     },
   ],
   stretch: ['Add a chimney that sticks out of the roof.', 'Make the sun move by changing the numbers in `directionalLight` over time.', 'Build a tiny village with a loop.'],
-  reflect: 'What goes wrong if you leave out `pop()`? Try it, then explain what you saw.',
+  reflect: 'What goes wrong if you leave out `pop()`? Try it, then explain what you saw. Then name one place outside this lesson where saving your place and coming back to it would be useful.',
 });
 
 lesson({
@@ -185,7 +185,7 @@ lesson({
     },
   ],
   stretch: ['Add a second kind of tree with a different shape.', 'Make trees different sizes with `scale(random(0.7, 1.4))`.', 'Change the colors to make a fall or snowy forest.'],
-  reflect: 'A real tree has thousands of leaves. Which details did your model keep, which did it leave out, and why does it still look like a tree?',
+  reflect: 'A real tree has thousands of leaves. Which details did your model keep, which did it leave out, and why does it still look like a tree? Then name one place outside this lesson where leaving out detail on purpose would be useful.',
 });
 
 lesson({
@@ -282,7 +282,7 @@ let speed = 2.5;`, at: { replace: 'let spin = 0;' } },
     },
   ],
   stretch: ['Add the down arrow so you can walk backward.', 'Hold shift to sprint.', 'Make a first-person view by moving the camera into the hero.'],
-  reflect: 'Your hero faces straight down the `x` direction. What are `sin(heading)` and `cos(heading)` then? Predict first, then test it with `console.log`.',
+  reflect: 'Your hero faces straight down the `x` direction. What are `sin(heading)` and `cos(heading)` then? Predict first, then test it with `console.log`. Then name one place outside this lesson where turning a direction into movement would be useful.',
 });
 
 lesson({
@@ -427,7 +427,7 @@ function heightAt(x, z) {
     },
   ],
   stretch: ['Add blue water where the land is lowest.', 'Change `noiseSeed` until you find a world you love.', 'Make the grid finer. How does that change the look and the speed?'],
-  reflect: 'Your land is a model of real terrain. What did you leave out on purpose? When would that missing detail matter?',
+  reflect: 'Your land is a model of real terrain. What did you leave out on purpose? When would that missing detail matter? Then name one place outside this lesson where a grid of numbers would be useful.',
 });
 
 lesson({
@@ -583,5 +583,5 @@ function keyPressed() {
     },
   ],
   stretch: ['Add a low poly creature that chases you.', 'Make the sky change color as the clock runs out.', 'Hide one gem somewhere very hard to find, and add a hint.'],
-  reflect: 'What was hardest about thinking in 3D? Name one idea from your 2D games that worked the same way here.',
+  reflect: 'What was hardest about thinking in 3D? Name one idea from your 2D games that worked the same way here. Then name one place outside this lesson where a goal and a time limit would be useful.',
 });

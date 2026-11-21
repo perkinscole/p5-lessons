@@ -183,7 +183,7 @@ function drawBush(x) {
     },
   ],
   stretch: ['Add a `color` parameter to your tree.', 'Remove `noLoop()`, and make the trees sway using `frameCount`.', 'Use `randomSeed(42)` and `random()` to place a forest of 10 trees.'],
-  reflect: 'Look at your game. Which chunk of code would you turn into a function first, and what would you call it?',
+  reflect: 'Look at your game. Which chunk of code would you turn into a function first, and what would you call it? Then name one place outside this lesson where a function with parameters would be useful.',
 });
 
 lesson({
@@ -191,7 +191,7 @@ lesson({
   hook: 'Time to retire that rectangle. Today you open the Sprite Studio, draw your own character, and bring it into your game, whichever road you are on.',
   steps: [
     {
-      title: 'Make your sprite', mins: 13, action: 'sprites',
+      title: 'Make your sprite', mins: 9, action: 'sprites',
       say: 'Open **Sprites** above the editor. Draw your hero, or choose one from the library. Make at least **two frames** if you can, using **Duplicate frame** and changing a small detail like a leg or a wing.\n\nName it exactly `hero`, then press **Use in this project**.',
     },
     {
@@ -243,12 +243,16 @@ function drawPlayer() {
       check: /%/,
     },
     {
-      title: 'Check your work', mins: 3,
+      title: 'Check your work', mins: 2,
       say: 'Run your game and try everything again. Does your hero\'s size feel right? Try changing `playerSize`. Good programmers check that nothing broke after a big change.',
+    },
+    {
+      title: 'Use it somewhere new', mins: 5, action: 'sprites',
+      say: 'Your hero is not the only thing that could be a picture. Draw a **second sprite** for something else in your game, like a coin, an enemy, or a door. Load it in `preload()` the same way, and show it with `image`. You decide what it is and where it goes.',
     },
   ],
   stretch: ['Only animate while moving, using `keyIsDown`.', 'Flip the sprite when moving left. Look up `scale(-1, 1)`.', 'Draw a second sprite for an enemy or a coin, and load it the same way.'],
-  reflect: 'What is `preload()` for? What do you think would happen if `loadImage` ran in `draw()`?',
+  reflect: 'What is `preload()` for? What do you think would happen if `loadImage` ran in `draw()`? Then name one place outside this lesson where loading something before you start would be useful.',
   rubric: [
     { id: 'works', label: 'It runs', levels: ['Crashes or empty', 'Runs with errors', 'Sprite shows in the game', 'Sprite is animated, no bugs found'] },
     { id: 'concept', label: 'Uses the concept', levels: ['No image used', 'Static image', 'Sprite sheet slices used', 'Frames react to gameplay'] },
@@ -368,7 +372,7 @@ fill(this.hue, 130, 80);`,
     },
   ],
   stretch: ['Add a `hungry()` method that changes color over time.', 'Make two different classes, like Critter and Food.', 'Make critters eat each other when they touch.'],
-  reflect: 'What in your own game could be a class? What would its properties and methods be?',
+  reflect: 'What in your own game could be a class? What would its properties and methods be? Then name one place outside this lesson where a class would be useful.',
 });
 
 lesson({
@@ -466,7 +470,7 @@ lesson({
     },
   ],
   stretch: ['Add a "pause" state on the P key.', 'Add a "how to play" state between title and game.', 'Keep a best score that lasts between rounds.'],
-  reflect: 'How did this change make your code easier to understand? What other state would your game benefit from?',
+  reflect: 'How did this change make your code easier to understand? What other state would your game benefit from? Then name one place outside this lesson where states would be useful.',
 });
 
 lesson({
@@ -492,7 +496,7 @@ function draw() {
 `,
   steps: [
     {
-      title: 'Search for the best', mins: 7,
+      title: 'Search for the best', mins: 5,
       reveal: true,
       say: 'To find the highest score, walk the list and remember the best one seen so far. This is **linear search**. (The `scores.push` line in your starter adds each number to the end of the list.) Press **Add the starter code**, then finish the TODO. The function returns the **index** of the largest value, starting from a given position.',
       code: `function findBest(start) {
@@ -612,7 +616,7 @@ text("Comparisons: " + comparisons, 10, 24);   // in draw()`,
       check: /text\s*\([^)]*\+/,
     },
     {
-      title: 'Bug hunt', mins: 5,
+      title: 'Bug hunt', mins: 4,
       reveal: true,
       say: 'Press **Add the starter code**. The total should be a number, but it says `NaN`, which means "not a number". Use `console.log` inside the loop to see the last value. Then fix the loop.',
       edits: [
@@ -645,9 +649,13 @@ text("Comparisons: " + comparisons, 10, 24);   // in draw()`,
       title: 'Predict, then test', mins: 4,
       say: 'If 16 bars takes about 120 comparisons, how many do you predict for 32? Write down your guess. Change the `16` to `32`, and adjust the bar width if needed. Were you right?',
     },
+    {
+      title: 'Use it somewhere new', mins: 3,
+      say: 'Your sort puts the biggest score first. Change it so the **smallest** score ends up first. Decide which line has to change before you touch anything, then test it.',
+    },
   ],
   stretch: ['Sort a list of objects with names, and draw a real leaderboard.', 'Look up bubble sort, and try writing that too.', 'Write a search that finds the first score above 300.'],
-  reflect: 'What did you predict for 32 bars? What did you get? Why does doubling the list do more than double the work?',
+  reflect: 'What did you predict for 32 bars? What did you get? Why does doubling the list do more than double the work? Then name one place outside this lesson where sorting would be useful.',
 });
 
 lesson({
@@ -769,7 +777,7 @@ updateSparks();`,
     },
   ],
   stretch: ['Play 3 classmates\' games and tell each of them one thing you liked.', 'Read another road\'s code. What did they do differently?', 'Start a sequel!'],
-  reflect: 'Look at your plan card. What changed while you built it, and why? What are you most proud of?',
+  reflect: 'Look at your plan card. What changed while you built it, and why? What are you most proud of? Then name one place outside this lesson where testing with a real person would be useful.',
   rubric: [
     { id: 'works', label: 'It runs', levels: ['Crashes or empty', 'Runs with errors', 'Complete game', 'Polished, no bugs found'] },
     { id: 'concept', label: 'Shows learning', levels: ['Few concepts', 'Some concepts', 'Functions, arrays, and classes used well', 'Includes an algorithm of their own'] },
