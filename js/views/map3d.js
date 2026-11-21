@@ -179,8 +179,13 @@ function layRoads({ w, rows, edges, lines, myPath }) {
   return { road, across, along, info };
 }
 
-/** Build the world once: ground colours, heights, and everything that stands up. */
-function buildWorld(myPath) {
+/**
+ * Build the world once: ground colours, heights, and everything that stands up.
+ * It takes seconds on a Chromebook, so it is written to be done a piece at a time: each `yield`
+ * is a place where the page may draw and answer a click before the next piece (`prepareWorld`).
+ * The pieces do the same work in the same order however they are run.
+ */
+function* buildWorld(myPath) {
   const { nodes, edges, cols } = mapLayout();
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const width = EDGE * 2 + MARGIN * 2 + (cols - 1) * COL_W;
@@ -231,7 +236,9 @@ function buildWorld(myPath) {
     { x0: (t.x0 - t.ramp) * ART, x1: (t.x1 + t.ramp) * ART, y0: t.y0 * ART - 14, y1: t.y0 * ART + 14 },
     { x0: (t.x0 - t.ramp) * ART, x1: (t.x1 + t.ramp) * ART, y0: t.y1 * ART - 14, y1: t.y1 * ART + 14 },
   ]);
+  yield;
   const { canvas, plan } = paintGround({ width, height: LAND_H, stops, trails: lines, stages: spans, avoid, signs: false, grounds: GROUNDS, skip: new Set(['pond']) });
+  yield;
   const g = canvas.getContext('2d');
   const inside = (x, y) => x >= 0 && y >= 0 && x < w && y < rows;
 
@@ -297,8 +304,10 @@ function buildWorld(myPath) {
     if (flat > 0.02) { const tier = STEP * 4; tall += (Math.round(tall / tier) * tier - tall) * flat; }
     return 290 * (1 - Math.exp(-tall / 290));
   };
+  yield;
   const H = buildHeights({ w, h: rows, terraces, bumps: bumps.filter((b) => b.kind !== 'castle' && b.kind !== 'tower'), calm, hills: 50, hillScale: (x) => looks[x].rough, lift: (x, y) => (y < BACK ? backLand(x, y) : 0), step: STEP, block: BLOCK });
 
+  yield;
   // Nothing between you and a road may stand in the way of seeing it. Hills and mountains in front
   // of a road are held below the line from your eye to the road, a whole block at a time.
   for (let bx = 0; bx < w; bx += BLOCK) {
@@ -316,6 +325,7 @@ function buildWorld(myPath) {
     }
   }
 
+  yield;
   // Water. A river runs through the lake land from the hills to the front, and the trail crosses
   // it on a plank bridge. The lake land is half pools, the alpine meadow has tarns, the desert an
   // oasis or two, and every pond the ground plan asked for is dug as real water. Water always
@@ -375,6 +385,7 @@ function buildWorld(myPath) {
     if (spills) eachCell(bx, by, (j) => { wet[j] = 0; });
   }
 
+  yield;
   // Then the buildings, block by block, on top of the finished ground.
   const built = bumps.filter((b) => b.kind === 'castle' || b.kind === 'tower');
   if (built.length) {
@@ -427,6 +438,7 @@ function buildWorld(myPath) {
     }
   }
 
+  yield;
   // Anything standing throws a shadow the same way.
   for (const t of plan.things) if (!FLAT.has(t.kind) && !SHAPED.has(t.kind) && !spire(t)) for (let dy = 0; dy <= 3; dy++) for (let dx = -2; dx <= 4; dx++) darken(t.x + dx + dy, t.y + dy, 0.74);
 
@@ -475,7 +487,7 @@ function buildWorld(myPath) {
     return null;
   };
 
-  for (let y = 0; y < rows; y++) for (let x = 0; x < w; x++) {
+  for (let y = 0; y < rows; y++) { if (y % 16 === 0) yield; for (let x = 0; x < w; x++) {
     const i = y * w + x;
     const land = lands[x];
     const look = looks[x];
@@ -545,8 +557,9 @@ function buildWorld(myPath) {
     k *= 0.93 + grain(bx, by, 3) * 0.14 + (grain(x, y, 4) - 0.5) * 0.08;
     if (x % BLOCK === 0 || y % BLOCK === 0) k *= 1.04; else if (x % BLOCK === BLOCK - 1 || y % BLOCK === BLOCK - 1) k *= 0.9;
     C[i] = lit(C[i], k, sh, tint);
-  }
+  } }
 
+  yield;
   // The far country, a block to a cell. Its woods are blocks too: dark, a step or two taller than
   // the ground they grow on, so a wooded ridge has a ragged top and a tree line where rock begins.
   const fw = Math.ceil(w / BLOCK);
@@ -563,6 +576,7 @@ function buildWorld(myPath) {
     if (far.water && tall <= far.water + lumps(fx / 9, fr / 5, 38) * 30) { tall = 0; kinds[i] = 1; } else if (tall < Math.min(far.rock, far.snow || 999) - 12 && lumps(fx / 6, fr / 4, 34) + lumps(fx / 23, fr / 11, 39) * 0.6 > 1.45 - far.woods && grain(fx, fr, 35) < 0.82) { tall += STEP * (1 + (grain(fx, fr, 40) < 0.45 ? 1 : 0)); kinds[i] = 2; }
     FH[i] = tall;
   }
+  yield;
   for (let fr = 0; fr < FAR_ROWS; fr++) for (let fx = 0; fx < fw; fx++) {
     const i = fr * fw + fx;
     const x = Math.min(w - 1, fx * BLOCK + 2);
@@ -599,6 +613,7 @@ function buildWorld(myPath) {
     FS[i] = look.light ? pack(side[0] * look.light[0], side[1] * look.light[1], side[2] * look.light[2]) : packed(side);
   }
 
+  yield;
   const heightAt = (x, t) => H[Math.max(0, Math.min(rows - 1, Math.round(t / ART))) * w + Math.max(0, Math.min(w - 1, Math.round(x / ART)))];
   // Some things stand bigger than their drawing: a giant mushroom should tower, a tent should be a tent.
   const GROW = { bigshroom: 1.9, oak: 1.25, maple: 1.3, pine: 1.3, snowpine: 1.25, cabin: 1.4, tent: 1.4, palm: 1.4, crystal: 1.3, flag: 1.5, boulder: 1.2, cactus: 1.15 };
@@ -624,6 +639,7 @@ function buildWorld(myPath) {
   };
   const standing = plan.things.filter((t) => !FLAT.has(t.kind) && !SHAPED.has(t.kind) && !spire(t) && mayStand(t.kind, Math.min(w - 1, t.x), Math.min(rows - 1, t.y)))
     .map((t) => ({ x: t.x * ART, z: depthOf(t.y * ART), lift: heightAt(t.x * ART, t.y * ART), grow: GROW[t.kind] || 1, art: spritePixels(t.kind, (t.x + t.y) % 3) }));
+  yield;
   // Woods fill the foothills along the back, each land with its own kind of tree, up to where the
   // rock begins.
   const WOODS = { camp: 'oak', forest: 'pine', lake: 'oak', autumn: 'maple', highland: 'pine', snow: 'snowpine', alpine: 'pine', grove: 'bigshroom', crystal: 'crystal', dusk: 'bigshroom', desert: 'palm' };
@@ -640,6 +656,7 @@ function buildWorld(myPath) {
   for (const b of built) if (b.kind === 'castle') { const cx = b.x + (CASTLE * BLOCK) / 2; const cy = b.y + (CASTLE * BLOCK) / 2; standing.push({ x: cx * ART, z: depthOf(cy * ART), lift: H[cy * w + cx], grow: 1.6, art: spritePixels('flag', 0) }); }
   standing.sort((a, b) => a.z - b.z);
 
+  yield;
   // Animals. Each needs room in its own land: water under the whole of a boat or a duck wherever
   // it drifts, dry level ground the whole way a sheep walks. None is hidden behind higher land.
   const critters = [];
@@ -676,8 +693,64 @@ function buildWorld(myPath) {
 }
 
 const CROWD = 8; // how many characters are drawn at one stop
+/**
+ * Times the slow parts, so they can be read on a real Chromebook: in DevTools' Performance panel,
+ * or in the console with performance.getEntriesByType('measure').
+ */
+function timed(name, work) {
+  const from = performance.now();
+  const out = work();
+  note(name, from, performance.now());
+  return out;
+}
+function note(name, start, end, detail = null) {
+  try { performance.measure(`map3d ${name}`, { start, end, detail }); } catch (_) { /* an older browser: no timing */ }
+}
+// A built world is kept for the visit, one for each road it can be drawn for (the road is all it
+// depends on), so coming back to the map does not build it again. It is far too big for storage.
 const worlds = new Map();
-const worldFor = (myPath) => { const key = myPath || ''; if (!worlds.has(key)) worlds.set(key, buildWorld(myPath)); return worlds.get(key); };
+const building = new Map();
+/** Whether the world for this road is already built, so the map can be made without a wait. */
+export const worldBuilt = (myPath = null) => worlds.has(myPath || '');
+const worldFor = (myPath) => {
+  const key = myPath || '';
+  if (!worlds.has(key)) worlds.set(key, timed('buildWorld', () => { const steps = buildWorld(myPath); let step = steps.next(); while (!step.done) step = steps.next(); return step.value; }));
+  return worlds.get(key);
+};
+const SLICE = 30; // milliseconds of building before the page gets a turn
+/**
+ * Build the world for this road without freezing the page: a slice of work, then a pause in which
+ * the page can draw and answer a click, until it is done. Resolves when `buildMap3d` will be quick.
+ */
+export function prepareWorld(myPath = null) {
+  const key = myPath || '';
+  if (worlds.has(key)) return Promise.resolve();
+  if (!building.has(key)) {
+    const steps = buildWorld(myPath);
+    const began = performance.now();
+    let worked = 0;
+    let longest = 0;
+    building.set(key, new Promise((resolve, reject) => {
+      const more = () => {
+        const from = performance.now();
+        try {
+          let step = steps.next();
+          while (!step.done && performance.now() - from < SLICE) step = steps.next();
+          const took = performance.now() - from;
+          worked += took;
+          if (took > longest) longest = took;
+          if (!step.done) { setTimeout(more, 0); return; }
+          if (!worlds.has(key)) worlds.set(key, step.value);
+          note('buildWorld', began, performance.now(), { worked: Math.round(worked), longest: Math.round(longest) });
+          building.delete(key);
+          resolve();
+        } catch (e) { building.delete(key); reject(e); }
+      };
+      setTimeout(more, 0);
+    }));
+  }
+  return building.get(key);
+}
 
 /** The 3D map. Returns the element to put on the page. */
 export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set(), onNode }) {
@@ -971,6 +1044,6 @@ export function buildMap3d({ board, meId = null, myPath = null, myDone = new Set
 
   /** Bring a stop to the middle of the view. */
   scroller.centerOn = (id) => { const n = byId.get(id); if (n) scroller.scrollLeft = (at(n).x - EDGE) * SPEED - scroller.clientWidth / 2; };
-  requestAnimationFrame(() => { resize(); draw(); });
+  requestAnimationFrame(() => { resize(); timed('first draw', draw); });
   return scroller;
 }

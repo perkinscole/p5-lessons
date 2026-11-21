@@ -1,7 +1,7 @@
 // The journey chart: every student's character standing where they are on the branching trail.
-import { h, svg, modal, clear } from '../ui.js';
+import { h, svg, modal, clear, loading, toast } from '../ui.js';
 import { getSettings, setSetting } from '../settings.js';
-import { buildMap3d } from './map3d.js';
+import { buildMap3d, worldBuilt, prepareWorld } from './map3d.js';
 import { app, go } from '../main.js';
 import { getLesson } from '../curriculum/engine.js';
 import { PATHS, STAGES, mapLayout, currentLesson, sequence, isSideTrail, sideTrailOpen } from '../curriculum/graph.js';
@@ -215,17 +215,37 @@ export function showCrowd(id, people) {
  */
 export function mapView(opts, centerId = null) {
   const wrap = h('div.map-wrap');
+  let turn = 0;
+  const flatMap = () => h('div.map-scroll', { tabindex: 0, 'aria-label': 'Journey map, scrollable' }, buildMap(opts));
   const draw = () => {
+    const mine = ++turn;
     const flat = !!getSettings().mapFlat;
-    const map = flat ? h('div.map-scroll', { tabindex: 0, 'aria-label': 'Journey map, scrollable' }, buildMap(opts)) : buildMap3d(opts);
+    const put = (map) => {
+      clear(wrap).append(
+        h('div.row.end', h('button.btn.small', { type: 'button', onclick: () => { setSetting({ mapFlat: !flat }); draw(); } }, flat ? '⛰️ 3D map' : '🗺️ Flat map')),
+        map);
+      if (!centerId) return;
+      requestAnimationFrame(() => {
+        if (map.centerOn) map.centerOn(centerId);
+        else { const here = mapLayout().nodes.find((n) => n.id === centerId); if (here) map.scrollLeft = place(here).x - map.clientWidth / 2; }
+      });
+    };
+    if (flat) { put(flatMap()); return; }
+    if (worldBuilt(opts.myPath)) { put(buildMap3d(opts)); return; }
+    // Building the 3D world takes seconds on a Chromebook. So the page is drawn first with the
+    // hiker where the map will be, and the world is built a piece at a time once that has reached
+    // the screen. The hiker keeps walking and the Flat map button works while it waits.
     clear(wrap).append(
-      h('div.row.end', h('button.btn.small', { type: 'button', onclick: () => { setSetting({ mapFlat: !flat }); draw(); } }, flat ? '⛰️ 3D map' : '🗺️ Flat map')),
-      map);
-    if (!centerId) return;
-    requestAnimationFrame(() => {
-      if (map.centerOn) map.centerOn(centerId);
-      else { const here = mapLayout().nodes.find((n) => n.id === centerId); if (here) map.scrollLeft = place(here).x - map.clientWidth / 2; }
-    });
+      h('div.row.end', h('button.btn.small', { type: 'button', onclick: () => { setSetting({ mapFlat: true }); draw(); } }, '🗺️ Flat map')),
+      h('div.map-scroll.map3d-wait', loading('Drawing the map…')));
+    const fail = (e) => {
+      // Never leave the hiker walking for ever: say so and show the flat map, which needs no world.
+      console.error(e);
+      if (mine !== turn) return;
+      toast('The 3D map could not be drawn, so here is the flat one.', 'error');
+      clear(wrap).append(flatMap());
+    };
+    requestAnimationFrame(() => prepareWorld(opts.myPath).then(() => { if (mine === turn) put(buildMap3d(opts)); }).catch(fail));
   };
   draw();
   return wrap;

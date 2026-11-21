@@ -863,6 +863,8 @@ ol.steps { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: colum
 .map3d-stage { position: sticky; left: 0; width: 100%; height: 730px; overflow: hidden; background: #b9d0e6; }
 .map3d-canvas { display: block; width: 100%; height: 730px; image-rendering: pixelated; }
 .map3d-spacer { height: 1px; margin-top: -1px; }
+/* Where the 3D map will be, while its world is built: the same height, so nothing jumps when it arrives. */
+.map3d-wait { display: grid; place-items: center; height: 734px; overflow: hidden; }
 .map3d-overlay { position: absolute; inset: 0; pointer-events: none; }
 .map3d-sign { position: absolute; left: 0; top: 6px; padding: 1px 10px; white-space: nowrap; font: 400 20px/1.3 var(--font-display); color: var(--ink); background: var(--card); border: 2px solid var(--line); border-radius: 4px; box-shadow: 2px 2px 0 rgba(0, 0, 0, .25); z-index: 900; }
 .pin { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
