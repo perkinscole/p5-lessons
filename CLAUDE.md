@@ -32,6 +32,8 @@ In the preview, sign in as anyone with `http://localhost:8081/?as=ari@school.tes
 
 To run every lesson's answer key in the real sandbox, run `npm start` and open `http://localhost:8080/tests/lessons.html` with the tab visible. Browsers pause animation in hidden tabs and off-screen frames, so a blank canvas or "BRAIN not-ready" there isn't necessarily a bug. Confirm ml5 training with an on-screen game. Add `?only=t1,mind/m6` to run just those lessons, or `?at=1` to run one at a time. Running four at a time in headless Chromium can leave some lessons without a frame drawn in time, so rerun failures with `?at=1` before treating them as bugs.
 
+The teacher installs a build by pasting `dist/` files into the Apps Script editor. A paste of `App` has twice arrived cut short, which left the app not starting with no useful message. So `tools/build-gas.mjs` wraps the packed text into 4,000-character lines and opens `App` and `P5` with a small check (`CHECK`) that knows how long the contents should be and says on screen when they are not. Keep both.
+
 There is no linter. `dist/` is committed and is what gets deployed, so run `npm run build` after any change to `js/`, `css/`, `gas/`, or `vendor/`.
 
 ## Architecture

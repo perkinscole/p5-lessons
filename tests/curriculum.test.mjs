@@ -787,3 +787,18 @@ test('a "read first" question sits on a step that shows code to add', () => {
   }
   assert.ok(found >= 8, 'Base Camp uses read-first questions');
 });
+
+test('the packed App and P5 files are in short lines and know their own length', async () => {
+  // They are pasted into Apps Script by hand. A paste cut short must be noticed, not silently fail to start.
+  const { readFileSync } = await import('node:fs');
+  for (const name of ['App', 'P5']) {
+    const text = readFileSync(new URL(`../dist/${name}.html`, import.meta.url), 'utf8');
+    assert.ok(Math.max(...text.split('\n').map((l) => l.length)) <= 4000, `${name} has a very long line`);
+    const want = JSON.parse(text.match(/var want = (\{[^}]*\});/)[1]);
+    for (const [id, size] of Object.entries(want)) {
+      const body = text.match(new RegExp(`id="${id}"[^>]*>([\\s\\S]*?)</script>`))[1].replace(/\s+/g, '');
+      assert.equal(body.length, size, `${name}: ${id}`);
+    }
+    assert.ok(text.trimEnd().endsWith('</script>'));
+  }
+});

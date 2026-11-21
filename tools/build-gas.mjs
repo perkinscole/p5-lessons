@@ -33,7 +33,41 @@ const css = await build({ stdin: { contents: read('vendor/codemirror/codemirror.
 // bundle (template literals holding lesson code). So code ships as base64 text, which nothing
 // rewrites, and a short loader in plain ES5 decodes it and runs it.
 const b64 = (t) => Buffer.from(t, 'utf8').toString('base64');
-const encoded = (t, id) => `<script type="text/plain" id="${id}" data-encoding="base64">${b64(t)}</script>\n`;
+// These files are pasted into the Apps Script editor by hand, and a paste has twice arrived cut
+// short, which left the app silently not starting. So: the text is wrapped into short lines (one
+// line a megabyte long is what editors and clipboards handle worst), and each file opens with a
+// small check that knows how long its contents should be and says so on screen when they are not.
+const wrap = (t) => t.replace(/(.{4000})/g, '$1\n');
+const CHECK = (file, sizes) => `<script>
+(function () {
+  var want = ${JSON.stringify(sizes)};
+  function look() {
+    for (var id in want) {
+      var el = document.getElementById(id);
+      var got = el ? el.textContent.replace(/\\s+/g, '').length : 0;
+      if (got === want[id]) continue;
+      window.__ptStarted = true;
+      var old = document.querySelector('.boot-screen');
+      if (old) old.remove();
+      var box = document.createElement('div');
+      box.style.cssText = 'max-width:640px;margin:40px auto;padding:20px;border:3px solid #c43f29;background:#fff;color:#2b2350;font:16px/1.5 system-ui,sans-serif';
+      var h = document.createElement('h2');
+      h.textContent = 'The ${file} file was not pasted completely.';
+      var p = document.createElement('p');
+      p.textContent = 'It has ' + got.toLocaleString() + ' of ' + want[id].toLocaleString() + ' characters. In the Apps Script editor, open ${file}, select everything, delete it, and paste the whole ${file}.html file from the zip again. Then publish a new version.';
+      var q = document.createElement('p');
+      q.textContent = 'Students: this is not your fault. Tell your teacher.';
+      box.appendChild(h); box.appendChild(p); box.appendChild(q);
+      document.body.insertBefore(box, document.body.firstChild);
+      return;
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', look); else look();
+})();
+</script>
+`;
+const sizeOf = (t) => b64(t).length;
+const encoded = (t, id) => `<script type="text/plain" id="${id}" data-encoding="base64">\n${wrap(b64(t))}\n</script>\n`;
 const LOADER = `<script>
 (function () {
   function text(id) {
@@ -50,12 +84,12 @@ const LOADER = `<script>
 })();
 </script>
 `;
-writeFileSync(path('dist/App.html'), encoded(cm, 'cm-src') + encoded(app.outputFiles[0].text, 'app-src') + LOADER);
+writeFileSync(path('dist/App.html'), CHECK('App', { 'cm-src': sizeOf(cm), 'app-src': sizeOf(app.outputFiles[0].text) }) + encoded(cm, 'cm-src') + encoded(app.outputFiles[0].text, 'app-src') + LOADER);
 writeFileSync(path('dist/Styles.html'), `<style>${css.outputFiles[0].text}</style>\n`);
 // Apps Script rejects an HTML file that is bare script text, so libraries go inside a
 // text/plain script tag. The browser reads them out as text.
 const asText = (t, id) => `<script type="text/plain"${id ? ` id="${id}"` : ''}>${t}</script>\n`;
-writeFileSync(path('dist/P5.html'), encoded(safeInline(read('vendor/p5.min.js')), 'p5-src'));
+writeFileSync(path('dist/P5.html'), CHECK('P5', { 'p5-src': sizeOf(safeInline(read('vendor/p5.min.js'))) }) + encoded(safeInline(read('vendor/p5.min.js')), 'p5-src'));
 copyFileSync(path('gas/Index.html'), path('dist/Index.html'));
 // ml5 is about 4 MB, so it travels in pieces about the size of the p5 file.
 // Made safe before splitting, so no piece can end its script tag early.
