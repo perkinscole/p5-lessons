@@ -1,6 +1,6 @@
 # Making the Apps Script build smaller and faster
 
-Instructions for a future change. Step 1 is done (see below); the rest is not. Do the steps in order: they are sorted by how much they save for how little risk. Stop after any step that gets you where you need to be.
+Steps 1, 2 and 4 are done (see under each). Step 3 is not, on purpose: it is the risky one and has not been needed. The steps are sorted by how much they save for how little risk.
 
 ## Where the size is now
 
@@ -71,6 +71,25 @@ Not measured: the load time on a school Chromebook before and after.
 
 Saving: about 26 KB of 669 KB. Small, but free.
 
+### Step 2 is done
+
+`tools/build-gas.mjs` passes `DEMO: 'false'` to esbuild, and `js/main.js` only reaches for the demo store when `DEMO` is missing or true, so esbuild drops `local.js` from the packed app. Run from the files (`npm start`), `DEMO` does not exist and nothing changes.
+
+| | Before | Now |
+| --- | --- | --- |
+| App bundle, minified | 671,676 bytes | 642,489 bytes (29 KB less) |
+| App bundle, gzip then base64 | 305,800 characters | 292,136 characters |
+| `App.html` | 398,708 bytes | 385,041 bytes |
+
+Those are for this step alone. With the map changes of step 4 added, the bundle is 644,399 bytes and `App.html` is 386,089 bytes.
+
+Two guards, because this changes what the packed app can do:
+
+- The build stops with an error if the demo store's storage key (`pixeltrail.demo.v1`) is found in the bundle, so a later change to `main.js` cannot quietly bring it back.
+- The packed app has no demo to fall back on. Opened anywhere without `google.script`, it throws "This copy of Pixel Trail only runs on Google Apps Script…", which `Index.html` shows in its "could not start" card.
+
+Checked: demo mode signs in as a student and as the teacher; `npm run preview` starts, and its Student view opens the 3D map; a preview of a build with `App.html` cut short shows "The App file was not pasted completely", and one with damaged contents of the right length shows "Pixel Trail could not start."
+
 ## Step 3: load lessons a road at a time
 
 A student uses one road: Base Camp, the Crossings, and one of four roads, plus Beyond. Today every road's lessons are in the bundle. Splitting `platformer.js`, `adventure.js`, `arcade.js` and `mind.js` (about 30 KB each) and the Beyond lessons (`lowpoly.js`, `sound.js`, `big.js`) into files fetched when needed would cut roughly 90 to 150 KB from a student's first load.
@@ -95,6 +114,28 @@ If it is too slow in class, in this order:
 4. Only then look at the lighting and far-country passes, which are the new work in `buildWorld`.
 
 Students already have a way out: the **Flat map** button, which remembers the choice.
+
+### Step 4 is done
+
+Measured in headless Chromium on a development machine with the CPU slowed four times (`Emulation.setCPUThrottlingRate`), standing in for a Chromebook. No real Chromebook has been timed. The numbers move by a few hundred milliseconds from run to run.
+
+| At 4x slower | Before | Now |
+| --- | --- | --- |
+| Building the world (`buildWorld`) | 3.8 to 4.3 s | 2.8 to 3.3 s of work |
+| Longest time the page cannot respond | 3.9 to 4.4 s | 0.5 to 0.8 s |
+| First draw once the world is built | 0.2 to 0.3 s | the same |
+| Opening the map again in the same visit | 0.2 to 0.3 s, no rebuild | the same |
+
+At full speed the build went from about 0.92 s to about 0.80 s of work, and the longest pause from 0.94 s to 0.17 s.
+
+What changed:
+
+1. **Measuring.** `map3d.js` records `map3d buildWorld` and `map3d first draw` with `performance.measure`. On a Chromebook, open the map, then run `performance.getEntriesByType('measure')` in the console. For a sliced build the entry's `detail` has `worked` (milliseconds of actual work) and `longest` (the longest single piece).
+2. **The page is drawn first.** `mapView` in `map.js` shows `loading('Drawing the map…')` in a box the height of the map, then builds the world. `buildWorld` is a generator: each `yield` is a place it can pause. `prepareWorld` runs it 30 ms at a time with a pause between, so the hiker keeps walking and the **Flat map** button works during the wait. The pieces are the same work in the same order; a generator run straight through was no slower than the plain function. If the build fails, the page says so and shows the flat map.
+3. **The world is kept for the visit.** This was already there: `worlds` in `map3d.js`, keyed by the student's road, which is all `buildWorld` depends on. `worldBuilt` lets `mapView` skip the wait when it is. Nothing is put in `localStorage`.
+4. **One cheap win.** `paintGround` in `overworld.js` filled a one-pixel rectangle for each of about half a million ground pixels. It now writes them into the picture directly. That took roughly a quarter off the build. The 3D picture is unchanged: the canvas at five scroll positions, start to end of the trail, is byte-for-byte identical before and after (0 pixels differ).
+
+What is left if it is still too slow: the longest single piece is `buildHeights` in `terrain.js`, about half a second at 4x, which cannot pause without being rewritten. The lighting loop and the far-country passes were not changed.
 
 ## What not to do
 

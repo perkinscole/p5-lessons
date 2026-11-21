@@ -28,9 +28,12 @@ const app = await build({
   entryPoints: [fileURLToPath(path('js/main.js'))],
   bundle: true, minify: true, format: 'iife', write: false, target: 'es2020', legalComments: 'none',
   // BUILD_ID names this copy of ml5, so each device downloads it once and again only when it changes.
-  define: { 'import.meta.url': '""', BUILD_ID: JSON.stringify(createHash('sha1').update(read('vendor/ml5.min.js')).digest('hex').slice(0, 12)) },
+  // DEMO: false drops js/data/local.js, the demo store, which Apps Script never uses (see main.js).
+  define: { 'import.meta.url': '""', DEMO: 'false', BUILD_ID: JSON.stringify(createHash('sha1').update(read('vendor/ml5.min.js')).digest('hex').slice(0, 12)) },
   logOverride: { 'empty-import-meta': 'silent' },
 });
+// The demo store must really be gone: if a later change to main.js brings it back, say so here.
+if (app.outputFiles[0].text.includes('pixeltrail.demo.v1')) throw new Error('The demo store (js/data/local.js) is in the Apps Script bundle. Check the DEMO test in js/main.js.');
 const css = await build({ stdin: { contents: read('vendor/codemirror/codemirror.css') + read('css/app.css'), loader: 'css' }, minify: true, write: false });
 
 // Apps Script rewrites inline JavaScript on its way to the browser, and that breaks some of the

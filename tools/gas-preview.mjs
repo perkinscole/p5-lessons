@@ -17,6 +17,8 @@ const classroom = {
   subs: { gc1: [{ userId: 'u1', courseWorkId: 'a1', state: 'CREATED' }, { userId: 'u2', courseWorkId: 'a1', state: 'RETURNED', assignedGrade: 9 }, { userId: 'u3', courseWorkId: 'a1', state: 'TURNED_IN', late: true }, { userId: 'u1', courseWorkId: 'a2', state: 'CREATED' }] },
 };
 const DIST = process.env.PT_DIST || 'dist';
+// PT_PORT moves the preview off 8081, for running two at once.
+const PORT = Number(process.env.PT_PORT) || 8081;
 const server = createServer({ owner: OWNER, codeFile: `../${DIST}/Code.gs`, htmlDir: `../${DIST}`, classroom });
 const dist = (f) => readFileSync(new URL(`../${DIST}/${f}`, import.meta.url), 'utf8');
 
@@ -53,4 +55,4 @@ createHttp((req, res) => {
   // Same sandbox flags Google gives web apps, so frame-related problems show up here too.
   res.end(`<!doctype html><title>Pixel Trail (Apps Script preview)</title><style>html,body,iframe{margin:0;width:100%;height:100%;border:0}</style>
 <iframe sandbox="allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-top-navigation-by-user-activation" src="/app?as=${encodeURIComponent(email)}"></iframe>`);
-}).listen(8081, () => console.log('Apps Script preview: http://localhost:8081/?as=teacher@school.test'));
+}).listen(PORT, () => console.log(`Apps Script preview: http://localhost:${PORT}/?as=teacher@school.test`));
