@@ -15,7 +15,7 @@ function draw() {
   steps: [
     {
       title: 'Meet the grid', mins: 5,
-      say: 'Press **Run**. The blue square is your **canvas**, 400 dots wide and 400 tall. Press **Grid** above your code to see the numbers, and move your mouse over the canvas to read any spot.\n\nPositions are written `(x, y)`. `x` counts dots from the left. `y` counts dots from the **top**, so bigger `y` means lower down. Most people expect the opposite, so keep this one in mind.',
+      say: 'Press **Run**. The blue square is your **canvas**, 400 dots wide and 400 tall. Press **Grid** above your code to see the numbers, and move your mouse over the canvas to read any spot.\n\nThe two numbers for a spot are its **coordinates**, written `(x, y)`. The `x` coordinate is **horizontal**: it counts dots across from the left. The `y` coordinate is **vertical**: it counts dots down from the **top**, so bigger `y` means lower down. Most people expect the opposite, so keep this one in mind.',
     },
     {
       title: 'Where your code lives', mins: 4,
