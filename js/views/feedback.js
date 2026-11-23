@@ -8,7 +8,7 @@
 import { h, clear, debounce, toast, attempt, download } from '../ui.js';
 import { app } from '../main.js';
 import { getLesson, allLessons } from '../curriculum/engine.js';
-import { buildReport, troubleSteps, quizRows, REASONS, stalledList } from '../curriculum/report.js';
+import { buildReport, mergeFeedback, troubleSteps, quizRows, REASONS, stalledList } from '../curriculum/report.js';
 import { XP } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
 import { chime } from '../celebrate.js';
@@ -225,7 +225,31 @@ async function copyText(text) {
 
 /** The class's Feedback tab. */
 export async function feedbackTab(cls, students) {
-  const entries = (await app.store.lessonRatings(cls.id)).filter((e) => getLesson(e.lesson_id));
+  return feedbackPage(await app.store.lessonRatings(cls.id), { className: cls.name, students: students.length, file: cls.name },
+    h('p.small', h('a', { href: '#/feedback' }, 'See feedback from all your classes together')));
+}
+
+/** Every class's feedback added together, so a lesson's trouble spots show up with more students behind them. */
+export async function viewAllFeedback() {
+  const classes = await app.store.listClasses();
+  if (!classes.length) return h('section.card.stack', h('h1', 'Feedback from all classes'), h('p', 'No classes yet.'));
+  // Everything is asked for at once, so it travels together.
+  const [lists, rosters] = await Promise.all([
+    Promise.all(classes.map((c) => app.store.lessonRatings(c.id))),
+    Promise.all(classes.map((c) => app.store.listStudents(c.id))),
+  ]);
+  const students = rosters.reduce((a, r) => a + r.length, 0);
+  const names = classes.map((c) => c.name).join(', ');
+  return h('div.stack',
+    h('div', h('p.eyebrow', h('a', { href: '#/' }, 'Classes')), h('h1', 'Feedback from all classes'),
+      h('p.muted', { translate: 'no' }, `${classes.length} class${classes.length === 1 ? '' : 'es'} · ${students} student${students === 1 ? '' : 's'} · ${names}`)),
+    await feedbackPage(mergeFeedback(lists), { className: `All classes (${names})`, students, file: 'all-classes' }, null));
+}
+
+async function feedbackPage(raw, about, extra) {
+  const cls = { name: about.file };
+  const students = { length: about.students };
+  const entries = raw.filter((e) => getLesson(e.lesson_id));
   const said = (e) => e.count || Object.keys(e.flags || {}).length || Object.keys(e.help || {}).length || Object.keys(e.quiz || {}).length;
   const useful = entries.filter(said);
   if (!useful.length) {
@@ -234,7 +258,7 @@ export async function feedbackTab(cls, students) {
   }
   const order = allLessons().map((l) => l.id);
   useful.sort((a, b) => order.indexOf(a.lesson_id) - order.indexOf(b.lesson_id));
-  const info = { className: cls.name, students: students.length, date: new Date().toLocaleDateString('en-CA') };
+  const info = { className: about.className, students: students.length, date: new Date().toLocaleDateString('en-CA') };
   const report = (only) => buildReport(useful, info, only);
   const copy = async (only) => { toast(await copyText(report(only)) ? 'Report copied. Paste it to Claude.' : "Couldn't copy. Use Download instead.", 'info'); };
   const rated = useful.filter((e) => e.count);
@@ -267,5 +291,6 @@ export async function feedbackTab(cls, students) {
         h('button.btn.primary', { type: 'button', onclick: () => copy() }, '📋 Copy report for Claude'),
         h('button.btn', { type: 'button', onclick: () => download(`${cls.name}-lesson-feedback.md`, report(), 'text/markdown') }, '⬇ Download .md')),
       h('p.muted.small', 'The report lists each lesson\'s file, its confusing steps, missed questions, ratings, and comments, with no names. Students\' typed notes are included as written, so read it before sharing in case one mentions a name.')),
+    extra,
     useful.map(card));
 }

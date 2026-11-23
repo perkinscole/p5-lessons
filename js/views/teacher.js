@@ -23,7 +23,7 @@ export async function viewTeacherHome() {
     app.store.dataInfo().catch(() => null), app.store.bugReports().catch(() => [])]);
   const name = h('input', { required: true, maxlength: 80, placeholder: 'Period 3: Game Design', 'aria-label': 'New class name' });
   return h('div.stack',
-    h('div.row.between', h('h1', 'Your classes'), app.store.hasClassroom && h('button.btn', { onclick: () => openImport(render) }, 'Import from Google Classroom')),
+    h('div.row.between', h('h1', 'Your classes'), h('div.row', classes.length > 0 && h('a.btn', { href: '#/feedback' }, '💬 Feedback from all classes'), app.store.hasClassroom && h('button.btn', { onclick: () => openImport(render) }, 'Import from Google Classroom'))),
     classes.length
       ? h('div.class-grid', classes.map((c) => h('a.card.class-card', { href: `#/class/${c.id}` }, h('h2', c.name), alerts[c.id] > 0 && h('p.alert-chip', `${alerts[c.id]} need${alerts[c.id] === 1 ? 's' : ''} a check-in`), c.code && h('p', 'Class code: ', h('strong.code', c.code)))))
       : h('p.muted', 'No classes yet. Make your first one below.'),

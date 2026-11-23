@@ -8,15 +8,18 @@ const first = (step, ...rest) => ({ ...Q(step, ...rest), before: true });
 
 export const CHECKS = {
   t1: [
-    Q(2, 'What goes between the numbers inside the parentheses?', ['A semicolon', 'A comma', 'Nothing'], 1, 'Commas split the numbers. A semicolon ends the line.', 'ellipse(340, 60, 70, 70);'),
-    Q(2, 'Which mark is missing from this line?', ['A comma', 'A )', 'A ;'], 1, 'Every ( needs a matching ).', 'rect(0, 320, 400, 80;'),
-    first(4, 'Where does this square appear?', ['Bottom right', 'Top left', 'Center'], 1, 'x and y both start at 0, the top left corner.', 'rect(0, 0, 50, 50);'),
-    Q(0, 'Which way does a bigger `y` move a shape?', ['Up', 'Down', 'Right'], 1, 'y counts down from the top. Turn on Grid to see it.'),
-    first(3, 'In this line, which number is the width?', ['340', '60', '70'], 2, 'The order is x, y, width, height.', 'ellipse(340, 60, 70, 30);'),
-    Q(5, 'Where does a `rect` start drawing?', ['Its center', 'Its bottom edge', 'Its top-left corner'], 2, 'x and y are the top-left corner.'),
+    // After the first class's feedback (most missed: where a rect starts, which number is the width, which
+    // way y goes), each explanation now says why the answer is right and what the common mix-up is.
+    // Positions are unchanged, because saved answers are stored by position.
+    Q(2, 'What goes between the numbers inside the parentheses?', ['A semicolon', 'A comma', 'Nothing'], 1, 'A comma goes between each number, so the computer can tell them apart. The semicolon comes once, at the very end of the line.', 'ellipse(340, 60, 70, 70);'),
+    Q(2, 'Which mark is missing from this line?', ['A comma', 'A )', 'A ;'], 1, 'The line opens a `(` after `rect` and never closes it. Every `(` needs a `)` before the `;`.', 'rect(0, 320, 400, 80;'),
+    first(4, 'Where does this square appear?', ['Bottom right', 'Top left', 'Center'], 1, 'The first two numbers are x and y, and both are 0. Zero across and zero down is the top-left corner of the canvas.', 'rect(0, 0, 50, 50);'),
+    Q(0, 'Which way does a bigger `y` move a shape?', ['Up', 'Down', 'Right'], 1, 'On the canvas, y counts down from the top, so a bigger y is lower. This is the opposite of a graph in math class. Turn on Grid to check.'),
+    first(3, 'The four numbers are x, y, width, height. Which one is the width here?', ['340', '60', '70'], 2, 'The numbers always come in the same order: x, y, width, height. The first two say where it goes. The third, 70, is how wide it is.', 'ellipse(340, 60, 70, 30);'),
+    Q(5, 'The `x` and `y` of a `rect` name which spot on it?', ['Its center', 'Its bottom edge', 'Its top-left corner'], 2, 'A `rect` is placed by its top-left corner and grows right and down from there. An `ellipse` is different: it is placed by its center.'),
     // Added later. Saved answers are stored by position in this list, so new questions go at the end.
-    Q(1, 'Which line closes `draw()`?', ['Line 1', 'Line 2', 'Line 3'], 2, 'The `}` on line 3 closes the function that `{` opened on line 1.', 'function draw() {\n  background(0);\n}'),
-    Q(1, 'Where does new drawing code for `draw()` go?', ['Above `function draw() {`', 'Between its `{` and `}`', 'After its closing `}`'], 1, 'Only code between the braces belongs to draw().'),
+    Q(1, 'Which line closes `draw()`?', ['Line 1', 'Line 2', 'Line 3'], 2, 'Line 1 opens the function with `{`. Line 3 is the `}` that closes it. Line 2 is the code inside.', 'function draw() {\n  background(0);\n}'),
+    Q(1, 'Where does new drawing code for `draw()` go?', ['Above `function draw() {`', 'Between its `{` and `}`', 'After its closing `}`'], 1, 'Only the lines between `{` and `}` belong to `draw()`. Code above or below them is outside the function and will not run with it.'),
     // The same idea somewhere else, to see whether it travels.
     Q(7, "A map app puts a pin at (x, y). What do the two numbers say?", ["How big the pin is", "How far across and how far down", "What color the pin is"], 1, "Coordinates name a spot: across, then down."),
   ],

@@ -945,3 +945,24 @@ test('the click-through check flags skipped steps, guessing, and blank reflectio
   const list = worthALook([{ ...good, id: 'a' }, { ...rushed, id: 'b' }, { ...rushed, id: 'c', status: 'in_progress' }, { ...good, id: 'd', reflection: '' }, { lesson_id: 'zz', status: 'submitted' }]);
   assert.deepEqual(list.map((x) => x.work.id), ['b', 'd']);
 });
+
+test('feedback from several classes adds up into one list per lesson', async () => {
+  const { mergeFeedback } = await import('../js/curriculum/report.js');
+  const a = [{ lesson_id: 't1', started: 9, finished: 7, count: 3, average: 4, stars: [0, 0, 1, 1, 1], confusing: { pace: 1 }, steps: { 3: 1 }, comments: ['fun'], hardest: ['x and y'], better: [], flags: { 'step:3': { count: 1, reasons: { unclear: 1 }, notes: ['huh'] } }, help: { 6: 1 }, quiz: { 5: { tries: 9, missed: 6 }, 0: { tries: 9, missed: 3 } } }];
+  const b = [{ lesson_id: 't1', started: 20, finished: 18, count: 1, average: 2, stars: [0, 1, 0, 0, 0], confusing: { pace: 2 }, steps: {}, comments: [], hardest: [], better: ['more examples'], flags: { 'step:3': { count: 2, reasons: { unclear: 1, toohard: 1 }, notes: [] }, 'quiz:1': { count: 1, reasons: { unclear: 1 }, notes: [] } }, help: { 6: 2, 1: 1 }, quiz: { 5: { tries: 20, missed: 4 } } },
+    { lesson_id: 't3', started: 5, finished: 5, count: 0, average: 0, stars: [0, 0, 0, 0, 0], confusing: {}, steps: {}, comments: [], hardest: [], better: [], flags: {}, help: {}, quiz: {} }];
+  const all = mergeFeedback([a, b, []]);
+  assert.deepEqual(all.map((e) => e.lesson_id), ['t1', 't3']);
+  const t1 = all[0];
+  assert.deepEqual([t1.started, t1.finished, t1.count], [29, 25, 4]);
+  assert.deepEqual(t1.stars, [0, 1, 1, 1, 1]);
+  assert.equal(t1.average, 3.5);
+  assert.deepEqual(t1.quiz, { 5: { tries: 29, missed: 10 }, 0: { tries: 9, missed: 3 } });
+  assert.deepEqual(t1.flags['step:3'], { count: 3, reasons: { unclear: 2, toohard: 1 }, notes: ['huh'] });
+  assert.deepEqual(t1.help, { 6: 3, 1: 1 });
+  assert.deepEqual(t1.confusing, { pace: 3 });
+  assert.deepEqual([t1.comments, t1.hardest, t1.better], [['fun'], ['x and y'], ['more examples']]);
+  // The inputs are left as they were, and one class alone comes back unchanged in what it says.
+  assert.equal(a[0].started, 9);
+  assert.equal(mergeFeedback([a])[0].average, 4);
+});

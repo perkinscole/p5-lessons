@@ -114,6 +114,45 @@ export function buildBugReport(bugs, info = {}) {
   return lines.join('\n');
 }
 
+/**
+ * Feedback from several classes added into one list, one entry per lesson. Takes what
+ * `lessonRatings` returns for each class and gives the same shape back, so every page and report
+ * that reads one class's feedback can read all of it.
+ */
+export function mergeFeedback(lists) {
+  const byLesson = new Map();
+  const add = (into, from) => { for (const [k, n] of Object.entries(from || {})) into[k] = (into[k] || 0) + n; };
+  for (const e of (lists || []).flat()) {
+    if (!e || !e.lesson_id) continue;
+    if (!byLesson.has(e.lesson_id)) {
+      byLesson.set(e.lesson_id, { lesson_id: e.lesson_id, started: 0, finished: 0, count: 0, sum: 0, stars: [0, 0, 0, 0, 0], confusing: {}, steps: {}, comments: [], hardest: [], better: [], flags: {}, help: {}, quiz: {} });
+    }
+    const t = byLesson.get(e.lesson_id);
+    t.started += e.started || 0;
+    t.finished += e.finished || 0;
+    t.count += e.count || 0;
+    (e.stars || []).forEach((n, i) => { t.stars[i] += n || 0; t.sum += (n || 0) * (i + 1); });
+    add(t.confusing, e.confusing);
+    add(t.steps, e.steps);
+    add(t.help, e.help);
+    for (const k of ['comments', 'hardest', 'better']) t[k].push(...(e[k] || []));
+    for (const [target, f] of Object.entries(e.flags || {})) {
+      const into = t.flags[target] || { count: 0, reasons: {}, notes: [] };
+      into.count += f.count || 0;
+      add(into.reasons, f.reasons);
+      into.notes.push(...(f.notes || []));
+      t.flags[target] = into;
+    }
+    for (const [q, tally] of Object.entries(e.quiz || {})) {
+      const into = t.quiz[q] || { tries: 0, missed: 0 };
+      into.tries += tally.tries || 0;
+      into.missed += tally.missed || 0;
+      t.quiz[q] = into;
+    }
+  }
+  return [...byLesson.values()].map(({ sum, ...t }) => ({ ...t, average: t.count ? Math.round((sum / t.count) * 10) / 10 : 0 }));
+}
+
 export function buildReport(entries, info, only) {
   const order = allLessons().map((l) => l.id);
   const list = entries.filter((e) => getLesson(e.lesson_id) && (!only || e.lesson_id === only)).sort((a, b) => order.indexOf(a.lesson_id) - order.indexOf(b.lesson_id));
