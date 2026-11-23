@@ -179,12 +179,24 @@ test('each lesson has well-formed checks for learning, in the walkthrough', () =
   for (const i of [0, 1, 2]) assert.ok(answers.filter((a) => a === i).length > total / 5, 'answers lean toward one position');
 });
 
+const PLAIN = new Set(['t1', 't3', 't4']);
 test('each step opens with one short instruction', () => {
   for (const l of allLessons()) {
     for (const s of l.steps) {
       const { brief } = briefOf(s);
       assert.ok(brief.length > 0, `${l.id} / ${s.title} has no instruction`);
-      assert.ok(brief.split(/\s+/).length <= 26, `${l.id} / ${s.title}: ${brief.split(/\s+/).length} words`);
+      // Lessons rewritten in plain sentences (PLAIN) say the idea, then what to do. They may be longer,
+      // but no sentence may run on, and the last paragraph is the action. The rest keep the old short limit.
+      const plain = PLAIN.has(l.id);
+      const count = brief.split(/\s+/).length;
+      assert.ok(count <= (plain ? 75 : 26), `${l.id} / ${s.title}: ${count} words`);
+      if (plain) {
+        const paragraphs = brief.split(/\n{2,}/);
+        assert.ok(paragraphs.length >= 2 && paragraphs.length <= 3, `${l.id} / ${s.title}: an idea, then what to do`);
+        for (const sentence of brief.replace(/`[^`]*`/g, 'code').split(/(?<=[.!?:])\s+/)) {
+          assert.ok(sentence.split(/\s+/).length <= 26, `${l.id} / ${s.title}: a sentence runs on: ${sentence}`);
+        }
+      }
     }
   }
 });
@@ -910,4 +922,26 @@ test('a class file holds the class, and what would be sent on leaves out who eac
   assert.ok(pieces.length > 1 && pieces.every((p) => p.works.length >= 1));
   assert.equal(pieces.flatMap((p) => p.works).length, 5);
   assert.ok(pieces[0].profile && !pieces[1].profile, 'the profile travels once');
+});
+
+test('the click-through check flags skipped steps, guessing, and blank reflections, and nothing else', async () => {
+  const { effortOf, worthALook } = await import('../js/curriculum/effort.js');
+  const t1 = getLesson('t1');
+  const good = { lesson_id: 't1', status: 'submitted', checks_passed: 6, checks_total: 6, quiz_first: { 0: true, 1: true, 2: false, 3: true }, reflection: 'The top left corner. You change y and it gets bigger.' };
+  assert.deepEqual(effortOf(good).notes, []);
+  assert.equal(effortOf(good).level, 'ok');
+  // One sign is worth a look; two or more reads as clicked through.
+  assert.equal(effortOf({ ...good, reflection: '' }).level, 'look');
+  const rushed = { ...good, id: 'w2', checks_passed: 1, quiz_first: { 0: false, 1: false, 2: true, 3: false }, reflection: 'idk' };
+  assert.equal(effortOf(rushed).level, 'rushed');
+  assert.equal(effortOf(rushed).notes.length, 3);
+  // Two wrong first tries is not enough to call guessing, and a missing record is not a flag.
+  assert.equal(effortOf({ ...good, quiz_first: { 0: false, 1: false } }).level, 'ok');
+  assert.equal(effortOf({ ...good, quiz_first: undefined }).level, 'ok');
+  // Unchanged code is only checked when the code is given.
+  assert.equal(effortOf(good, t1.starter).notes.length, 1);
+  assert.equal(effortOf(good, `${t1.starter}\nellipse(1, 2, 3, 4);`).notes.length, 0);
+  // Only handed-in work is listed, worst first, and an unknown lesson never throws.
+  const list = worthALook([{ ...good, id: 'a' }, { ...rushed, id: 'b' }, { ...rushed, id: 'c', status: 'in_progress' }, { ...good, id: 'd', reflection: '' }, { lesson_id: 'zz', status: 'submitted' }]);
+  assert.deepEqual(list.map((x) => x.work.id), ['b', 'd']);
 });

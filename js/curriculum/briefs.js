@@ -5,17 +5,33 @@ import { getLesson } from './engine.js';
 const RESET = 'Write a function called `resetGame` at the bottom that puts every starting value back.';
 
 const BRIEFS = {
+  // The first three lessons, rewritten after the teacher found the short versions too terse to follow:
+  // each says the idea in whole sentences first, then (after a blank line) exactly what to do.
+  "t1/Meet the grid": "Your game is drawn on the blue square, called the **canvas**. It is made of tiny dots: 400 across and 400 down.\n\nThe **Grid** draws numbered lines over the canvas, like graph paper, so you can find any dot. Every dot has two numbers, its **coordinates**: `x` counts across from the left, and `y` counts **down** from the top.\n\nPress **Run**, then turn on **Grid**. Move your mouse over it and read the numbers.",
+  "t1/Where your code lives": "Code is grouped into **functions**. A function is a named set of instructions. It starts at `{` and ends at `}`, and the lines between those two marks belong to it.\n\nFind `function draw() {` on line 5 and its closing `}` on line 7. Everything you draw today goes **between** those two lines.",
+  "t1/How a line of code is built": "Every drawing command is written the same way. The computer only understands it when every mark is in place, so learn the marks first.\n\nLook at line 6. Find the **name** of the command, the `( )` around its numbers, the **commas** between the numbers, and the `;` that ends the line.",
+  "t1/Add a sun": "`ellipse` draws a circle or an oval. It needs four numbers: `x` and `y` say **where** its middle goes, then the width and height say **how big** it is.\n\nType this line below `background`. It puts a sun near the top right corner:",
+  "t1/Add the ground": "`rect` draws a rectangle. Its `x` and `y` are its **top-left corner**, not its middle. After them come its width and its height.\n\nType this line below the sun. It lays a strip of ground along the bottom of the canvas:",
+  "t1/Add color": "`fill` chooses the color for every shape drawn **after** it, like dipping a brush in paint. Its three numbers say how much red, green and blue to mix, each from 0 to 255.\n\nType one `fill` line above the sun to make it yellow, and another above the ground to make it green:",
+  "t1/Draw a character": "Now use what you know, with no line to copy. You can use `rect`, `ellipse`, and `line(x1, y1, x2, y2)`. Guess the numbers, press **Run**, and change them until it looks right.\n\nBuild a character that stands on the ground, from at least **three more** shapes.",
+  "t1/Read the error": "Everyone makes typing mistakes, so the computer tells you where they are. Practice reading that message now, while nothing is really wrong.\n\nDelete one `)` from any line and press **Run**. Read the message under your game, then put the `)` back.",
+  "t3/Why draw() matters": "Your sketch has two functions. `setup()` runs **once**, when the program starts. `draw()` runs again and again, about 60 times every second, and paints the whole picture each time.\n\nPress **Run** and watch the saucer. It stays still, because `draw()` paints it in the same spot every time.",
+  "t3/A name for a number": "To move the saucer, the computer has to remember where it is. A **variable** does that job: it is a name that holds a value.\n\nType this line at the very top, above `setup`. It makes a variable named `saucerX` and puts 50 in it:",
+  "t3/Use the name": "A variable does nothing until you use it. Wherever you write `saucerX`, the computer swaps in the value it holds, which is 50 right now.\n\nThe saucer is two shapes, and each one has a `50` for its `x`. Replace both of those `50`s with `saucerX`:",
+  "t3/One name, one change": "Both shapes now get their `x` from the same variable, so one change moves them both. See it for yourself.\n\nChange the `50` in your `let` line to `300` and press **Run**. Watch the whole saucer jump. Then change it back to `50`.",
+  "t3/See what it holds": "You cannot see what a variable holds unless you ask the computer to show you. `text` draws words on the canvas, so use it to print the value.\n\nType these lines at the end of `draw()`, just above its closing `}`:",
+  "t3/Change it every frame": "Now make the value change while the program runs. In code, `=` means **\"becomes\"**. This line says: `saucerX` becomes its old value plus 2.\n\nType it at the end of `draw()`. `draw()` runs 60 times a second, so watch the number climb and the saucer fly:",
+  "t3/Try removing background()": "Why does `draw()` start with `background` every time? Find out by turning that line off.\n\nType `//` in front of `background` and press **Run**. The saucer leaves a smear, because the old pictures are never painted over. Then delete the `//`.",
+  "t3/Your own variable": "Now do all three steps yourself. Make a variable with `let` at the top, use it in a shape, and change it at the end of `draw()`.\n\n**Make**, **use** and **change** a second variable for a new moving thing, such as a falling meteor.",
+  "t4/Variables p5 gives you": "Last lesson you made `saucerX` and changed it yourself. p5 also has variables that it makes and changes **for you**. `mouseX` and `mouseY` always hold where the mouse is.\n\nReplace the body's two position numbers with `mouseX` and `mouseY`, so the creature follows your mouse:",
+  "t4/Do math in the arguments": "The body follows the mouse now, but the eyes stay behind. Anywhere a number goes you can write math, such as `mouseX + 20`, and the computer works it out.\n\nChange the two eyes so each sits 20 dots to one side of the mouse and 10 dots above it:",
+  "t4/Check the mouse with if": "An `if` lets your program make a choice. It asks a question inside its `( )`, and runs the code inside its `{ }` **only when the answer is yes**.\n\nType these lines at the end of `draw()`. They open the creature's mouth while the mouse button is held down:",
+  "t4/Show a number on screen": "p5 changes `mouseX` and `mouseY` many times a second. Print them on the canvas so you can watch it happen, the same way you printed `saucerX`.\n\nType these lines at the end of `draw()`. Then move the mouse and watch the two numbers:",
+  "t4/Your creature, your rules": "Now use the mouse for an idea of your own. `mouseX` or `mouseY` could set a color, a size, or where a second shape sits.\n\nMake one more thing in your picture change when the mouse moves, by using `mouseX` or `mouseY` in a **new** place.",
   'c2/Use it somewhere new': 'Draw a **second sprite** for something else in your game. Load it in `preload()` the same way, and show it with `image`.',
   'c5/Use it somewhere new': 'Change your sort so the **smallest** score ends up first. Decide which line must change before you touch anything.',
   // Variables (t3, t4). Students finished these unable to say what a variable is, so each card says
   // one thing about it: it is a name for a value, you use it by name, and something changes it.
-  't3/A name for a number': 'A **variable** is a name that holds a value. This line makes one named `saucerX` that holds 50. Add it at the very top:',
-  't3/Use the name': 'Wherever you write `saucerX`, the computer uses the value it holds. Replace both `50`s in the saucer with `saucerX`.',
-  't3/One name, one change': 'Change the `50` in your `let` line to `300` and press **Run**. Both shapes move, because both use `saucerX`. Then put `50` back.',
-  't3/See what it holds': '`text` draws words on the canvas. Add this at the end of `draw()` to see the value `saucerX` holds:',
-  't3/Change it every frame': 'Read `=` as **"becomes"**: `saucerX` becomes its old value plus 2. Add this at the end of `draw()`, then watch the number climb.',
-  't3/Your own variable': '**Make** a second variable with `let` at the top, **use** it in a new shape, and **change** it at the end of `draw()`.',
-  't4/Variables p5 gives you': 'You made `saucerX` and changed it yourself. p5 makes `mouseX` and `mouseY` and changes them for you. Replace the body\'s position so it follows the mouse:',
   // Where a step brings in a new idea, the instruction names the idea first. It used to sit folded
   // under "Why?", and students typed the code without having met the word for it.
   "t6/Game over": "`||` means **or**: true if either side is true. Add this at the end of `draw()` to end the round:",
@@ -58,19 +74,10 @@ const BRIEFS = {
   "d1/Three directions": "`translate(x, y, z)` moves where you draw. `push` and `pop` keep that move from affecting anything else. Add ground above your box.",
   "e3/Pick from a list": "A scale is a list of notes, so `random` can choose from it. Add this below `// music goes here`.",
   // Lesson 1 names each command's parts on screen, since nothing has been explained yet.
-  't1/Meet the grid': 'Press **Run** to run your code, then **Grid**. `(x, y)` **coordinates**: `x` is horizontal. `y` is vertical and counts **down**, not up as you\'d expect.',
-  't1/Where your code lives': 'Find `function draw() {` on line 5 and its closing `}` on line 7. Your drawing code goes **between** them.',
-  't1/Add a sun': '`ellipse(x, y, width, height)` draws an oval: where it goes, then how big it is. Add this line below `background`:',
-  't1/Add the ground': '`rect(x, y, width, height)` draws a rectangle. Its `x` and `y` are its **top-left corner**. Add ground along the bottom:',
-  't1/Add color': '`fill(red, green, blue)` colors the shapes drawn after it. Each number is 0 to 255. Make the sun yellow and the ground green.',
-  't1/Draw a character': 'Build a character from at least **three more** shapes, standing on the ground. Try `rect`, `ellipse`, and `line(x1, y1, x2, y2)`.',
-  't1/Read the error': 'Make an error on purpose: delete one `)` and press Run. Read the message under your game, then put the `)` back.',
   // Steps whose first action, or what "it" means, was folded away under Why.
   'c5/Swap two items': 'Add this helper function, which swaps two items in a list.',
   't2/Mix a color': '`fill(red, green, blue)` colors every shape drawn after it. Add this line above the body:',
   't2/Break the order on purpose': 'Cut your body `ellipse` line and paste it **below** the eyes. Run it, then put it back so the eyes show.',
-  't3/Try removing background()': 'Put `//` in front of `background`, then Run to see a smear. Then remove the `//`.',
-  't4/Show a number on screen': '`text(what, x, y)` draws words on the canvas. Add this to show where the mouse is:',
   't5/Spot the problem': 'Press Run and watch the ball. It leaves and never comes back. Your code needs to check for the wall.',
   'p1/Tune the feel': 'Change `gravity` and the jump strength until jumping feels good. Try a moon level with gravity at 0.2.',
   'p2/Land on the platform': 'Add this landing check just above `// ground`. The player must be falling, over the platform, and at its top.',
@@ -113,8 +120,6 @@ const BRIEFS = {
   'm2/Winning and the score': 'Press **Add the starter code**, then finish the TODOs. Winning takes 100 points.',
   'c4/An ending screen': 'Write a function called `showEnding` with a win or lose message and the score.',
   't2/Make it yours': 'Add at least **two new features**, and make this monster your own.',
-  't1/How a line of code is built': 'Look at line 6. Find its parts: the **name**, the `( )`, the **commas**, and the `;` at the end.',
-  't3/Why draw() matters': '`setup()` runs once. `draw()` runs 60 times a second. Press Run and watch.',
   't5/Bounce off the right wall': 'Flip the direction when the ball passes the right wall.',
   't5/All four walls': 'Write the other three wall checks yourself.',
   't5/Fix the sinking edge': 'The ball sinks into the wall. Change the first check so its edge stops at the wall.',

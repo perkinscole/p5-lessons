@@ -1316,3 +1316,31 @@ code.say-idea { background: var(--sun); }
   .halves .sheet { break-after: auto; break-inside: avoid; min-height: 4.75in; }
   .halves .print-only { border-top: 1pt dashed #000; padding-top: .22in; }
 }
+
+/* An instruction written as an idea and then an action: the idea reads as ordinary text, and the
+   last paragraph, what to do, is the bold one. */
+.step-do .md p { margin: 0 0 .6em; }
+.step-do .md p:last-child { margin-bottom: 0; }
+.step-do .md p:not(:last-child) { font-weight: 400; }
+
+/* "I'm stuck" is the way to get the teacher, so it is a big yellow button, not a footnote. */
+.help-box { align-items: stretch; }
+.help-ask { display: flex; align-items: center; justify-content: flex-start; gap: 12px; width: 100%; padding: 10px 14px; text-align: left; background: var(--sun); color: #2b2350; border-width: 3px; box-shadow: 0 4px 0 var(--line); }
+.help-ask:hover, .help-ask:focus-visible { filter: brightness(1.06); transform: translateY(-1px); }
+.help-ask:active { transform: translateY(3px); box-shadow: none; }
+.help-ask .help-hand { font-size: 1.9rem; line-height: 1; }
+.help-ask strong { display: block; font: 400 1.35rem/1.1 var(--font-display); }
+.help-ask small { display: block; font-size: .9rem; font-weight: 700; }
+
+/* The teacher's check for work that was clicked through. */
+.look-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.look-list > li { padding: 8px 12px; border-left: 6px solid #e0a400; background: var(--paper-2); }
+.look-list > li.rushed { border-left-color: #c43f29; }
+.look-tag { margin-left: 10px; padding: 1px 8px; font-size: .78rem; font-weight: 700; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.look-list > li.rushed .look-tag { background: #c43f29; color: #fff; border-color: #c43f29; }
+.look-notes { margin: 4px 0 0; padding-left: 20px; font-size: .92rem; }
+.effort { padding: 8px 12px; border-left: 6px solid #1d8f58; background: var(--paper-2); }
+.effort.look { border-left-color: #e0a400; }
+.effort.rushed { border-left-color: #c43f29; }
+.cell.rushed { position: relative; }
+.cell.rushed::after { content: ''; position: absolute; top: 0; right: 0; border: 6px solid transparent; border-top-color: #c43f29; border-right-color: #c43f29; }

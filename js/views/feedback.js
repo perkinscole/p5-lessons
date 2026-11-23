@@ -109,7 +109,7 @@ export function helpBox(lessonId, getStep, startOpen) {
         h('button.btn.small', { type: 'button', onclick: async () => { if (await attempt(() => app.store.cancelHelp())) { waiting = false; watch(); draw(); } } }, 'I figured it out 👍'));
       return;
     }
-    el.append(h('button.btn.small', { type: 'button', onclick: ask }, "✋ I'm stuck: ask for help"));
+    el.append(h('button.btn.help-ask', { type: 'button', onclick: ask }, h('span.help-hand', { 'aria-hidden': 'true' }, '✋'), h('span', h('strong', "I'm stuck"), h('small', 'Ask my teacher for help'))));
   }
   function ask() {
     const note = h('input', { maxlength: 140, placeholder: 'What are you stuck on? (optional)', 'aria-label': 'What are you stuck on?' });

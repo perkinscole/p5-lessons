@@ -1,5 +1,6 @@
 // Teacher screens: classes, roster, gradebook, reviewing work, and browsing lessons.
 import { buildClassFile } from '../curriculum/classfile.js';
+import { effortOf, worthALook } from '../curriculum/effort.js';
 import { h, clear, toast, attempt, modal, confirmBox, download, md } from '../ui.js';
 import { app, go, render } from '../main.js';
 import { getLesson, rubricFor, checkSummary } from '../curriculum/engine.js';
@@ -230,6 +231,24 @@ function awardDialog(student, reload) {
 
 const csv = (v) => `"${String(v ?? '').replace(/"/g, '""').replace(/^([=+\-@])/, "'$1")}"`;
 
+/**
+ * Handed-in work that may have been clicked through: skipped steps, questions answered like
+ * guesses, an empty reflection. For the teacher only, and only ever a reason to look.
+ */
+function lookCard(works, nameOf) {
+  const found = worthALook(works).filter((x) => nameOf.has(x.work.student_id));
+  if (!found.length) return null;
+  const row = ({ work, effort }) => h('li', { class: effort.level },
+    h('a', { href: `#/review/${work.id}` }, h('strong', { translate: 'no' }, nameOf.get(work.student_id)), ` · ${getLesson(work.lesson_id).title}`),
+    h('span.look-tag', effort.level === 'rushed' ? 'Likely clicked through' : 'Worth a look'),
+    h('ul.look-notes', effort.notes.map((n) => h('li', n))));
+  return h('details.card.stack.look-card', { open: found.some((x) => x.effort.level === 'rushed') },
+    h('summary', h('strong', `Did they do the work? (${found.length} to check)`)),
+    h('p.muted.small', 'Work that was handed in with steps skipped, questions answered like guesses, or no reflection. These are reasons to look, not proof. Only you see this.'),
+    h('ul.look-list', found.slice(0, 30).map(row)),
+    found.length > 30 && h('p.muted.small', `And ${found.length - 30} more.`));
+}
+
 function gradebookTab(cls, students, works) {
   const SLOTS = sequence('platformer').length;
   const byKey = new Map(works.map((w) => [`${w.student_id}:${w.lesson_id}`, w]));
@@ -243,7 +262,10 @@ function gradebookTab(cls, students, works) {
     const title = getLesson(id).title;
     if (!w || w.status === 'in_progress') return h('td.cell', { title, class: w ? 'working' : 'none' }, w ? '…' : '');
     const label = w.grade ? `${w.grade.total}` : '●';
-    return h('td.cell', { class: w.status, title: `${title}: ${w.status}` }, h('a', { href: `#/review/${w.id}`, 'aria-label': `${s.display_name}, ${title}, ${w.status}` }, label));
+    // A corner mark on work that looks clicked through, so it stands out in the grid too.
+    const effort = effortOf(w);
+    const rushed = effort.level === 'rushed';
+    return h('td.cell', { class: `${w.status} ${rushed ? 'rushed' : ''}`, title: `${title}: ${w.status}${rushed ? `. Worth a look: ${effort.notes.join(' ')}` : ''}` }, h('a', { href: `#/review/${w.id}`, 'aria-label': `${s.display_name}, ${title}, ${w.status}${rushed ? ', may have been clicked through' : ''}` }, label));
   };
   const exportCsv = () => {
     const header = ['Student', 'Road', 'Lessons submitted', 'Total score', 'Total possible', ...Array.from({ length: SLOTS }, (_, i) => `L${i + 1}`)];
@@ -262,6 +284,7 @@ function gradebookTab(cls, students, works) {
       h('div.row.between', h('h2', `Waiting for review (${queue.length})`), queue.length > 0 && h('a.btn.primary', { href: `#/review/${queue[0].id}` }, 'Start reviewing')),
       queue.length ? h('ul.queue', queue.slice(0, 8).map((w) => h('li', h('a', { href: `#/review/${w.id}` }, h('strong', nameOf.get(w.student_id)), ` · ${getLesson(w.lesson_id).title}`, w.auto_ok ? '' : h('span.warn', ` · ${w.checks_passed} of ${w.checks_total} checks`))))) : h('p.muted', 'All caught up.'),
     ),
+    lookCard(works, nameOf),
     h('div.row.between', h('h2', 'Gradebook'), h('button.btn', { onclick: exportCsv }, 'Export CSV')),
     h('div.legend',
       h('span', h('i.key.submitted'), 'Needs review'), h('span', h('i.key.approved'), 'Approved'), h('span', h('i.key.returned'), 'Sent back'), h('span', h('i.key.working'), 'In progress'),
@@ -431,6 +454,7 @@ export async function viewReview(main, workId) {
         h('div.stack.tight', h('h3', `Reflection: "${lesson.reflect}"`), w.reflection ? h('blockquote', w.reflection) : h('p.muted', 'No reflection written.')),
         h('p.small', `Stretch goals claimed: ${w.stretch_done}`),
         w.quiz_total > 0 && h('p.small', `Quick checks right on the first try: ${w.quiz_right} of ${w.quiz_total}`),
+        effortPanel(w),
       ),
       h('section.stack', h('h2', 'Code'), host),
       w.team && teamPanel(w.team),
@@ -447,6 +471,17 @@ export async function viewReview(main, workId) {
   player.run(w.code, w.assets || {}, w.files || {});
   app.cleanup = () => { cm.stopSettings(); player.destroy(); };
   return null;
+}
+
+/** On the review page: what this work shows about the effort behind it. */
+function effortPanel(w) {
+  const effort = effortOf(w, w.code);
+  return h('div.stack.tight.effort', { class: effort.level },
+    h('h3', 'Did they do the work?'),
+    h('p.small', effort.facts.join(' · ')),
+    effort.notes.length
+      ? h('ul.look-notes', effort.notes.map((n) => h('li', n)))
+      : h('p.small.muted', 'Nothing here suggests it was clicked through.'));
 }
 
 const shortCode = (code) => code.replace('6-8.', '');

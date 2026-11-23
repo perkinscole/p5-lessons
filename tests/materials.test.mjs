@@ -111,7 +111,8 @@ test('the checklist has a box for each step, the stretch goals, and an "I can" f
       const step = l.steps[i];
       assert.equal(s.title, step.title);
       // A step with its code hidden states a goal, so the name alone is not enough on paper.
-      assert.equal(s.goal, step.reveal ? briefOf(step).brief : '', `${l.id} / ${step.title}`);
+      // Where an instruction is an idea and then an action, the action (its last paragraph) is the goal.
+      assert.equal(s.goal, step.reveal ? briefOf(step).brief.split(/\n{2,}/).pop() : '', `${l.id} / ${step.title}`);
       assert.ok(wordCount(s.goal) <= 26, `${l.id} / ${step.title}: the goal is long`);
     });
     assert.deepEqual(c.stretch, l.stretch);

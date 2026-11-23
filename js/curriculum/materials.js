@@ -203,7 +203,7 @@ export function checklistFor(id, path) {
   return {
     title: l.title,
     ...placeOf(id, path),
-    steps: l.steps.map((s) => ({ title: s.title, goal: s.reveal ? briefOf(s).brief : '' })),
+    steps: l.steps.map((s) => ({ title: s.title, goal: s.reveal ? briefOf(s).brief.split(/\n{2,}/).pop() : '' })),
     stretch: [...(l.stretch || [])],
     ican: ideasOf(l).map((x) => ({ lead: 'I can explain', term: x.term, tail: 'to a classmate.' })),
   };
