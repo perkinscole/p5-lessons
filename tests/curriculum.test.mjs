@@ -988,3 +988,34 @@ test('a student is told about work sent back and feedback they have not seen, an
   assert.ok(!noticesFrom(works, {}).fresh.some((w) => w.status === 'returned'));
   assert.deepEqual(noticesFrom(undefined, null), { returned: [], fresh: [], stamp: {} });
 });
+
+test('the cheat sheet explains every built-in command the lessons use, once, under the lesson that taught it', async () => {
+  const { CODE, NOT_LISTED, cheatSheet, tokensIn, namesMadeIn, codeIn } = await import('../js/curriculum/cheats.js');
+  // Names the lessons make themselves are not commands to explain.
+  const made = new Set();
+  for (const l of allLessons()) for (const n of namesMadeIn(codeIn(l))) made.add(n);
+  for (const l of allLessons()) {
+    for (const t of tokensIn(codeIn(l))) {
+      assert.ok(CODE[t] || NOT_LISTED.has(t) || made.has(t.replace(/^\./, '')), `${l.id} uses ${t}, which the cheat sheet does not explain. Add it to CODE in cheats.js.`);
+    }
+  }
+  for (const [key, c] of Object.entries(CODE)) {
+    assert.ok(c.form && c.does, key);
+    assert.ok(c.does.split(/\s+/).length <= 18, `${key}: keep it to one short sentence`);
+  }
+  for (const p of PATH_IDS) {
+    const road = sequence(p);
+    const sheet = cheatSheet(road);
+    const keys = sheet.flatMap((s) => s.items.map((i) => i.key));
+    assert.equal(new Set(keys).size, keys.length, `${p}: a command is listed twice`);
+    assert.equal(sheet[0].lesson_id, 't1');
+    assert.ok(sheet[0].items.some((i) => i.key === 'rect' && i.example === 'rect(0, 320, 400, 80);'));
+    // It grows: a later lesson never shrinks it, and stopping early leaves later commands out.
+    const early = cheatSheet(road.slice(0, 2)).flatMap((s) => s.items.map((i) => i.key));
+    assert.ok(early.includes('let') && !early.includes('if'));
+    assert.ok(keys.length > early.length);
+    for (const s of sheet) for (const i of s.items) assert.ok(!i.example || i.example.length <= 70);
+  }
+  assert.deepEqual(cheatSheet([]), []);
+  assert.deepEqual(cheatSheet(['zz']), []);
+});

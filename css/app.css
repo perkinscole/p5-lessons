@@ -1351,3 +1351,18 @@ code.say-idea { background: var(--sun); }
 .notice em { font-weight: 400; }
 .notice.sent-back { background: #ffd9cc; }
 .sent-back blockquote { margin: 0; padding: 8px 12px; border-left: 6px solid #c43f29; background: var(--paper-2); }
+
+/* The code cheat sheet. */
+.cheat-open { background: #dff1ff; color: #1b1640; }
+.cheat-find { width: 100%; padding: 8px 10px; font: inherit; border: 2px solid var(--line); border-radius: 4px; background: var(--card); color: var(--ink); }
+.cheat-list { display: flex; flex-direction: column; gap: 8px; }
+.cheat-lesson { border: 2px solid var(--line); border-radius: 4px; background: var(--card); }
+.cheat-lesson > summary { padding: 8px 12px; cursor: pointer; background: var(--paper-2); }
+.cheat-now { margin-left: 10px; padding: 1px 8px; font-size: .78rem; font-weight: 700; background: var(--sun); color: #2b2350; border: 1px solid var(--line); border-radius: 10px; }
+.cheat-items { margin: 0; padding: 4px 12px 10px; }
+.cheat-items > div { padding: 8px 0; border-top: 1px dashed var(--line); }
+.cheat-items > div:first-child { border-top: 0; }
+.cheat-items dt code { display: inline-block; padding: 1px 8px; background: #dff1ff; color: #1b1640; border: 2px solid var(--line); border-radius: 4px; font-weight: 700; }
+.cheat-items dd { margin: 4px 0 0; }
+.cheat-example { display: block; margin-top: 3px; }
+.cheat-example code { background: var(--paper-2); padding: 0 6px; border-radius: 3px; }

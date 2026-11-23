@@ -19,6 +19,7 @@ import { viewStandards } from './views/standards.js';
 import { viewMaterials } from './views/materials.js';
 import { viewProject } from './views/project.js';
 import { viewQuest } from './views/quest.js';
+import { viewCheats } from './views/cheats.js';
 import { applySettings, openSettings } from './settings.js';
 import { initLanguage } from './translate.js';
 import { lessonForStop } from './curriculum/classroom.js';
@@ -37,7 +38,7 @@ export const go = (hash) => { location.hash = hash; };
 
 const STUDENT_ROUTES = [
   [/^\/$/, viewHome], [/^\/road$/, viewChooseRoad], [/^\/map$/, viewMap], [/^\/character$/, viewCharacter], [/^\/standards$/, viewStandards],
-  [/^\/lesson\/(\w+)$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/sounds$/, viewSounds], [/^\/arcade$/, viewArcade], [/^\/quest$/, viewQuest],
+  [/^\/lesson\/(\w+)$/, viewLesson], [/^\/sprites$/, viewSprites], [/^\/sounds$/, viewSounds], [/^\/arcade$/, viewArcade], [/^\/quest$/, viewQuest], [/^\/cheats$/, viewCheats],
 ];
 const TEACHER_ROUTES = [
   [/^\/project\/([\w-]+)$/, viewProject],
@@ -74,6 +75,7 @@ function topbar() {
         { href: '/sprites', label: '🎨 Sprites', tool: 'sprites' },
         { href: '/sounds', label: '🔊 Sounds', tool: 'sounds' },
         s.class?.music_open && { href: '/sounds', label: '🎵 Music Maker', tool: 'music' },
+        { href: '/cheats', label: '📒 Cheat sheet', tool: 'cheats' },
         { href: '/character', label: '🧍 My character' },
         { href: '/standards', label: '📋 Standards' },
       ]),

@@ -5,6 +5,7 @@ import { getLesson, stepPasses, checkSummary, buildSolution, buildThrough, fallb
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
 import { ratingBox, confusingButton, helpBox } from './feedback.js';
+import { openCheatSheet, lessonsSoFar } from './cheats.js';
 import { chime, sparkle, pop, countUp, markCelebrated, correct, incorrect, splash, popBadge, popRank, flyXP, gainXP } from '../celebrate.js';
 import { PATHS, PATH_IDS, previousGameLesson, sequence, stageOf, currentLesson, isSideTrail, sideTrailOpen, isBeyond } from '../curriculum/graph.js';
 import { createPlayer } from '../sandbox.js';
@@ -992,6 +993,9 @@ export async function viewLesson(main, id, previewPath) {
 
   // Tools a student needs now and then, kept in one menu so the page is not a wall of buttons.
   // A step that needs one of them shows its own button at the moment it is needed.
+  // The code met so far: this student's road up to this lesson, plus anything else they finished.
+  const openCheats = () => openCheatSheet(lessonsSoFar(path, me ? me.done : new Set(), id), id);
+
   const moreMenu = () => {
     const menu = h('details.more-menu');
     const item = (label, action) => h('button.btn', { type: 'button', onclick: () => { menu.open = false; action(); } }, label);
@@ -1020,6 +1024,7 @@ export async function viewLesson(main, id, previewPath) {
         preview && h('a.btn', { href: `#/materials/${id}/${path}`, title: 'Slides, a worksheet and a checklist for this lesson' }, '🖨 Materials'),
         preview && h('button.btn', { onclick: () => { openFile(MAIN); cm.setValue(buildSolution(id, path)); for (const [n, t] of Object.entries(filesThrough(id, path))) if (!extraDocs.has(n)) extraDocs.set(n, window.CodeMirror.Doc(t, 'javascript')); drawFileBar(); run(); toast('Showing the answer key.'); } }, 'Show answer key'),
         h('button.btn.key-ideas', { onclick: () => openToday(), title: 'What this lesson builds, and its key ideas' }, '💡 Key ideas'),
+        h('button.btn.cheat-open', { onclick: openCheats, title: 'Every piece of code you have met so far, and what it does' }, '📒 Cheat sheet'),
         moreMenu(),
       ),
     );
@@ -1181,7 +1186,7 @@ export async function viewLesson(main, id, previewPath) {
   window.addEventListener('resize', fitPage);
   document.body.classList.add('in-workspace');
   // The top bar's Tools menu opens these here, so a student stays in the lesson.
-  app.lessonTools = { sprites: openPicker, sounds: openSounds, music: musicAllowed() ? openMusic : null };
+  app.lessonTools = { sprites: openPicker, sounds: openSounds, music: musicAllowed() ? openMusic : null, cheats: openCheats };
   drawFileBar();
   cm.refresh();
   run();
