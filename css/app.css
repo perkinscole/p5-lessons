@@ -1344,3 +1344,10 @@ code.say-idea { background: var(--sun); }
 .effort.rushed { border-left-color: #c43f29; }
 .cell.rushed { position: relative; }
 .cell.rushed::after { content: ''; position: absolute; top: 0; right: 0; border: 6px solid transparent; border-top-color: #c43f29; border-right-color: #c43f29; }
+
+/* A bar across the top of a student's page when their teacher has said something. */
+.notice { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 10px 14px; background: #fff3c4; color: #2b2350; border: 3px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); font-weight: 700; }
+.notice > span { flex: 1; min-width: 220px; }
+.notice em { font-weight: 400; }
+.notice.sent-back { background: #ffd9cc; }
+.sent-back blockquote { margin: 0; padding: 8px 12px; border-left: 6px solid #c43f29; background: var(--paper-2); }

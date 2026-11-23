@@ -966,3 +966,25 @@ test('feedback from several classes adds up into one list per lesson', async () 
   assert.equal(a[0].started, 9);
   assert.equal(mergeFeedback([a])[0].average, 4);
 });
+
+test('a student is told about work sent back and feedback they have not seen, and old feedback is not announced', async () => {
+  const { noticesFrom } = await import('../js/game/rules.js');
+  const works = [
+    { id: 'a', lesson_id: 't1', status: 'approved', grade: { feedback: 'Nice', graded_at: '2026-11-20T10:00:00Z' } },
+    { id: 'b', lesson_id: 't3', status: 'returned', grade: { feedback: 'Fix the saucer', graded_at: '2026-11-21T10:00:00Z' } },
+    { id: 'c', lesson_id: 't4', status: 'submitted', grade: null },
+    { id: 'd', lesson_id: 't5', status: 'in_progress' },
+  ];
+  // A first visit on this device: sent-back work still shows, but nothing is called new.
+  const first = noticesFrom(works, null);
+  assert.deepEqual(first.returned.map((w) => w.id), ['b']);
+  assert.deepEqual(first.fresh, []);
+  assert.deepEqual(first.stamp, { a: '2026-11-20T10:00:00Z', b: '2026-11-21T10:00:00Z' });
+  // Once seen, it is quiet. A new grade, or feedback changed later, is new again.
+  assert.deepEqual(noticesFrom(works, first.stamp).fresh, []);
+  assert.deepEqual(noticesFrom(works, {}).fresh.map((w) => w.id), ['a']);
+  assert.deepEqual(noticesFrom(works, { ...first.stamp, a: '2026-11-19T10:00:00Z' }).fresh.map((w) => w.id), ['a']);
+  // Sent-back work is never just a passing note, and nothing breaks on an empty list.
+  assert.ok(!noticesFrom(works, {}).fresh.some((w) => w.status === 'returned'));
+  assert.deepEqual(noticesFrom(undefined, null), { returned: [], fresh: [], stamp: {} });
+});

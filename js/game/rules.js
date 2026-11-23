@@ -126,3 +126,20 @@ export function recentAchievements(board, days = 7) {
   }
   return events.sort((a, b) => b.time - a.time || b.priority - a.priority);
 }
+
+/**
+ * What a student should be told about their teacher's feedback.
+ *   returned: lessons the teacher sent back, which are still waiting to be fixed.
+ *   fresh:    graded lessons whose feedback this browser has not shown yet (`seen` maps a work's id
+ *             to the `graded_at` it last showed). With no record at all, nothing counts as new, so a
+ *             first visit doesn't announce a year of old feedback.
+ */
+export function noticesFrom(works, seen) {
+  const list = Array.isArray(works) ? works : [];
+  const returned = list.filter((w) => w.status === 'returned');
+  const known = seen && typeof seen === 'object' ? seen : null;
+  const fresh = known ? list.filter((w) => w.status !== 'returned' && w.grade && w.grade.graded_at && known[w.id] !== w.grade.graded_at) : [];
+  const stamp = {};
+  for (const w of list) if (w.grade && w.grade.graded_at) stamp[w.id] = w.grade.graded_at;
+  return { returned, fresh, stamp };
+}

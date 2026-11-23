@@ -1,10 +1,11 @@
 // App shell and router.
-import { h, clear, attempt, toast, loading } from './ui.js';
+import { getLesson } from './curriculum/engine.js';
+import { h, clear, attempt, toast, loading, modal } from './ui.js';
 import { createLocalStore } from './data/local.js';
 import { createAppsScriptStore } from './data/appsscript.js';
 import { avatarURL, defaultAvatar } from './game/avatar.js';
-import { statsFor } from './game/rules.js';
-import { xpPurse, setPurse } from './celebrate.js';
+import { statsFor, noticesFrom } from './game/rules.js';
+import { xpPurse, setPurse, chime } from './celebrate.js';
 import { viewLogin, viewNoAccess } from './views/auth.js';
 import { viewHome, viewChooseRoad, viewCharacter, SessionEnded } from './views/student.js';
 import { viewMap } from './views/map.js';
@@ -148,6 +149,58 @@ function rememberBoot(session) {
   } catch (_) { /* Then the first page just takes one more trip. */ }
 }
 
+// Telling a student about their teacher's feedback -------------------------------------------------
+// Play pages close while a lesson is sent back. The teacher asked for this after students stayed in
+// the Arcade without ever seeing that work had come back.
+const PLAY = /^\/(arcade|quest)$/;
+let noticeTimer = null;
+const rung = new Set();
+const seenKey = () => `pixeltrail.feedback.${app.session?.student?.id || ''}`;
+function readSeenFeedback() { try { return JSON.parse(localStorage.getItem(seenKey()) || 'null'); } catch (_) { return null; } }
+function saveSeenFeedback(stamp) { try { localStorage.setItem(seenKey(), JSON.stringify(stamp)); } catch (_) { /* Then it is announced again next visit. */ } }
+const ringOnce = (key) => { if (!rung.has(key)) { rung.add(key); chime('doorbell'); } };
+
+/** Shows what is new, and sends a student out of a play page if a lesson was sent back. Returns 'left' if it did. */
+function tellStudent(works, path, main) {
+  const seen = readSeenFeedback();
+  const { returned, fresh, stamp } = noticesFrom(works, seen);
+  if (!seen) saveSeenFeedback(stamp);
+  const title = (w) => (getLesson(w.lesson_id) || { title: 'a lesson' }).title;
+  if (returned.length && PLAY.test(path)) {
+    const w = returned[0];
+    ringOnce(`back:${w.id}:${w.grade?.graded_at || ''}`);
+    go('/');
+    modal((close) => h('div.stack.sent-back',
+      h('p.eyebrow', 'From your teacher'),
+      h('h2', `✋ Your teacher sent back ${title(w)}`),
+      w.grade?.feedback && h('blockquote', { translate: 'no' }, w.grade.feedback),
+      h('p', 'Fix it and submit it again. The Arcade and Trail Quest open again after that.'),
+      h('div.row.end', h('a.btn.primary.big', { href: `#/lesson/${w.lesson_id}`, onclick: close }, 'Open the lesson'))));
+    return 'left';
+  }
+  main.querySelectorAll('.notice').forEach((x) => x.remove());
+  const bars = [];
+  // Home already has a card for lessons sent back, so the bar is for every other page.
+  if (returned.length && path !== '/') {
+    const w = returned[0];
+    ringOnce(`back:${w.id}:${w.grade?.graded_at || ''}`);
+    bars.push(h('div.notice.sent-back', { role: 'status' }, h('span', '✋ Your teacher sent back ', h('strong', title(w)), '. Read the feedback and fix it.'),
+      h('a.btn.small.primary', { href: `#/lesson/${w.lesson_id}` }, 'Open it')));
+  }
+  if (fresh.length) {
+    const w = fresh[0];
+    ringOnce(`new:${w.id}:${w.grade.graded_at}`);
+    const bar = h('div.notice', { role: 'status' },
+      h('span', '💬 New feedback from your teacher on ', h('strong', title(w)), fresh.length > 1 ? ` and ${fresh.length - 1} more` : '', w.grade.feedback ? ': ' : '.',
+        w.grade.feedback && h('em', { translate: 'no' }, w.grade.feedback.length > 160 ? `${w.grade.feedback.slice(0, 160)}…` : w.grade.feedback)),
+      h('a.btn.small', { href: `#/lesson/${w.lesson_id}`, onclick: () => saveSeenFeedback(stamp) }, 'Open the lesson'),
+      h('button.btn.small', { type: 'button', onclick: () => { saveSeenFeedback(stamp); bar.remove(); } }, 'Got it'));
+    bars.push(bar);
+  }
+  if (bars.length) main.prepend(...bars);
+  return '';
+}
+
 let renderToken = 0;
 
 export async function render() {
@@ -171,11 +224,30 @@ export async function render() {
   if (!view) { go('/'); return; }
 
   const main = h('main.page', loading());
+  // A student's page also asks whether the teacher has sent anything back. It is asked for here,
+  // before the page asks for its own things, so both travel in the same trip. The lesson page is
+  // left alone: it shows its own feedback.
+  clearInterval(noticeTimer);
+  const isStudent = app.session.role === 'student';
+  const asked = isStudent && !/^\/lesson\//.test(path) ? store.myWorks([]).catch(() => null) : null;
   clear(root).append(store.mode === 'local' ? demoBanner() : '', app.session.preview ? previewBanner() : '', topbar(), main);
   try {
     const content = await view(main, ...match.slice(1));
     if (token !== renderToken) return;
     if (content) clear(main).append(content);
+    if (asked) {
+      const works = await asked;
+      if (token !== renderToken) return;
+      if (works && tellStudent(works, path, main) === 'left') return;
+      // While a student is playing, look again now and then, so being sent back reaches them there.
+      if (PLAY.test(path)) {
+        noticeTimer = setInterval(async () => {
+          if (document.hidden) return;
+          const again = await store.myWorks([]).catch(() => null);
+          if (again && token === renderToken) tellStudent(again, path, main);
+        }, 60000);
+      }
+    }
   } catch (e) {
     if (e instanceof SessionEnded) {
       app.session = null;
