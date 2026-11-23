@@ -162,6 +162,39 @@ function readSeenFeedback() { try { return JSON.parse(localStorage.getItem(seenK
 function saveSeenFeedback(stamp) { try { localStorage.setItem(seenKey(), JSON.stringify(stamp)); } catch (_) { /* Then it is announced again next visit. */ } }
 const ringOnce = (key) => { if (!rung.has(key)) { rung.add(key); chime('doorbell'); } };
 
+/**
+ * Good news gets a pop-up of its own: the teacher approved a lesson or wrote something about it.
+ * A bar across the page was easy to miss, and the teacher wanted praise noticed as surely as work
+ * that is sent back. It opens once for each new piece of feedback, on whatever page the student is on.
+ */
+let praising = false;
+function praise(fresh, stamp) {
+  if (praising) return;
+  praising = true;
+  const title = (w) => (getLesson(w.lesson_id) || { title: 'a lesson' }).title;
+  ringOnce(`new:${fresh.map((w) => `${w.id}:${w.grade.graded_at}`).join(',')}`);
+  const approved = fresh.filter((w) => w.status === 'approved').length;
+  modal((close) => h('div.stack.praise',
+    h('p.eyebrow', 'From your teacher'),
+    h('h2', approved === fresh.length ? (fresh.length === 1 ? `🎉 Your teacher approved ${title(fresh[0])}` : `🎉 Your teacher approved ${fresh.length} lessons`) : '💬 New feedback from your teacher'),
+    fresh.slice(0, 4).map((w) => h('div.praise-item',
+      fresh.length > 1 && h('strong', title(w)),
+      w.grade.feedback ? h('blockquote', { translate: 'no' }, w.grade.feedback) : h('p.muted', 'No note this time.'),
+      w.grade.max_total > 0 && h('p.small.muted', { translate: 'no' }, `Score: ${w.grade.total} of ${w.grade.max_total}`))),
+    fresh.length > 4 && h('p.muted.small', `And ${fresh.length - 4} more on your Home page.`),
+    h('div.row.end', h('button.btn.primary.big', { type: 'button', onclick: close }, 'Got it'))),
+  { onClose: () => { praising = false; saveSeenFeedback(stamp); } });
+}
+
+/** For the lesson page, which loads the student's work itself: tell them about new praise there too. */
+export function noticeWorks(works) {
+  if (app.session?.role !== 'student') return;
+  const seen = readSeenFeedback();
+  const { fresh, stamp } = noticesFrom(works, seen);
+  if (!seen) { saveSeenFeedback(stamp); return; }
+  if (fresh.length) praise(fresh, stamp);
+}
+
 /** Shows what is new, and sends a student out of a play page if a lesson was sent back. Returns 'left' if it did. */
 function tellStudent(works, path, main) {
   const seen = readSeenFeedback();
@@ -189,16 +222,7 @@ function tellStudent(works, path, main) {
     bars.push(h('div.notice.sent-back', { role: 'status' }, h('span', '✋ Your teacher sent back ', h('strong', title(w)), '. Read the feedback and fix it.'),
       h('a.btn.small.primary', { href: `#/lesson/${w.lesson_id}` }, 'Open it')));
   }
-  if (fresh.length) {
-    const w = fresh[0];
-    ringOnce(`new:${w.id}:${w.grade.graded_at}`);
-    const bar = h('div.notice', { role: 'status' },
-      h('span', '💬 New feedback from your teacher on ', h('strong', title(w)), fresh.length > 1 ? ` and ${fresh.length - 1} more` : '', w.grade.feedback ? ': ' : '.',
-        w.grade.feedback && h('em', { translate: 'no' }, w.grade.feedback.length > 160 ? `${w.grade.feedback.slice(0, 160)}…` : w.grade.feedback)),
-      h('a.btn.small', { href: `#/lesson/${w.lesson_id}`, onclick: () => saveSeenFeedback(stamp) }, 'Open the lesson'),
-      h('button.btn.small', { type: 'button', onclick: () => { saveSeenFeedback(stamp); bar.remove(); } }, 'Got it'));
-    bars.push(bar);
-  }
+  if (fresh.length) praise(fresh, stamp);
   if (bars.length) main.prepend(...bars);
   return '';
 }

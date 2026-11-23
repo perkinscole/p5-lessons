@@ -1,6 +1,6 @@
 // The workspace: lesson steps on the left, code in the middle, the running game on the right.
 import { h, clear, md, toast, attempt, modal, debounce, confirmBox } from '../ui.js';
-import { app, go } from '../main.js';
+import { app, go, noticeWorks } from '../main.js';
 import { getLesson, stepPasses, checkSummary, buildSolution, buildThrough, fallbackStarter, rubricFor, applySkeleton, briefOf, filesThrough, placeFor, shownCode } from '../curriculum/engine.js';
 import { checksFor } from '../curriculum/checks.js';
 import { explainError, warnings } from '../game/debug.js';
@@ -192,6 +192,8 @@ export async function viewLesson(main, id, previewPath) {
       if (!me.done.has(id) && id !== current) { toast('Finish the lesson before this one first.'); go('/map'); return null; }
     }
     work = me.works.find((w) => w.lesson_id === id) || null;
+    // New praise from the teacher shows here too, since this is where students spend their time.
+    noticeWorks(me.works);
     // Never open the editor on a lesson whose code did not arrive: an empty editor would be saved over real work.
     if (me.works.some((w) => needCode.includes(w.lesson_id) && w.full === false)) throw new Error('Your code did not load. Reload the page to try again.');
     if (work) {
