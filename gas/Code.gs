@@ -1148,9 +1148,11 @@ function createAssignments_(me, classId, items, opts) {
   if (!Array.isArray(items) || !items.length || items.length > 30) throw new Error('Choose up to 30 lessons.');
   const publish = !!(opts && opts.publish);
   const out = { created: 0, skipped: [], failed: [] };
-  // Assignments go under one "Pixel Trail" topic when this script is allowed to manage topics.
-  const topicId = classroomTopic_(link.course_id);
+  // Assignments go under one topic, named for the teacher's unit, when this script is allowed to manage topics.
+  const unit = text_(opts && opts.unit, 60).replace(/[<>]/g, '').trim() || TOPIC_NAME;
+  const topicId = classroomTopic_(link.course_id, unit);
   out.topic = !!topicId;
+  out.unit = unit;
   items.forEach((it) => {
     const [slot] = cleanSlots_([it]);
     const title = text_(it.title, 150).trim();
@@ -1200,11 +1202,12 @@ function stopUrl_(key) {
  * assignments must still be created without one.
  */
 const TOPIC_NAME = 'Pixel Trail';
-function classroomTopic_(courseId) {
+function classroomTopic_(courseId, name) {
+  const wanted = name || TOPIC_NAME;
   try {
-    const found = allPages_((t) => Classroom.Courses.Topics.list(courseId, pageOpts_(t)), 'topic').find((x) => x.name === TOPIC_NAME);
+    const found = allPages_((t) => Classroom.Courses.Topics.list(courseId, pageOpts_(t)), 'topic').find((x) => x.name === wanted);
     if (found) return String(found.topicId);
-    return String(Classroom.Courses.Topics.create({ name: TOPIC_NAME }, courseId).topicId || '');
+    return String(Classroom.Courses.Topics.create({ name: wanted }, courseId).topicId || '');
   } catch (e) {
     console.warn(`TOPIC_SKIPPED: ${e && e.message}`);
     return '';

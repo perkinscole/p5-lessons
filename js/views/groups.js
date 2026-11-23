@@ -113,6 +113,22 @@ export async function sendGradesTab(cls, reload) {
   const points = h('input', { type: 'number', min: 1, max: 1000, value: 100, 'aria-label': 'Points for each assignment', style: 'width:6em' });
   const due = h('input', { type: 'date', min: todayText(), 'aria-label': 'Due date' });
   const publish = h('input', { type: 'checkbox' });
+  // The teacher's name for this unit. It leads each assignment's name and description, and is the
+  // topic the assignments are filed under where Classroom topics are allowed. Kept in this browser.
+  const UNIT_KEY = `pixeltrail.unit.${cls.id}`;
+  let savedUnit = '';
+  try { savedUnit = localStorage.getItem(UNIT_KEY) || ''; } catch (_) { savedUnit = ''; }
+  const unit = h('input', { value: savedUnit || 'Pixel Trail', maxlength: 60, 'aria-label': 'Unit name', style: 'min-width:16em' });
+  const unitName = () => unit.value.replace(/[<>]/g, '').trim() || 'Pixel Trail';
+  const describe = (slot) => (unitName() === 'Pixel Trail' ? slot.description : `Unit: ${unitName()}\n${slot.description}`);
+  unit.addEventListener('input', () => {
+    try { localStorage.setItem(UNIT_KEY, unit.value.trim()); } catch (_) { /* Then it is typed again next time. */ }
+    // Names the teacher has not typed over follow the unit; the preview follows it too.
+    for (const p of picks) {
+      if (!p.typed) p.name.value = `${unitName()}: ${p.slot.title}`;
+      p.preview.textContent = describe(p.slot);
+    }
+  });
   const create = h('button.btn.primary', { type: 'button' }, 'Create assignments');
   const createOut = h('div.stack.tight');
   const chosen = () => picks.filter((p) => p.box.checked);
@@ -135,13 +151,16 @@ export async function sendGradesTab(cls, reload) {
         h('td', st.link && h('a.small', { href: st.link, target: '_blank', rel: 'noopener noreferrer' }, 'Open ↗')));
     }
     const box = h('input', { type: 'checkbox', onchange: drawCreate, 'aria-label': `Choose lesson ${slot.n}` });
-    const name = h('input', { value: `Pixel Trail: ${slot.title}`, maxlength: 150, 'aria-label': `Assignment name for lesson ${slot.n}`, style: 'width:100%', oninput: () => { box.checked = true; drawCreate(); } });
-    picks.push({ slot, box, name });
+    const entry = { slot, box, typed: false };
+    const name = h('input', { value: `${unitName()}: ${slot.title}`, maxlength: 150, 'aria-label': `Assignment name for lesson ${slot.n}`, style: 'width:100%', oninput: () => { entry.typed = true; box.checked = true; drawCreate(); } });
+    const preview = h('pre.assignment-text', { translate: 'no' }, describe(slot));
+    Object.assign(entry, { name, preview });
+    picks.push(entry);
     return h('tr',
       h('td', box),
       h('th', { scope: 'row' }, name, lessonLine,
         // Exactly what students and families will read in Classroom.
-        h('details.small', h('summary', 'What the assignment will say'), h('pre.assignment-text', { translate: 'no' }, slot.description))),
+        h('details.small', h('summary', 'What the assignment will say'), preview)),
       h('td.num', ''), h('td', ''),
       h('td.num', st.approved ? `${st.approved} approved` : ''),
       h('td', ''));
@@ -163,10 +182,10 @@ export async function sendGradesTab(cls, reload) {
     create.disabled = true;
     create.textContent = 'Creating...';
     const r = await attempt(() => app.store.createAssignments(cls.id, list.map((p) => ({
-      key: p.slot.key, ids: p.slot.ids, title: p.name.value.trim(), points: Number(points.value), due: due.value, description: p.slot.description,
-    })), { publish: publish.checked }));
+      key: p.slot.key, ids: p.slot.ids, title: p.name.value.trim(), points: Number(points.value), due: due.value, description: describe(p.slot),
+    })), { publish: publish.checked, unit: unitName() }));
     if (!r) { drawCreate(); return; }
-    toast(`Created ${r.created} assignment${r.created === 1 ? '' : 's'} in Classroom${r.created && r.topic ? ', under the Pixel Trail topic' : ''}.`);
+    toast(`Created ${r.created} assignment${r.created === 1 ? '' : 's'} in Classroom${r.created && r.topic ? `, under the ${r.unit || unitName()} topic` : ''}.`);
     if (r.skipped.length || r.failed.length) clear(createOut).append(...[...r.skipped, ...r.failed].map((x) => h('p.warn.small', x)));
     else reload();
   };
@@ -180,7 +199,7 @@ export async function sendGradesTab(cls, reload) {
       'Each one gets the current description: where the stop is on the trail, what the lesson teaches, how to do it, and its standards. Names, points, due dates, and grades are not touched.', 'Update');
     if (!sure) return;
     refresh.disabled = true;
-    const r = await attempt(() => app.store.updateAssignments(cls.id, made.map(({ key, ids, description }) => ({ key, ids, description }))));
+    const r = await attempt(() => app.store.updateAssignments(cls.id, made.map((slot) => ({ key: slot.key, ids: slot.ids, description: describe(slot) }))));
     refresh.disabled = false;
     if (!r) return;
     toast(`Updated ${r.updated} description${r.updated === 1 ? '' : 's'} in Classroom.`);
@@ -211,6 +230,8 @@ export async function sendGradesTab(cls, reload) {
     h('section.card.stack',
       h('h2', 'Classroom assignments'),
       h('p.muted.small', 'Each assignment matches a lesson number in the gradebook. Road lessons share a number, so one assignment covers all four roads.'),
+      h('label.field', h('span', 'Unit name'), unit),
+      h('p.muted.small', 'Used at the start of each assignment name and description. Change it before you create assignments.'),
       h('div.row',
         h('button.btn.small', { type: 'button', onclick: () => pick((x) => !x.beyond) }, 'Select core lessons'),
         h('button.btn.small', { type: 'button', onclick: () => pick(() => false) }, 'Clear')),

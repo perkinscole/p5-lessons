@@ -1258,6 +1258,14 @@ test('Classroom assignments: descriptions, the topic, and bringing old ones up t
   t('createAssignments', r.class_id, [{ key: 'L2', ids: ['t3'], title: 'It Moves!', points: 100, description: 'Second.' }], {});
   assert.equal(data.created[1].topicId, 'topic-1');
   assert.deepEqual(data.topics.c1.map((x) => x.name), ['Pixel Trail']);
+  // The teacher's unit name is the topic. It is cleaned, reused when it exists, and reported back.
+  const unit = t('createAssignments', r.class_id, [{ key: 'L3', ids: ['t4'], title: 'Game Design: Puppet Master', points: 100, description: 'Third.' }], { unit: '  Game <b>Design</b> Unit 2  ' });
+  assert.equal(unit.unit, 'Game bDesign/b Unit 2');
+  assert.equal(data.created[2].topicId, 'topic-2');
+  t('createAssignments', r.class_id, [{ key: 'L4', ids: ['t5'], title: 'x', points: 100, description: 'Fourth.' }], { unit: 'Game bDesign/b Unit 2' });
+  assert.equal(data.created[3].topicId, 'topic-2');
+  assert.deepEqual(data.topics.c1.map((x) => x.name), ['Pixel Trail', 'Game bDesign/b Unit 2']);
+  assert.equal(t('createAssignments', r.class_id, [{ key: 'L5', ids: ['t6'], title: 'y', points: 100, description: 'Fifth.' }], { unit: '   ' }).unit, 'Pixel Trail');
 
   // Updating: owner only, only assignments this app made, and only the description changes.
   const fresh = [{ key: 'L1', ids: ['t1'], description: 'New words\nabout the trail.' }, { key: 'L9', ids: ['c1'], description: 'Never made.' }, { key: 'L2', ids: ['t3'], description: '   ' }];
