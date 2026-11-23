@@ -15,15 +15,15 @@ export const CODE = {
   setup: { form: 'function setup() { }', does: 'Runs once, when your program starts. Make the canvas here.' },
   draw: { form: 'function draw() { }', does: 'Runs again and again, about 60 times a second. Each run paints one picture.' },
   createCanvas: { form: 'createCanvas(width, height)', does: 'Makes the square you draw on, this many dots wide and tall.' },
-  background: { form: 'background(red, green, blue)', does: 'Paints over the whole canvas with one color, wiping the last picture.' },
+  background: { form: 'background(color)', does: "Paints the whole canvas one color, wiping the last picture. Use a name or three numbers." },
   // Shapes
   ellipse: { form: 'ellipse(x, y, width, height)', does: 'Draws a circle or oval. x and y are its center.' },
   rect: { form: 'rect(x, y, width, height)', does: 'Draws a rectangle. x and y are its top-left corner.' },
   line: { form: 'line(x1, y1, x2, y2)', does: 'Draws a straight line from one spot to another.' },
   triangle: { form: 'triangle(x1, y1, x2, y2, x3, y3)', does: 'Draws a triangle between three spots.' },
   // Color and style
-  fill: { form: 'fill(red, green, blue)', does: 'Sets the color for every shape drawn after it. Each number is 0 to 255.' },
-  stroke: { form: 'stroke(red, green, blue)', does: 'Sets the color of the outline around shapes drawn after it.' },
+  fill: { form: 'fill(color)', does: "Sets the color for shapes drawn after it. Use a name like 'red', or three numbers." },
+  stroke: { form: 'stroke(color)', does: 'Sets the color of the outline around shapes drawn after it.' },
   noStroke: { form: 'noStroke()', does: 'Turns off the outline around shapes drawn after it.' },
   strokeWeight: { form: 'strokeWeight(thickness)', does: 'Sets how thick outlines and lines are.' },
   noFill: { form: 'noFill()', does: 'Draws shapes after it as outlines only, with nothing inside.' },

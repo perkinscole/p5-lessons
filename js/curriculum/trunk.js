@@ -9,7 +9,7 @@ lesson({
 }
 
 function draw() {
-  background(135, 206, 235);
+  background('skyblue');
 }
 `,
   steps: [
@@ -27,18 +27,18 @@ function draw() {
     {
       title: 'How a line of code is built', mins: 5,
       say: 'Every drawing line is built the same way: a **name**, then `( )` holding numbers split by **commas**, then a `;` to end it.\n\nEvery `(` needs a `)`, just as every `{` needs a `}`.\n\nComputers are picky about these marks. One missing comma or bracket, and nothing runs.',
-      show: `background(135, 206, 235);
+      show: `createCanvas(400, 400);
 
-background  the name
-( )         hold numbers
-,           between numbers
-;           ends the line`,
+createCanvas  the name
+( )           hold numbers
+,             between numbers
+;             ends the line`,
     },
     {
       title: 'Add a sun', mins: 5,
       say: 'Each drawing command is a **function call**: a name, then numbers in parentheses. These numbers are called **arguments**.\n\n`ellipse(x, y, width, height)` draws a circle or oval. Add this line inside `draw()`, below `background`:',
       code: '  ellipse(340, 60, 70, 70);',
-      at: { after: 'background(135, 206, 235);' },
+      at: { after: "background('skyblue');" },
       show: `  ellipse(340, 60, 70, 70);
 
 340  x: how far from the left
@@ -57,14 +57,16 @@ background  the name
     },
     {
       title: 'Add color', mins: 5,
-      say: 'Screens mix **red, green, and blue** light, each from 0 to 255. `fill(r, g, b)` sets the color for every shape drawn after it, like dipping a brush in paint. Make the sun yellow and the ground green.',
+      say: '`fill` sets the color for every shape drawn after it, like dipping a brush in paint. You tell it the color by name, with the name inside quote marks: `fill(\'yellow\')`. The quote marks tell the computer the word is a color name and not a command. Make the sun yellow and the ground green, then try other names from the list.',
+      // Named colors come first. Colors as three numbers wait until a number is needed (t4).
+      palette: ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'brown', 'black', 'white', 'gray', 'skyblue'],
       edits: [
-        { code: '  fill(255, 220, 60);', at: { before: 'ellipse(340, 60, 70, 70);' } },
-        { code: '  fill(90, 170, 80);', at: { before: 'rect(0, 320, 400, 80);' } },
+        { code: "  fill('yellow');", at: { before: 'ellipse(340, 60, 70, 70);' } },
+        { code: "  fill('green');", at: { before: 'rect(0, 320, 400, 80);' } },
       ],
-      show: `fill(255, 220, 60);
+      show: `fill('yellow');
 ellipse(340, 60, 70, 70);
-fill(90, 170, 80);
+fill('green');
 rect(0, 320, 400, 80);`,
       check: /fill\s*\(/,
     },
@@ -169,12 +171,12 @@ lesson({
 }
 
 function draw() {
-  background(15, 20, 50);
+  background('navy');
 
   // flying saucer
-  fill(180, 220, 255);
+  fill('lightblue');
   ellipse(50, 120, 90, 30);
-  fill(120, 255, 180);
+  fill('lightgreen');
   ellipse(50, 108, 40, 30);
 }
 `,
@@ -211,7 +213,7 @@ ellipse(saucerX, 108, 40, 30);`,
       say: 'You cannot see inside a variable unless you ask. `text(words, x, y)` draws words on the canvas, and `+` joins words to a value. Programmers print values like this all the time to check what the computer is remembering.',
       code: `
   // show what saucerX holds
-  fill(255);
+  fill('white');
   textSize(16);
   text("saucerX is " + saucerX, 10, 24);`,
       at: { endOf: 'function draw' },
@@ -237,14 +239,14 @@ ellipse(saucerX, 108, 40, 30);`,
         { code: 'let meteorY = 0;', at: { after: 'let saucerX = 50;' } },
         { code: `
   // falling meteor
-  fill(255, 170, 60);
+  fill('orange');
   ellipse(300, meteorY, 24, 24);
   meteorY = meteorY + 3;`, at: { endOf: 'function draw' } },
       ],
       show: `let meteorY = 0;   // make it, at the top
 
 // inside draw():
-fill(255, 170, 60);
+fill('orange');
 ellipse(300, meteorY, 24, 24);   // use it
 meteorY = meteorY + 3;           // change it`,
       check: /\blet[\s\S]+\blet\s+\w+/,
@@ -263,12 +265,12 @@ lesson({
 }
 
 function draw() {
-  background(250, 235, 200);
+  background('beige');
 
   // creature
-  fill(255, 130, 80);
+  fill('orange');
   ellipse(200, 200, 100, 100);
-  fill(255);
+  fill('white');
   ellipse(180, 190, 30, 30);
   ellipse(220, 190, 30, 30);
 }
@@ -297,7 +299,7 @@ ellipse(mouseX + 20, mouseY - 10, 30, 30);`,
       say: 'Time for your first **if**. The question goes in the `( )` right after `if`. The code inside the `{ }` runs only when the answer is true. `mouseIsPressed` is true while the button is held down. Add this so the creature opens its mouth on a click:',
       code: `
   if (mouseIsPressed) {
-    fill(60, 20, 20);
+    fill('darkred');
     ellipse(mouseX, mouseY + 25, 40, 30);
   }`,
       at: { endOf: 'function draw' },
@@ -307,7 +309,7 @@ ellipse(mouseX + 20, mouseY - 10, 30, 30);`,
       title: 'Show a number on screen', mins: 4,
       say: '`text(what, x, y)` draws words. Show the coordinates, the same way you showed `saucerX` last lesson. Move the mouse and watch p5 change the two values for you. Checking what your variables hold like this is called **debugging**.',
       code: `
-  fill(0);
+  fill('black');
   textSize(16);
   text("x: " + mouseX + "  y: " + mouseY, 10, 24);`,
       at: { endOf: 'function draw' },
@@ -315,10 +317,10 @@ ellipse(mouseX + 20, mouseY - 10, 30, 30);`,
     },
     {
       title: 'Your creature, your rules', mins: 6,
-      say: 'Make something else respond to the mouse. Maybe the background color changes with `mouseX`, or the creature\'s size changes with `mouseY`. Use `mouseX` or `mouseY` in a **new** place.',
+      say: 'Make something else respond to the mouse. Maybe the creature\'s size changes with `mouseY`. Or the background color changes with `mouseX`: a color can also be written as three numbers, for how much **red, green, and blue** light to mix, each from 0 to 255. A name like `\'beige\'` can never change, but a number can. Use `mouseX` or `mouseY` in a **new** place.',
       reveal: true,
       code: 'background(mouseX / 2, 235, 200);',
-      at: { replace: 'background(250, 235, 200);' },
+      at: { replace: "background('beige');" },
       check: /background\s*\([^)]*mouse|ellipse\s*\([^,]+,[^,]+,[^,]*mouse/,
       hint: 'Try putting mouseX inside background(), or use it for the width of the body.',
     },

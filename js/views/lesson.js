@@ -748,6 +748,8 @@ export async function viewLesson(main, id, previewPath) {
       h(`p.step-kind.${kind}`, h('b', kind === 'do' ? '✏️ Your turn' : '👀 Just read'), h('small', `Step ${flow[stepIndex].n + 1} of ${lesson.steps.length}`)),
       h('h2', s.title),
       h('div.step-do', h('div.read-row', pronounce(md(brief), todayIdeas, openToday), readButton(() => brief))),
+      // A list of color names to try, each beside the color it makes.
+      s.palette && h('ul.palette', { 'aria-label': 'Color names you can use' }, s.palette.map((name) => h('li', h('i', { style: `background:${name}`, 'aria-hidden': 'true' }), h('code', `'${name}'`)))),
       wait && readFirst(item),
       item.ask && !wait && !preview && h('p.read-first-done', '✓ ', md(item.ask.why)),
       placeBox,
