@@ -1321,7 +1321,7 @@ code.say-idea { background: var(--sun); }
    last paragraph, what to do, is the bold one. */
 .step-do .md p { margin: 0 0 .6em; }
 .step-do .md p:last-child { margin-bottom: 0; }
-.step-do .md p:not(:last-child) { font-weight: 400; }
+.step-do .md p:not(:last-child) { font-weight: 400; font-size: .9em; line-height: 1.4; }
 
 /* "I'm stuck" is the way to get the teacher, so it is a big yellow button, not a footnote. */
 .help-box { align-items: stretch; }

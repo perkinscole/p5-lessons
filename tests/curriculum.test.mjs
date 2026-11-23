@@ -179,23 +179,25 @@ test('each lesson has well-formed checks for learning, in the walkthrough', () =
   for (const i of [0, 1, 2]) assert.ok(answers.filter((a) => a === i).length > total / 5, 'answers lean toward one position');
 });
 
-const PLAIN = new Set(['t1', 't3', 't4']);
 test('each step opens with one short instruction', () => {
   for (const l of allLessons()) {
     for (const s of l.steps) {
       const { brief } = briefOf(s);
       assert.ok(brief.length > 0, `${l.id} / ${s.title} has no instruction`);
-      // Lessons rewritten in plain sentences (PLAIN) say the idea, then what to do. They may be longer,
-      // but no sentence may run on, and the last paragraph is the action. The rest keep the old short limit.
-      const plain = PLAIN.has(l.id);
+      // Every instruction says the idea in whole sentences, then what to do. The teacher found one-line
+      // fragments too terse to follow. So: two or three short paragraphs, no sentence that runs on,
+      // and the last paragraph is the action (or, for a step whose code is hidden, the goal).
       const count = brief.split(/\s+/).length;
-      assert.ok(count <= (plain ? 75 : 26), `${l.id} / ${s.title}: ${count} words`);
-      if (plain) {
-        const paragraphs = brief.split(/\n{2,}/);
-        assert.ok(paragraphs.length >= 2 && paragraphs.length <= 3, `${l.id} / ${s.title}: an idea, then what to do`);
-        for (const sentence of brief.replace(/`[^`]*`/g, 'code').split(/(?<=[.!?:])\s+/)) {
-          assert.ok(sentence.split(/\s+/).length <= 26, `${l.id} / ${s.title}: a sentence runs on: ${sentence}`);
-        }
+      assert.ok(count <= 75, `${l.id} / ${s.title}: ${count} words`);
+      const paragraphs = brief.split(/\n{2,}/);
+      assert.ok(paragraphs.length >= 2 && paragraphs.length <= 3, `${l.id} / ${s.title}: an idea, then what to do`);
+      for (const sentence of brief.replace(/`[^`]*`/g, 'code').split(/(?<=[.!?:])\s+/)) {
+        assert.ok(sentence.split(/\s+/).length <= 26, `${l.id} / ${s.title}: a sentence runs on: ${sentence}`);
+      }
+      // A hidden step must not print a whole line of its own answer.
+      if (s.reveal) {
+        const answer = [s.code, ...(s.edits || []).map((x) => x.code)].filter(Boolean).join('\n').split('\n').map((x) => x.trim()).filter((x) => x.length >= 14 && !x.startsWith('//'));
+        for (const m of brief.matchAll(/`([^`]+)`/g)) assert.ok(!answer.includes(m[1].trim()), `${l.id} / ${s.title}: the instruction gives away the line ${m[1]}`);
       }
     }
   }
