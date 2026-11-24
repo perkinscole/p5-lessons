@@ -79,20 +79,20 @@ function settle(root, walk) {
   const W = Math.round(el.clientWidth);
   const H = Math.round(el.clientHeight);
   if (W < 80 || H < 80) return;
-  const plan = planRace(race.groups.map((g) => g.map((s) => s.display_name)), W, H, { maxSize: window.innerHeight * 0.16 });
+  const plan = planRace(race.groups.map((g) => g.map((s) => s.display_name)), W, H, { maxSize: window.innerHeight * 0.16, seed: race.seed });
   const theme = document.documentElement.dataset.theme;
   const night = theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const ratio = Math.min(2, window.devicePixelRatio || 1);
   if (canvas.width !== W * ratio || canvas.height !== H * ratio) { canvas.width = W * ratio; canvas.height = H * ratio; }
   const g = canvas.getContext('2d');
   g.setTransform(ratio, 0, 0, ratio, 0, 0);
-  paintRace(g, plan, { W, H, look: race.stops.map((st) => ({ hue: st.hue, kind: st.kind })), night, plain: theme === 'contrast', seed: race.stops.length });
+  paintRace(g, plan, { W, H, look: race.stops.map((st) => ({ hue: st.hue, kind: st.kind })), night, plain: theme === 'contrast' });
 
   // Signs go on the front of each terrace, as wide as the terrace is on screen.
   el.querySelectorAll('.pj-sign').forEach((sign, i) => {
     const t = plan.terraces[i];
-    const mid = plan.project((t.x0 + t.x1) / 2, t.top * 0.5, 0);
-    const wide = plan.project(t.x1, t.top * 0.5, 0).x - plan.project(t.x0, t.top * 0.5, 0).x;
+    const mid = plan.project(t.sign.x, t.sign.y, t.sign.z);
+    const wide = plan.project(t.x1, t.sign.y, t.sign.z).x - plan.project(t.x0, t.sign.y, t.sign.z).x;
     sign.style.left = `${mid.x}px`;
     sign.style.top = `${mid.y}px`;
     sign.style.setProperty('--u', `${mid.s}px`);
@@ -127,8 +127,10 @@ function settle(root, walk) {
     chip.getBoundingClientRect();
     chip.style.transition = `transform ${seconds}s linear`;
     chip.style.transform = '';
-    const done = () => { chip.classList.remove('walking'); chip.style.transition = ''; };
-    chip.addEventListener('transitionend', done, { once: true });
+    const done = () => { chip.classList.remove('walking'); chip.style.transition = ''; chip.removeEventListener('transitionend', arrived); };
+    // Only the chip's own walk ending counts: other transitions inside it bubble up here too.
+    const arrived = (e) => { if (e.target === chip && e.propertyName === 'transform') done(); };
+    chip.addEventListener('transitionend', arrived);
     setTimeout(done, seconds * 1000 + 300);
   });
   spots = now;
@@ -152,8 +154,13 @@ const personChip = (s, stop, place) => {
  * The lesson most of the class is on, as a race: each step is a stop, and each student stands at
  * the furthest step they have reached. Students who submit it today cross the finish.
  */
-function raceWorld(stops, at, busiest) {
+function raceWorld(stops, at, busiest, lessonId) {
+  // The land is picked from the lesson and the day, so it stays put through a class and is a
+  // different walk tomorrow.
+  let seed = 7;
+  for (const ch of `${lessonId}|${todayKey()}`) seed = (Math.imul(seed, 31) + ch.charCodeAt(0)) | 0;
   race = {
+    seed: Math.abs(seed) % 100000 + 1,
     stops: stops.map((st) => ({ hue: typeof st.key === 'number' ? STEP_HUES[st.key % STEP_HUES.length] : null, kind: typeof st.key === 'number' ? '' : st.key })),
     groups: stops.map((st) => at.get(st.key)),
   };
@@ -206,7 +213,7 @@ function racePanel(board, lessons, focus, picked) {
     // The race is a little block world seen at an angle: a staircase of terraces, one for each step,
     // with the finish at the top. The land is painted on the canvas, and the signs and characters
     // are placed over it by settle().
-    raceWorld(stops, at, busiest),
+    raceWorld(stops, at, busiest, main.id),
     others.length > 0 && h('div.pj-others', h('strong', 'On other lessons:'),
       others.map((s) => h('span.pj-other', { class: needsHelp.has(s.id) ? 'needs-help' : '' }, h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 2), alt: '' }), `${s.display_name} · ${where(s)}`))),
   );

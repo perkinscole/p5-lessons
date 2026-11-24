@@ -1021,3 +1021,56 @@ test('the cheat sheet explains every built-in command the lessons use, once, und
   assert.deepEqual(cheatSheet([]), []);
   assert.deepEqual(cheatSheet(['zz']), []);
 });
+
+// ---- The class display's little world ----
+{
+  const { planRace, shapeFor, SHAPES, LANDS } = await import('../js/game/raceworld.js');
+  const names = ['Alexander P', 'Bea T', 'Christopher M', 'Dee L', 'Maria Fernanda S', 'Jo N'];
+  const classOf = (counts) => { let n = 0; return counts.map((c) => Array.from({ length: c }, () => names[n++ % names.length])); };
+  const CLASSES = [[3, 0, 2, 6, 9, 4, 1, 0, 5], [1, 0, 0, 14, 2, 0, 9, 0, 4], [0, 0, 1, 2, 0, 1, 0, 0, 1], [30, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 32]];
+  const PANELS = [[1230, 690], [820, 440], [600, 700], [400, 260], [2400, 1300]];
+
+  test('class display: every student stands inside the panel, at any size, on any day', () => {
+    for (const counts of CLASSES) for (const [W, H] of PANELS) for (let seed = 1; seed <= 12; seed++) {
+      const plan = planRace(classOf(counts), W, H, { seed });
+      const slots = plan.slots.flat();
+      assert.equal(slots.length, counts.reduce((a, b) => a + b, 0));
+      for (const s of slots) {
+        const half = s.wide * s.h / 2;
+        assert.ok(s.sx - half >= -1 && s.sx + half <= W + 1 && s.sy <= H + 1 && s.sy - s.h * 2.25 >= -1,
+          `a student is outside a ${W} by ${H} panel on day ${seed} (${plan.shape}): ${Math.round(s.sx)}, ${Math.round(s.sy)}, height ${Math.round(s.h)}`);
+      }
+    }
+  });
+
+  test('class display: no two students share a spot, and each stands on the ground under them', () => {
+    for (const counts of CLASSES) for (let seed = 1; seed <= 12; seed++) {
+      const plan = planRace(classOf(counts), 1230, 690, { seed });
+      const slots = plan.slots.flat();
+      for (const s of slots) assert.equal(s.y, plan.height(s.x, s.z), 'a student floats above or sinks into the ground');
+      for (let i = 0; i < slots.length; i++) for (let j = i + 1; j < slots.length; j++) {
+        assert.ok(Math.hypot(slots[i].x - slots[j].x, slots[i].z - slots[j].z) > 0.9, 'two students stand on the same spot');
+      }
+    }
+  });
+
+  test('class display: the trail is not a mountain every day, and no hill stands in front of the class', () => {
+    const seen = new Set();
+    const lands = new Set();
+    for (let seed = 1; seed <= 60; seed++) {
+      const plan = planRace(classOf(CLASSES[0]), 1230, 690, { seed });
+      seen.add(plan.shape);
+      lands.add(plan.land);
+      const { tops } = shapeFor(9, seed);
+      for (const t of tops) assert.ok(t >= 0.5 && Number.isInteger(t * 2), 'a stretch is not a whole number of blocks high');
+      // On the pad the ground is each stretch's own height; in front of it, never higher.
+      for (const t of plan.terraces) {
+        const x = (t.x0 + t.x1) / 2;
+        assert.equal(plan.height(x, plan.wind(x) + 1), t.top);
+        for (let d = 0.3; d < 8; d += 0.5) assert.ok(plan.height(x, plan.wind(x) - d) <= t.top, `a hill stands in front of stretch ${t.i} on day ${seed}`);
+      }
+    }
+    assert.deepEqual([...seen].sort(), [...SHAPES].sort(), 'some shapes of trail never come up');
+    assert.deepEqual([...lands].sort(), [...LANDS].sort(), 'some lands never come up');
+  });
+}
