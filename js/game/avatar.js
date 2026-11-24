@@ -162,9 +162,9 @@ export const unlockLabel = (unlock, badgeName) => (unlock.xp !== undefined ? `${
 const cache = new Map();
 
 /** Draw a character to a PNG data URL. 24 by 16 cells: 16 for the hero, 8 for the pet. */
-export function avatarURL(av, scale = 6) {
+export function avatarURL(av, scale = 6, { hand = false } = {}) {
   const a = { ...defaultAvatar(), ...(av || {}) };
-  const key = JSON.stringify(a) + scale;
+  const key = JSON.stringify(a) + scale + (hand ? 'hand' : '');
   if (cache.has(key)) return cache.get(key);
   const c = document.createElement('canvas');
   c.width = 24 * scale;
@@ -185,6 +185,14 @@ export function avatarURL(av, scale = 6) {
   const overlay = (grid, colors) => {
     for (const y of Object.keys(grid)) [...grid[y]].forEach((ch, x) => { if (ch !== '.') put(x, +y, colors[ch] || palette[ch]); });
   };
+  if (hand) {
+    // A raised hand, for a student asking for help: the right arm goes up beside the head.
+    for (const y of [10, 11]) { g.clearRect(12 * scale, y * scale, scale, scale); filled.delete(`12,${y}`); }
+    put(12, 9, palette.O);
+    put(13, 9, palette.O);
+    for (const y of [8, 7, 6]) put(13, y, palette.S);
+    for (const [x, y] of [[13, 5], [14, 5], [13, 4], [14, 4], [12, 4], [13, 3], [14, 3]]) put(x, y, palette.S);
+  }
   overlay((HAIR[a.hair] || HAIR.none).grid, palette);
   const hat = HATS[a.hat] || HATS.none;
   overlay(hat.grid, hat.colors || {});

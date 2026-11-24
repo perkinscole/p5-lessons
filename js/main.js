@@ -195,6 +195,9 @@ export function noticeWorks(works) {
   if (fresh.length) praise(fresh, stamp);
 }
 
+// Lessons sent back that this page has already put up a pop-up for.
+const toldBack = new Set();
+
 /** Shows what is new, and sends a student out of a play page if a lesson was sent back. Returns 'left' if it did. */
 function tellStudent(works, path, main) {
   const seen = readSeenFeedback();
@@ -203,6 +206,7 @@ function tellStudent(works, path, main) {
   const title = (w) => (getLesson(w.lesson_id) || { title: 'a lesson' }).title;
   if (returned.length && PLAY.test(path)) {
     const w = returned[0];
+    toldBack.add(`back:${w.id}:${w.grade?.graded_at || ''}`);
     ringOnce(`back:${w.id}:${w.grade?.graded_at || ''}`);
     go('/');
     modal((close) => h('div.stack.sent-back',
@@ -215,11 +219,26 @@ function tellStudent(works, path, main) {
   }
   main.querySelectorAll('.notice').forEach((x) => x.remove());
   const bars = [];
-  // Home already has a card for lessons sent back, so the bar is for every other page.
-  if (returned.length && path !== '/') {
-    const w = returned[0];
-    ringOnce(`back:${w.id}:${w.grade?.graded_at || ''}`);
-    bars.push(h('div.notice.sent-back', { role: 'status' }, h('span', '✋ Your teacher sent back ', h('strong', title(w)), '. Read the feedback and fix it.'),
+  // A lesson page shows its own feedback, so the lesson that is open is not announced over itself.
+  const open = (path.match(/^\/lesson\/(\w+)/) || [])[1];
+  const back = returned.filter((w) => w.lesson_id !== open);
+  if (back.length) {
+    const w = back[0];
+    const key = `back:${w.id}:${w.grade?.graded_at || ''}`;
+    // The teacher asked for a pop-up: a bar across the page went unread. It opens once for each
+    // time a lesson is sent back; after that a bar stays as the reminder.
+    if (!toldBack.has(key) && !document.querySelector('.sent-back-pop')) {
+      toldBack.add(key);
+      ringOnce(key);
+      modal((close) => h('div.stack.sent-back.sent-back-pop',
+        h('p.eyebrow', 'From your teacher'),
+        h('h2', `✋ Your teacher sent back ${title(w)}`),
+        w.grade?.feedback && h('blockquote', { translate: 'no' }, w.grade.feedback),
+        h('p', 'Fix it and submit it again.'),
+        h('div.row.end', h('button.btn', { type: 'button', onclick: close }, 'Not now'), h('a.btn.primary.big', { href: `#/lesson/${w.lesson_id}`, onclick: close }, 'Open the lesson'))));
+    }
+    // Home already has a card for lessons sent back, and a lesson has no room for a bar.
+    if (path !== '/' && !open) bars.push(h('div.notice.sent-back', { role: 'status' }, h('span', '✋ Your teacher sent back ', h('strong', title(w)), '. Read the feedback and fix it.'),
       h('a.btn.small.primary', { href: `#/lesson/${w.lesson_id}` }, 'Open it')));
   }
   if (fresh.length) praise(fresh, stamp);
@@ -265,14 +284,15 @@ export async function render() {
       const works = await asked;
       if (token !== renderToken) return;
       if (works && tellStudent(works, path, main) === 'left') return;
-      // While a student is playing, look again now and then, so being sent back reaches them there.
-      if (PLAY.test(path)) {
-        noticeTimer = setInterval(async () => {
-          if (document.hidden) return;
-          const again = await store.myWorks([]).catch(() => null);
-          if (again && token === renderToken) tellStudent(again, path, main);
-        }, 60000);
-      }
+    }
+    // Look again now and then, so work sent back reaches a student who stays on one page: once a
+    // minute while playing, every two minutes anywhere else, and never while the tab is hidden.
+    if (isStudent) {
+      noticeTimer = setInterval(async () => {
+        if (document.hidden) return;
+        const again = await store.myWorks([]).catch(() => null);
+        if (again && token === renderToken) tellStudent(again, path, main);
+      }, PLAY.test(path) ? 60000 : 120000);
     }
   } catch (e) {
     if (e instanceof SessionEnded) {

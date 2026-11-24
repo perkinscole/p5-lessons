@@ -9,7 +9,7 @@ import { alignmentFor, coverage, standardByCode } from '../curriculum/alignment.
 import { bigQuestionFor } from '../curriculum/big.js';
 import { recentAchievements } from '../game/rules.js';
 import { avatarURL, defaultAvatar } from '../game/avatar.js';
-import { stageSceneStyle } from '../game/world.js';
+import { planRace, paintRace } from '../game/raceworld.js';
 import { standingOn } from './map.js';
 import { helpCard } from './feedback.js';
 import { chime } from '../celebrate.js';
@@ -59,48 +59,115 @@ const columnOf = (id) => {
   return st.beyond ? 'beyond' : st.id;
 };
 
+// What the race is showing right now: its stops, and who stands at each. Kept so the world can be
+// laid out again whenever the panel changes size, without asking the server.
+let race = null;
+// Where each student was standing the last time the race was drawn, so a student who has moved on
+// can be shown walking there.
+let spots = new Map();
+const still = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 /**
- * Make the characters as big as they can be with every student and every name still showing.
- * The size is one number (--ph, the character's height), searched for rather than picked from a few.
+ * Lay the race out for the panel as it is now: plan the little world, paint the land, and put each
+ * character, name and sign where the plan says. With `walk`, a student who has moved to another
+ * stop since last time walks there from where they stood.
  */
-function fitTrail(root) {
+function settle(root, walk) {
   const el = root.querySelector('.pj-race');
-  if (!el) return;
-  const vh = window.innerHeight / 100;
-  const parts = [...el.querySelectorAll('.pj-racers')];
-  const fits = (size) => {
-    el.style.setProperty('--ph', `${size}px`);
-    // Only height can run out: a name wraps and a row breaks before anything is too wide.
-    return !parts.some((st) => st.scrollHeight > st.clientHeight + 1);
-  };
-  let low = 3.2 * vh;
-  let high = 17 * vh;
-  if (fits(high) || !fits(low)) return;
-  for (let i = 0; i < 7; i++) {
-    const mid = (low + high) / 2;
-    if (fits(mid)) low = mid; else high = mid;
-  }
-  fits(low);
+  const canvas = el && el.querySelector('canvas.pj-world');
+  if (!canvas || !race) return;
+  const W = Math.round(el.clientWidth);
+  const H = Math.round(el.clientHeight);
+  if (W < 80 || H < 80) return;
+  const plan = planRace(race.groups.map((g) => g.map((s) => s.display_name)), W, H, { maxSize: window.innerHeight * 0.16 });
+  const theme = document.documentElement.dataset.theme;
+  const night = theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const ratio = Math.min(2, window.devicePixelRatio || 1);
+  if (canvas.width !== W * ratio || canvas.height !== H * ratio) { canvas.width = W * ratio; canvas.height = H * ratio; }
+  const g = canvas.getContext('2d');
+  g.setTransform(ratio, 0, 0, ratio, 0, 0);
+  paintRace(g, plan, { W, H, look: race.stops.map((st) => ({ hue: st.hue, kind: st.kind })), night, plain: theme === 'contrast', seed: race.stops.length });
+
+  // Signs go on the front of each terrace, as wide as the terrace is on screen.
+  el.querySelectorAll('.pj-sign').forEach((sign, i) => {
+    const t = plan.terraces[i];
+    const mid = plan.project((t.x0 + t.x1) / 2, t.top * 0.5, 0);
+    const wide = plan.project(t.x1, t.top * 0.5, 0).x - plan.project(t.x0, t.top * 0.5, 0).x;
+    sign.style.left = `${mid.x}px`;
+    sign.style.top = `${mid.y}px`;
+    sign.style.setProperty('--u', `${mid.s}px`);
+    sign.style.maxWidth = `${Math.max(20, wide - 4)}px`;
+    // A name cut down to a letter or two says nothing, so a narrow terrace shows its number alone.
+    sign.classList.toggle('tight', wide < mid.s * 2.6);
+  });
+  // Characters stand where the plan says, nearer ones in front of farther ones.
+  const now = new Map();
+  el.querySelectorAll('.pj-person[data-id]').forEach((chip) => {
+    const slot = (plan.slots[Number(chip.dataset.stop)] || [])[Number(chip.dataset.place)];
+    if (!slot) return;
+    chip.style.left = `${slot.sx}px`;
+    chip.style.top = `${slot.sy}px`;
+    chip.style.setProperty('--ph', `${slot.h}px`);
+    chip.style.setProperty('--wide', `${slot.wide * slot.h}px`);
+    chip.style.zIndex = String(2000 - Math.round(slot.far * 40));
+    const look = race.stops[Number(chip.dataset.stop)] || {};
+    if (look.hue !== null && look.hue !== undefined) chip.style.setProperty('--hue', String(look.hue));
+    if (look.kind) chip.dataset.kind = look.kind;
+    const here = { x: slot.sx, y: slot.sy, stop: chip.dataset.stop };
+    now.set(chip.dataset.id, here);
+    const was = spots.get(chip.dataset.id);
+    if (!walk || !was || was.stop === here.stop || still()) return;
+    const dx = was.x - here.x;
+    const dy = was.y - here.y;
+    // A pace that makes a short hop quick and a long climb take a few seconds.
+    const seconds = Math.max(1.4, Math.min(5, Math.hypot(dx, dy) / 140));
+    chip.classList.add('walking');
+    chip.style.transition = 'none';
+    chip.style.transform = `translate(${dx}px, ${dy}px)`;
+    chip.getBoundingClientRect();
+    chip.style.transition = `transform ${seconds}s linear`;
+    chip.style.transform = '';
+    const done = () => { chip.classList.remove('walking'); chip.style.transition = ''; };
+    chip.addEventListener('transitionend', done, { once: true });
+    setTimeout(done, seconds * 1000 + 300);
+  });
+  spots = now;
 }
 
 // Each step has its own colour, with neighbours far apart, so it is plain from the back of the room which block someone is on.
 const STEP_HUES = [205, 28, 275, 140, 340, 52, 178, 310, 95, 232];
-// How wide a stop wants to be: room for each name there, since names are what take the width.
-// Blocks further up the hill have less sky above them, so they get a little more width to make up for it.
-const roomFor = (people, rise) => 3 + (1 + 0.7 * rise) * people.reduce((a, s) => a + Math.min(9, Math.max(5, String(s.display_name).length)) + 2, 0);
-// A block is never narrower than the longest word of a name standing on it, so no name is cut off.
-const widestWord = (people) => Math.max(6.4, ...people.map((s) => 2.5 + 1.15 * Math.max(...String(s.display_name).split(/\s+/).map((w) => w.length)))).toFixed(1);
 const sameDay = (iso) => !!iso && new Date(iso).toLocaleDateString('en-CA') === todayKey();
-// A student who asked for help just bounces and glows a little. Who it is and what they wrote stay
-// off the projector: the teacher opens the list from the small ✋ button.
-const personChip = (s) => h('div.pj-person', { translate: 'no', class: needsHelp.has(s.id) ? 'needs-help' : '', title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
-  h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3), alt: '' }),
-  h('span', s.display_name));
+// A student who asked for help turns red and raises a hand, with a red hand over their head. The
+// teacher asked for this to be plain from across the room. What they wrote stays off the projector.
+const personChip = (s, stop, place) => {
+  const asking = needsHelp.has(s.id);
+  return h('div.pj-person', { translate: 'no', 'data-id': s.id, 'data-stop': String(stop), 'data-place': String(place), class: asking ? 'needs-help' : '', title: s.display_name, style: s.path ? `--road:${PATHS[s.path].color}` : null },
+    // The size is given up front, so the layout is right before the picture has loaded.
+    h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 3, { hand: asking }), width: 72, height: 48, alt: '' }),
+    h('span', s.display_name),
+    asking && h('b.pj-hand', { 'aria-label': 'asked for help' }, '✋'));
+};
 
 /**
  * The lesson most of the class is on, as a race: each step is a stop, and each student stands at
  * the furthest step they have reached. Students who submit it today cross the finish.
  */
+function raceWorld(stops, at, busiest) {
+  race = {
+    stops: stops.map((st) => ({ hue: typeof st.key === 'number' ? STEP_HUES[st.key % STEP_HUES.length] : null, kind: typeof st.key === 'number' ? '' : st.key })),
+    groups: stops.map((st) => at.get(st.key)),
+  };
+  return h('div.pj-race.pj-world3d',
+    h('canvas.pj-world', { 'aria-hidden': 'true' }),
+    stops.map((st, i) => {
+      const here = at.get(st.key);
+      const busy = typeof st.key === 'number' && here.length > 0 && here.length === busiest;
+      return h('div.pj-sign', { class: `${typeof st.key === 'number' ? '' : st.key} ${busy ? 'busy' : ''}`, style: race.stops[i].hue === null ? null : `--hue:${race.stops[i].hue}`, title: st.label },
+        h('b.pj-stop-mark', st.mark), h('span.pj-stop-label', st.label));
+    }),
+    stops.map((st, i) => at.get(st.key).map((s, k) => personChip(s, i, k))));
+}
+
 function racePanel(board, lessons, focus, picked) {
   const main = lessons[0];
   if (!main) return h('section.pj-panel.pj-race-panel', h('h2', 'Today'), h('p.pj-sub', 'Nobody has started yet. Open Home to begin.'));
@@ -136,19 +203,10 @@ function racePanel(board, lessons, focus, picked) {
       h('h2', `Today: ${lesson.title}`),
       h('span.pj-sub', `${working} working · ${at.get('finish').length} submitted · ${at.get('start').length} not started`)),
     focus.length > 0 && h('ul.pj-race-focus', focus.map((x) => h('li', x))),
-    // The race climbs a hill of blocks inside its stage's scenery: each step is one block higher,
-    // and the finish is the top. A crowded stop gets a wider block, so characters and names stay big.
-    h('div.pj-race.pj-scene', { style: `grid-template-columns:${stops.map((st, i) => `minmax(${widestWord(at.get(st.key))}vh, ${roomFor(at.get(st.key), i / (stops.length - 1)).toFixed(1)}fr)`).join(' ')};${stageSceneStyle(columnOf(main.id))}` },
-      stops.map((st, i) => {
-        const here = at.get(st.key);
-        const busy = typeof st.key === 'number' && here.length > 0 && here.length === busiest;
-        return h('div.pj-stop', { class: `${typeof st.key === 'number' ? '' : st.key} ${busy ? 'busy' : ''}`, style: `--rise:${(i / (stops.length - 1)).toFixed(3)};${typeof st.key === 'number' ? `--hue:${STEP_HUES[st.key % STEP_HUES.length]}` : ''}` },
-          h('div.pj-racers', here.map(personChip)),
-          h('div.pj-block',
-            h('div.pj-block-top'),
-            h('div.pj-stop-mark', st.mark),
-            h('div.pj-stop-label', st.label)));
-      })),
+    // The race is a little block world seen at an angle: a staircase of terraces, one for each step,
+    // with the finish at the top. The land is painted on the canvas, and the signs and characters
+    // are placed over it by settle().
+    raceWorld(stops, at, busiest),
     others.length > 0 && h('div.pj-others', h('strong', 'On other lessons:'),
       others.map((s) => h('span.pj-other', { class: needsHelp.has(s.id) ? 'needs-help' : '' }, h('img', { src: avatarURL(s.avatar || defaultAvatar(s.id), 2), alt: '' }), `${s.display_name} · ${where(s)}`))),
   );
@@ -284,7 +342,7 @@ export async function viewProject(main, classId) {
       h('section.pj-panel.pj-feed-panel', h('h2', 'Recent achievements'), achievements(board)),
       standardsPanel(lessons),
     );
-    setTimeout(() => fitTrail(panels), 0);
+    setTimeout(() => settle(panels, true), 0);
   }
 
   draw();
@@ -303,18 +361,28 @@ export async function viewProject(main, classId) {
   const helpButton = h('button.btn.small.pj-help-btn', { hidden: true, title: 'See who asked for help', onclick: () => modal((close) => h('div.stack', help.el, h('div.row.end', h('button.btn.primary', { onclick: close }, 'Done')))) });
   const help = helpCard(classId, { onUpdate: (list) => {
     helpButton.hidden = list.length === 0;
-    helpButton.textContent = `✋ ${list.length}`;
+    helpButton.textContent = `✋ ${list.length} need${list.length === 1 ? 's' : ''} help`;
     helpButton.setAttribute('aria-label', `${list.length} asked for help. Open the list.`);
     const next = new Set(list.map((r) => r.student_id));
     if (next.size !== needsHelp.size || [...next].some((x) => !needsHelp.has(x))) { needsHelp = next; draw(); }
   } });
 
-  const onResize = () => fitTrail(panels);
+  // The size is worked out again whenever the panel itself changes size, not only the window: the
+  // header growing or the fonts arriving also move things. Positions are forgotten then, so a
+  // resize is not mistaken for students walking.
+  let settling = 0;
+  const onResize = () => { cancelAnimationFrame(settling); settling = requestAnimationFrame(() => { spots = new Map(); settle(panels, true); }); };
   window.addEventListener('resize', onResize);
+  const watcher = typeof ResizeObserver === 'function' ? new ResizeObserver(onResize) : null;
+  if (watcher) watcher.observe(panels);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(onResize);
+  spots = new Map();
   document.body.classList.add('projecting');
   app.cleanup = () => {
     help.stop();
     window.removeEventListener('resize', onResize);
+    if (watcher) watcher.disconnect();
+    cancelAnimationFrame(settling);
     clearInterval(ticker);
     clearInterval(poller);
     document.body.classList.remove('projecting');
@@ -329,8 +397,9 @@ export async function viewProject(main, classId) {
   return h('div.pj',
     h('header.pj-head',
       h('div', h('h1', cls.name), h('p', new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }))),
+      // The red hand sits by itself, at full strength, so it is seen from anywhere in the room.
+      helpButton,
       h('div.pj-controls',
-        helpButton,
         h('button.btn.small', { onclick: setup }, 'Set up today'),
         h('button.btn.small', { title: 'Play the help doorbell, to test the sound on this computer', 'aria-label': 'Test the help doorbell', onclick: () => chime('doorbell') }, '🔔'),
         h('button.btn.small', { onclick: fullScreen }, 'Full screen'),

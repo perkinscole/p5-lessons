@@ -1378,3 +1378,37 @@ code.say-idea { background: var(--sun); }
 :root[data-theme='dark'] .praise h2 { color: #7fe0a0; }
 .praise-item { display: flex; flex-direction: column; gap: 4px; }
 .praise blockquote { margin: 0; padding: 10px 14px; font-size: 1.1rem; border-left: 6px solid #1d8f58; background: var(--paper-2); }
+
+/* The class display's race is a little block world seen at an angle (js/game/raceworld.js). The
+   land is painted on a canvas. Signs and characters are page elements that settle() in project.js
+   places over it, each at its own size, so the far ones are a little smaller. */
+.pj-race.pj-world3d { display: block; padding: 0; background: #8fd0f5; }
+canvas.pj-world { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+.pj-world3d .pj-person { position: absolute; left: 0; top: 0; margin: 0; max-width: none; translate: -40% -100%; }
+.pj-world3d .pj-person img { height: var(--ph); aspect-ratio: 3 / 2; width: auto; max-width: none; filter: none; }
+.pj-world3d .pj-person span { font-size: max(1.2vh, calc(var(--ph) * .25)); line-height: 1.08; letter-spacing: -.02em; white-space: normal; text-align: center; width: max-content; min-width: min-content; max-width: var(--wide, 20vh); padding: 0 calc(var(--ph) * .06); margin-bottom: calc(var(--ph) * -.06); box-shadow: 0 .2vh .4vh rgba(0, 0, 0, .3); }
+.pj-world3d .pj-person[style*='--hue']:not(.needs-help) span { background: hsl(var(--hue) 90% 92%); color: #2b2350; }
+.pj-world3d .pj-person[data-kind='finish']:not(.needs-help) span { background: #fff1b8; color: #2b2350; }
+/* A sign on the front of each terrace: the step's number, and its name where there is room. */
+.pj-sign { position: absolute; left: 0; top: 0; z-index: 1; translate: -50% -50%; display: flex; align-items: center; gap: calc(var(--u) * .12); --u: 5vh; }
+.pj-sign .pj-stop-mark { flex: none; width: calc(var(--u) * .78); height: calc(var(--u) * .78); display: grid; place-items: center; font: 400 calc(var(--u) * .5)/1 var(--font-display); background: var(--card); color: #2b2350; border: max(2px, calc(var(--u) * .05)) solid #2b2350; border-radius: calc(var(--u) * .08); box-shadow: 0 calc(var(--u) * .06) 0 rgba(0, 0, 0, .35); }
+.pj-sign[style*='--hue'] .pj-stop-mark { background: hsl(var(--hue) 92% 88%); }
+.pj-sign.finish .pj-stop-mark { background: #ffe07a; }
+.pj-sign.tight .pj-stop-label { display: none; }
+.pj-sign.busy .pj-stop-mark { background: var(--accent); color: var(--accent-ink); }
+.pj-sign .pj-stop-label { min-width: 0; max-height: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: max(1.1vh, calc(var(--u) * .24)); font-weight: 700; line-height: 1.2; padding: 0 calc(var(--u) * .1); color: #2b2350; background: #fffdf5; border: 1px solid #2b2350; border-radius: 3px; letter-spacing: -.02em; margin: 0; }
+/* Walking to a new terrace: the character bobs as it goes, in front of everyone it passes. */
+.pj-person.walking { z-index: 5000 !important; }
+.pj-person.walking img { animation: walk-step .34s steps(2, jump-none) infinite; }
+@keyframes walk-step { from { transform: translateY(0) rotate(-5deg); } to { transform: translateY(calc(var(--ph) * -.1)) rotate(5deg); } }
+
+/* Asking for help: red, a raised hand on the character, and a red hand over their head. */
+.pj-person.needs-help img { filter: drop-shadow(0 0 .4vh #fff) drop-shadow(0 0 .9vh #ff2a2a) drop-shadow(0 0 1.8vh #ff2a2a); }
+.pj-person.needs-help span, .pj-stop[data-hue] .pj-person.needs-help span { background: #d92b2b; color: #fff; border-bottom-color: #7a0d0d; }
+.pj-hand { position: absolute; left: 40%; bottom: calc(100% + .2vh); translate: -50% 0; display: grid; place-items: center; width: max(3vh, calc(var(--ph) * .48)); aspect-ratio: 1; font-size: max(1.8vh, calc(var(--ph) * .28)); font-weight: 400; line-height: 1; background: #d92b2b; border: .3vh solid #fff; border-radius: 50%; box-shadow: 0 0 0 .25vh #7a0d0d, 0 .4vh .8vh rgba(0, 0, 0, .4); animation: hand-wave .9s ease-in-out infinite; }
+@keyframes hand-wave { 0%, 100% { rotate: -14deg; } 50% { rotate: 14deg; } }
+.pj-other.needs-help { background: #d92b2b; color: #fff; border-color: #7a0d0d; animation: alert-pulse 1.4s ease-in-out infinite; }
+.pj-help-btn { font-size: 2.6vh; padding: .7vh 1.8vh; background: #d92b2b; color: #fff; border: .35vh solid #7a0d0d; box-shadow: 0 .5vh 0 #7a0d0d; animation: alert-pulse 1.4s ease-in-out infinite; }
+.pj-help-btn:hover { background: #ef3d3d; color: #fff; }
+@keyframes alert-pulse { 0%, 100% { box-shadow: 0 .5vh 0 #7a0d0d, 0 0 0 0 rgba(217, 43, 43, .75); } 50% { box-shadow: 0 .5vh 0 #7a0d0d, 0 0 0 1.4vh rgba(217, 43, 43, 0); } }
+@media (prefers-reduced-motion: reduce) { .pj-hand, .pj-help-btn, .pj-other.needs-help, .pj-person.walking img { animation: none; } }
