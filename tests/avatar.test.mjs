@@ -26,3 +26,22 @@ test('titles are a fixed list, short enough to show under a name', () => {
   for (const [id, t] of Object.entries(TITLES)) assert.ok(t.name.length <= 20, id);
   assert.equal(defaultAvatar('x').title, 'none');
 });
+
+test('every piece of gear is drawn on the 16-wide grid with a colour for each letter', () => {
+  const own = 'SEOPBH'; // skin, eyes, outfit, pants, boots, hair: the character's own colours
+  for (const [slot, def] of Object.entries(SLOTS)) {
+    if (!def.items) continue;
+    for (const [id, item] of Object.entries(def.items)) {
+      for (const grid of [item.grid, item.body, item.head]) {
+        if (!grid || Array.isArray(grid)) continue;
+        for (const [y, row] of Object.entries(grid)) {
+          assert.equal(row.length, 16, `${slot}:${id} row ${y} is not 16 wide`);
+          assert.ok(+y >= 0 && +y < 16, `${slot}:${id} row ${y} is off the character`);
+          for (const ch of row) assert.ok(ch === '.' || own.includes(ch) || (item.colors && item.colors[ch]), `${slot}:${id} row ${y} uses "${ch}" with no colour`);
+        }
+      }
+    }
+  }
+  assert.equal(defaultAvatar('x').costume, 'none');
+  assert.equal(defaultAvatar('x').face, 'none');
+});

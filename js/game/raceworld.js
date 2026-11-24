@@ -465,6 +465,8 @@ export function paintRace(g, plan, { W, H, look = [], night = false, plain = fal
     }
   }
 
+  // The whole land is dimmed a little, so the characters, which are not, are the brightest things on it.
+  if (!plain) { g.fillStyle = css(night ? [8, 8, 30] : [24, 28, 70], night ? 0.2 : 0.17); g.fillRect(0, 0, W, H); }
   // A soft shadow where each student stands.
   if (!plain) for (const s of plan.slots.flat()) {
     g.fillStyle = css([0, 0, 0], 0.34);

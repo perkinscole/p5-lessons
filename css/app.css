@@ -1386,18 +1386,21 @@ code.say-idea { background: var(--sun); }
 canvas.pj-world { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 .pj-world3d .pj-person { position: absolute; left: 0; top: 0; margin: 0; max-width: none; translate: -40% -100%; }
 /* A dark outline and a pale glow, so a character stands clear of whatever land is behind it. */
-.pj-world3d .pj-person img { height: var(--ph); aspect-ratio: 3 / 2; width: auto; max-width: none; filter: drop-shadow(1px 0 0 #1c1433) drop-shadow(-1px 0 0 #1c1433) drop-shadow(0 1px 0 #1c1433) drop-shadow(0 -1px 0 #1c1433) drop-shadow(0 0 calc(var(--ph) * .09) rgba(255, 255, 255, .9)); }
+.pj-world3d .pj-person img { height: var(--ph); aspect-ratio: 3 / 2; width: auto; max-width: none; --ol: max(1.5px, calc(var(--ph) * .035)); filter: saturate(1.25) contrast(1.1) drop-shadow(var(--ol) 0 0 #14102a) drop-shadow(calc(var(--ol) * -1) 0 0 #14102a) drop-shadow(0 var(--ol) 0 #14102a) drop-shadow(0 calc(var(--ol) * -1) 0 #14102a) drop-shadow(0 0 calc(var(--ph) * .1) #fff); }
 .pj-world3d .pj-person span { font-size: max(1.2vh, calc(var(--ph) * .25)); line-height: 1.08; letter-spacing: -.02em; white-space: normal; text-align: center; width: max-content; min-width: min-content; max-width: var(--wide, 20vh); padding: 0 calc(var(--ph) * .06); margin-bottom: calc(var(--ph) * -.06); box-shadow: 0 .2vh .4vh rgba(0, 0, 0, .3); }
-.pj-world3d .pj-person[style*='--hue']:not(.needs-help) span { background: hsl(var(--hue) 90% 92%); color: #2b2350; }
-.pj-world3d .pj-person[data-kind='finish']:not(.needs-help) span { background: #fff1b8; color: #2b2350; }
+/* Name tags are dark with white letters, edged in the step's colour: a pale tag vanished on snow and sand. */
+.pj-world3d .pj-person span { background: #17122e; color: #fff; border: max(1.5px, calc(var(--ph) * .03)) solid #fff; border-bottom-width: max(3px, calc(var(--ph) * .07)); border-radius: calc(var(--ph) * .07); padding: calc(var(--ph) * .02) calc(var(--ph) * .09); box-shadow: 0 0 0 max(1px, calc(var(--ph) * .02)) #17122e, 0 .3vh .5vh rgba(0, 0, 0, .45); }
+.pj-world3d .pj-person[style*='--hue']:not(.needs-help) span { border-color: hsl(var(--hue) 95% 72%); }
+.pj-world3d .pj-person[data-kind='finish']:not(.needs-help) span { border-color: #ffd84a; color: #ffe9a0; }
+.pj-world3d .pj-person.needs-help span { border-color: #fff; }
 /* A sign on the front of each terrace: the step's number, and its name where there is room. */
 .pj-sign { position: absolute; left: 0; top: 0; z-index: 1; translate: -50% -50%; display: flex; align-items: center; gap: calc(var(--u) * .12); --u: 5vh; }
-.pj-sign .pj-stop-mark { flex: none; width: calc(var(--u) * .78); height: calc(var(--u) * .78); display: grid; place-items: center; font: 400 calc(var(--u) * .5)/1 var(--font-display); background: var(--card); color: #2b2350; border: max(2px, calc(var(--u) * .05)) solid #2b2350; border-radius: calc(var(--u) * .08); box-shadow: 0 calc(var(--u) * .06) 0 rgba(0, 0, 0, .35); }
+.pj-sign .pj-stop-mark { flex: none; width: calc(var(--u) * .78); height: calc(var(--u) * .78); display: grid; place-items: center; font: 400 calc(var(--u) * .5)/1 var(--font-display); background: var(--card); color: #17122e; border: max(2px, calc(var(--u) * .06)) solid #17122e; border-radius: calc(var(--u) * .08); box-shadow: 0 0 0 max(1px, calc(var(--u) * .03)) #fff, 0 calc(var(--u) * .08) 0 rgba(0, 0, 0, .45); }
 .pj-sign[style*='--hue'] .pj-stop-mark { background: hsl(var(--hue) 92% 88%); }
 .pj-sign.finish .pj-stop-mark { background: #ffe07a; }
 .pj-sign.tight .pj-stop-label { display: none; }
 .pj-sign.busy .pj-stop-mark { background: var(--accent); color: var(--accent-ink); }
-.pj-sign .pj-stop-label { min-width: 0; max-height: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: max(1.1vh, calc(var(--u) * .24)); font-weight: 700; line-height: 1.2; padding: 0 calc(var(--u) * .1); color: #2b2350; background: #fffdf5; border: 1px solid #2b2350; border-radius: 3px; letter-spacing: -.02em; margin: 0; }
+.pj-sign .pj-stop-label { min-width: 0; max-height: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: max(1.1vh, calc(var(--u) * .24)); font-weight: 700; line-height: 1.2; padding: 0 calc(var(--u) * .1); color: #fff; background: #17122e; border: 1px solid #fff; border-radius: 3px; letter-spacing: -.02em; margin: 0; }
 /* Walking to a new terrace: the character bobs as it goes, in front of everyone it passes. */
 .pj-person.walking { z-index: 5000 !important; }
 .pj-person.walking img { animation: walk-step .34s steps(2, jump-none) infinite; }
