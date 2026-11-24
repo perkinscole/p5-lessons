@@ -15,7 +15,8 @@
 const PITCH = 0.66; // how far the camera looks down, in radians (about 38 degrees)
 const YAWS = [0.42, 0.6, 0.78]; // how far it may be turned to look along the trail; the one that shows the students largest is used
 const BLOCK = 0.5; // one block of land, in character heights
-const ROW = 1.55; // how far apart rows of students stand, front to back: close enough to be a crowd, far enough that every name and face shows
+const ROW = 1.45; // how far apart rows of students stand, front to back: close enough to be a crowd, far enough that every name and face shows
+const BIG = 1.2; // characters are drawn this much larger than the land's own scale, so they read from the back of the room
 const EMPTY = 1.15; // how wide a terrace with nobody on it is: room for its sign
 
 const hash = (x, y, k = 7) => {
@@ -186,8 +187,8 @@ export function planRace(stops, W, H, { maxSize = 190, margin = 10, sky = 0.06, 
     }
     for (const s of world.slots.flat()) {
       const p = cam(s.x, s.y, s.z);
-      see({ x: p.x - s.wide * 0.5 * p.s, y: p.y - 2.25 * p.s });
-      see({ x: p.x + s.wide * 0.5 * p.s, y: p.y });
+      see({ x: p.x - s.wide * 0.5 * p.s * BIG, y: p.y - 2.25 * p.s * BIG });
+      see({ x: p.x + s.wide * 0.5 * p.s * BIG, y: p.y });
     }
     const room = H * (1 - sky) - margin * 2;
     const k = Math.min((W - margin * 2) / (x1 - x0), room / (y1 - y0), maxSize);
@@ -202,7 +203,7 @@ export function planRace(stops, W, H, { maxSize = 190, margin = 10, sky = 0.06, 
   const project = (x, y, z) => { const p = cam(x, y, z); return { x: ox + p.x * k, y: oy + p.y * k, s: p.s * k, far: p.far }; };
   const ground = landFor(world, tops, seed, land, wind);
   // Each student stands on the ground as it is under their feet.
-  const slots = world.slots.map((list) => list.map((s) => { const y = ground.height(s.x, s.z); const p = project(s.x, y, s.z); return { ...s, y, sx: p.x, sy: p.y, h: p.s, far: p.far }; }));
+  const slots = world.slots.map((list) => list.map((s) => { const y = ground.height(s.x, s.z); const p = project(s.x, y, s.z); return { ...s, y, sx: p.x, sy: p.y, h: p.s * BIG, far: p.far }; }));
   // A stretch's sign hangs on the front of its ground, in the middle.
   const terraces = world.terraces.map((t) => { const x = (t.x0 + t.x1) / 2; return { ...t, sign: { x, y: Math.max(0.2, t.top - 0.3), z: wind(x) - 0.15 } }; });
   return { ...world, terraces, slots, size: k, project, shape, land, seed, ...ground };
@@ -405,7 +406,7 @@ export function paintRace(g, plan, { W, H, look = [], night = false, plain = fal
     if (L.kind === 'finish') stand((t.x0 + t.x1) / 2, back((t.x0 + t.x1) / 2, 0.6), { kind: 'tower', tall: 1 });
     else if (L.kind === 'start') stand((t.x0 + t.x1) / 2, back((t.x0 + t.x1) / 2, 0.6), { kind: 'tent', tall: 1 });
     else stand(t.x0 + 0.3, back(t.x0 + 0.3, 0.3), { kind: 'marker', tall: 1, color: trailOf(i) });
-    const n = Math.max(1, Math.round((t.x1 - t.x0) / 1.1));
+    const n = Math.round((t.x1 - t.x0) / 2.4);
     for (let k = 0; k < n; k++) {
       const x = t.x0 + 0.2 + hash(k, i, seed + 70) * Math.max(0.1, t.x1 - t.x0 - 0.4);
       const kind = LK.props[Math.floor(hash(k, i, seed + 72) * LK.props.length)];
@@ -454,9 +455,11 @@ export function paintRace(g, plan, { W, H, look = [], night = false, plain = fal
         // Taller ground behind is a little darker under it, higher ground a little brighter, and the tops of the hills are bare rock.
         const under = at(ix - 1, iz) > raw || at(ix, iz + 1) > raw ? 0.88 : 1;
         const bare = !w.pad && raw > 3.4 * (ROUGH[plan.land] || 1);
-        tone = lit(bare ? mix(P.stone, P.snow, plan.land === 'desert' ? 0 : 0.55) : grass, (0.9 + rnd * 0.16) * under * (1 + Math.min(4, raw) * 0.025));
+        // Where the students stand the ground is paler and plainer than the land around it, so they are the brightest and busiest things on it.
+        tone = w.pad ? lit(mix(grass, night ? [70, 74, 110] : [250, 246, 232], 0.42), 0.97 + rnd * 0.05)
+          : lit(bare ? mix(P.stone, P.snow, plan.land === 'desert' ? 0 : 0.55) : grass, (0.9 + rnd * 0.16) * under * (1 + Math.min(4, raw) * 0.025));
       }
-      quad([a, b, project(x0 + C, h, z0 + C), far], css(tone), edge && w.pad ? edge : css([0, 0, 0], w.road ? 0.14 : 0.07));
+      quad([a, b, project(x0 + C, h, z0 + C), far], css(tone), edge && w.pad ? edge : css([0, 0, 0], w.road ? 0.12 : w.pad ? 0.04 : 0.07));
       const here = standing.get(ix * nz + iz);
       if (here && !plain) here.forEach(draw);
     }
@@ -464,9 +467,9 @@ export function paintRace(g, plan, { W, H, look = [], night = false, plain = fal
 
   // A soft shadow where each student stands.
   if (!plain) for (const s of plan.slots.flat()) {
-    g.fillStyle = css([0, 0, 0], 0.24);
+    g.fillStyle = css([0, 0, 0], 0.34);
     g.beginPath();
-    g.ellipse(s.sx, s.sy, s.h * 0.34, s.h * 0.1, 0, 0, Math.PI * 2);
+    g.ellipse(s.sx, s.sy, s.h * 0.4, s.h * 0.12, 0, 0, Math.PI * 2);
     g.fill();
   }
 }

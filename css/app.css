@@ -1385,7 +1385,8 @@ code.say-idea { background: var(--sun); }
 .pj-race.pj-world3d { display: block; padding: 0; background: #8fd0f5; }
 canvas.pj-world { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 .pj-world3d .pj-person { position: absolute; left: 0; top: 0; margin: 0; max-width: none; translate: -40% -100%; }
-.pj-world3d .pj-person img { height: var(--ph); aspect-ratio: 3 / 2; width: auto; max-width: none; filter: none; }
+/* A dark outline and a pale glow, so a character stands clear of whatever land is behind it. */
+.pj-world3d .pj-person img { height: var(--ph); aspect-ratio: 3 / 2; width: auto; max-width: none; filter: drop-shadow(1px 0 0 #1c1433) drop-shadow(-1px 0 0 #1c1433) drop-shadow(0 1px 0 #1c1433) drop-shadow(0 -1px 0 #1c1433) drop-shadow(0 0 calc(var(--ph) * .09) rgba(255, 255, 255, .9)); }
 .pj-world3d .pj-person span { font-size: max(1.2vh, calc(var(--ph) * .25)); line-height: 1.08; letter-spacing: -.02em; white-space: normal; text-align: center; width: max-content; min-width: min-content; max-width: var(--wide, 20vh); padding: 0 calc(var(--ph) * .06); margin-bottom: calc(var(--ph) * -.06); box-shadow: 0 .2vh .4vh rgba(0, 0, 0, .3); }
 .pj-world3d .pj-person[style*='--hue']:not(.needs-help) span { background: hsl(var(--hue) 90% 92%); color: #2b2350; }
 .pj-world3d .pj-person[data-kind='finish']:not(.needs-help) span { background: #fff1b8; color: #2b2350; }
